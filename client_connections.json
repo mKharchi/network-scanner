@@ -1,0 +1,16 @@
+{
+    "b0:3c:dc:95:39:36": [
+        {
+            "timestamp": "2026-08-15 14:07:18",
+            "hostname": "adonis-IdeaPad-5-15ITL05",
+            "ip": "172.16.1.238",
+            "status": "connected"
+        },
+        {
+            "timestamp": "2026-08-15 14:17:16",
+            "hostname": "adonis-IdeaPad-5-15ITL05",
+            "ip": "172.16.1.238",
+            "status": "connected"
+        }
+    ]
+}
