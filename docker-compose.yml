@@ -1,39 +1,78 @@
 services:
+
   server:
     build:
       context: .
       dockerfile: Dockerfile.server
+
     container_name: network-scanner-server
-    command: python -u server.py
+
     ports:
       - "5000:5000"
-    stdin_open: true  # Required to interact with the server menu
-    tty: true         # Required to interact with the server menu
+
+    environment:
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_NAME=network_scanner
+      - DB_USER=scanner
+      - DB_PASSWORD=scanner_password
+    volumes:
+      - ./storage/log_storage:/app/storage/log_storage
+
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+    stdin_open: true
+    tty: true
+
 
   client:
     build:
       context: .
       dockerfile: Dockerfile.client
-    container_name: network-scanner-client
-    command: python -u client.py
-    
-    # Run the client in the host's PID and Network namespaces 
-    # so that it can actually scan the host PC's processes and network.
-    network_mode: "host"
-    pid: "host"
-    
-    env_file:
-      - .env
 
-    volumes:
-      # Mount host logs and config directories so activity logs actually read the host's browser history/syslog
-      - /var/log:/var/log:ro
-      - ~/.config:/root/.config:ro
-      - ~/.mozilla:/root/.mozilla:ro
-      - ~/.local/share:/root/.local/share:ro
-      - ~/.bash_history:/root/.bash_history:ro
-      - ~/.zsh_history:/root/.zsh_history:ro
+    container_name: network-scanner-client
 
     depends_on:
       - server
+
     restart: unless-stopped
+
+
+  mysql:
+    image: mysql:8.4
+
+    container_name: network-scanner-mysql
+
+    environment:
+      MYSQL_DATABASE: network_scanner
+      MYSQL_USER: scanner
+      MYSQL_PASSWORD: scanner_password
+      MYSQL_ROOT_PASSWORD: root_password
+
+    ports:
+      - "3306:3306"
+
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "localhost",
+          "-u",
+          "scanner",
+          "-pscanner_password"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+
+volumes:
+  mysql_data:

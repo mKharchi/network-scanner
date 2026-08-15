@@ -11,6 +11,7 @@ from server_lib import (
     send_message,
     server_menu,
 )
+from database import initiate_db
 
 HOST = "0.0.0.0"
 PORT = 5000
@@ -53,6 +54,7 @@ def accept_clients(server):
 
 
 def start_server():
+    initiate_db()
 
     server = socket.socket(
         socket.AF_INET,

@@ -531,7 +531,14 @@ def get_activity_log(period="1d"):
         reverse=True
     )
 
-    return {"period": period, "since": cutoff_str, "activity": activity}
+    return {
+    "period": period,
+    "since": cutoff_str,
+    "generated_at": datetime.now().strftime(
+        "%Y-%m-%d %H:%M:%S"
+    ),
+    "activity": activity
+}
 
 
 # ============================================================
