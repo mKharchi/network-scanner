@@ -11,6 +11,32 @@
             "hostname": "adonis-IdeaPad-5-15ITL05",
             "ip": "172.16.1.238",
             "status": "connected"
+        },
+        {
+            "timestamp": "2026-08-15 14:53:45",
+            "hostname": "adonis-IdeaPad-5-15ITL05",
+            "ip": "172.16.1.238",
+            "status": "connected"
+        }
+    ],
+    "00:e0:4c:06:df:f6": [
+        {
+            "timestamp": "2026-08-15 14:46:29",
+            "hostname": "DESKTOP-0AGOO55",
+            "ip": "172.16.0.246",
+            "status": "connected"
+        },
+        {
+            "timestamp": "2026-08-15 14:48:33",
+            "hostname": "DESKTOP-0AGOO55",
+            "ip": "172.16.0.246",
+            "status": "disconnected"
+        },
+        {
+            "timestamp": "2026-08-15 14:53:38",
+            "hostname": "DESKTOP-0AGOO55",
+            "ip": "172.16.0.246",
+            "status": "connected"
         }
     ]
 }

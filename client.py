@@ -1,15 +1,23 @@
+import json
+import os
+import socket
+
 from client_lib import (
     create_registration_message,
     handle_command,
     receive_message,
     send_message,
 )
-import json
-import socket
 
-SERVER_IP   = "172.16.1.238"
-SERVER_PORT = 5000
+SERVER_IP = os.environ.get("SERVER_IP", "172.16.1.238")
 
+SERVER_PORT = int(
+    os.getenv(
+        "SERVER_PORT",
+        "5000"
+    )
+
+)
 
 # ============================================================
 # CLIENT
