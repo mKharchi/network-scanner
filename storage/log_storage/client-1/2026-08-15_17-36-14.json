@@ -1,0 +1,2642 @@
+{
+  "period": "1d",
+  "since": "2026-08-14 17:36:14",
+  "generated_at": "2026-08-15 17:36:14",
+  "activity": [
+    {
+      "time": "2026-08-15 16:56:19",
+      "type": "Browser (Chrome)",
+      "detail": "Sign in - Google Accounts — https://accounts.google.com/v3/signin/accountchooser?access_type=offline&client_id=1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com&code_challenge=tRjXVMeFxI7sr2O5b3MFhKipIho4mM_AFoaQO_-k9M0&code_challenge_method=S256&prompt=consent&redirect_uri=http%3A%2F%2Flocalhost%3A35363%2Fauth%2Fcallback&response_type=code&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcclog+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fexperimentsandconfigs+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Faicode&state=yEY0cdBx5g-XUlGfPljnew&dsh=S-268011155%3A1786809360260029&o2v=1&service=lso&flowName=GeneralOAuthFlow&opparams=%253F&continue=https%3A%2F%2Faccounts.google.com%2Fsignin%2Foauth%2Fconsent%3Fauthuser%3Dunknown%26part%3DAJi8hAOgzNHkzPKYCEX2seauxSH7502mI1Mgvk1qI_y1cFN8cWG4D9b-dnPJa7neKhsq-aCAwPPX3P3fmu4Cx3tKQpdPwZU_PVapv3YmBUgeBRX8roBcsEG9fAz8eHQn2a5n8aTnlZO0mxEYYh-q3aCm5v0eOh6waKfJVbE4GBGFk5yKuiOPkpzyniFNRSnVC6SnfRtTCIoRUDPUU1mmCB9WzMvyYmzvAjjo7tv3eEf91GJtjNEZxrEARyGpPHv_nH-Yx4nWaOv36f9SaLiBDKfD-CMJ4sLSDETvfy9E5V5ZLQXNGKgTs47ljwii8BnxCErPVkV24ATj29EC_71n9E3p6sIDUxKHF6lcZ-xVbHUXxIyqeTi3H7jJTRYFNegTrGYcJ_BcYWew-or9IRl7QQAPmFZvRckyFacnbjtiTzPb0-X5ZbUZunlVDSfIb-fMweNicqJd4tEJ4EIeDZrMAq2nPuoZdi_M77JRS-Y7FfMauW9YByl_elHBu6paQYypKtTw3M9IZ0QS%26flowName%3DGeneralOAuthFlow%26as%3DS-268011155%253A1786809360260029%26client_id%3D1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com%26requestPath%3D%252Fsignin%252Foauth%252Fconsent%23&app_domain=http%3A%2F%2Flocalhost%3A35363"
+    },
+    {
+      "time": "2026-08-15 16:56:00",
+      "type": "Browser (Chrome)",
+      "detail": "Sign in - Google Accounts — https://accounts.google.com/o/oauth2/auth?access_type=offline&client_id=1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com&code_challenge=tRjXVMeFxI7sr2O5b3MFhKipIho4mM_AFoaQO_-k9M0&code_challenge_method=S256&prompt=consent&redirect_uri=http%3A%2F%2Flocalhost%3A35363%2Fauth%2Fcallback&response_type=code&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcclog+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fexperimentsandconfigs+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Faicode&state=yEY0cdBx5g-XUlGfPljnew"
+    },
+    {
+      "time": "2026-08-15 16:55:25",
+      "type": "Browser (Chrome)",
+      "detail": "Sign in to continue to Google Antigravity — https://accounts.google.com/v3/signin/identifier?access_type=offline&app_domain=http%3A%2F%2Flocalhost%3A35847&client_id=1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com&code_challenge=O4RkmoQ0LWndzzOWChEgXSKt0flQEN6G59RUmYUhUoQ&code_challenge_method=S256&continue=https%3A%2F%2Faccounts.google.com%2Fsignin%2Foauth%2Fconsent%3Fauthuser%3Dunknown%26part%3DAJi8hAOtFWihQM8eYogY8Lacjg2xfAq6r1vlcaD2JFoj-dhj2f2_7qaoPlAZ9fZhB4_QiAA0uMEomjC_xf1mTS7rrA5rpvuNVPslS9p68yZlE3PQ-5vJSPyqa9P8ARt_ZbaJKp8SFV5bJMdjqlk7FrTj5lgKhztzxG02jNeyrgUoaf_6BBZEjErwCVC6cZntflWfZma-6TiGRnd9htLGZ6bhp0RVR7YAvsIZhW4Y1uas5oebZ6JYj0pwTiSW4uyF7GWl9yB31EOA3uock5yw-Po7mE6RqU2SwjafP89k0ywhvdN11F5VEpCzlHVilIKxKvNNvSu06_EXnErEeXU7V1WI-fzIEQnz9Xl_6mk-_owGZlGlKih8s-94NuljxEAea50B9T0EOYwXAiC7eo9VzyD13zA_ToeLgJrOP1X-05n2VdNUul1vaxMhcdAZQ78a2iN2gMiuPXxKC8YlLJwgbFXHlUzwNnxujYG7lynY8lUNFm3t8D4d2DFHSxYlPygP7AYNjJeNNm5M%26flowName%3DGeneralOAuthFlow%26as%3DS1830845020%253A1786809323507126%26client_id%3D1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com%26requestPath%3D%252Fsignin%252Foauth%252Fconsent%23&dsh=S1830845020%3A1786809323507126&flowName=GeneralOAuthFlow&o2v=1&opparams=%253F&prompt=consent&redirect_uri=http%3A%2F%2Flocalhost%3A35847%2Fauth%2Fcallback&response_type=code&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcclog%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fexperimentsandconfigs%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Faicode&service=lso&state=7MeNNCdQgc08VnE--N4lZw"
+    },
+    {
+      "time": "2026-08-15 16:55:23",
+      "type": "Browser (Chrome)",
+      "detail": "Sign in - Google Accounts — https://accounts.google.com/o/oauth2/auth?access_type=offline&client_id=1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com&code_challenge=O4RkmoQ0LWndzzOWChEgXSKt0flQEN6G59RUmYUhUoQ&code_challenge_method=S256&prompt=consent&redirect_uri=http%3A%2F%2Flocalhost%3A35847%2Fauth%2Fcallback&response_type=code&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcclog+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fexperimentsandconfigs+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Faicode&state=7MeNNCdQgc08VnE--N4lZw"
+    },
+    {
+      "time": "2026-08-15 16:55:23",
+      "type": "Browser (Chrome)",
+      "detail": "Sign in - Google Accounts — https://accounts.google.com/v3/signin/accountchooser?access_type=offline&client_id=1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com&code_challenge=O4RkmoQ0LWndzzOWChEgXSKt0flQEN6G59RUmYUhUoQ&code_challenge_method=S256&prompt=consent&redirect_uri=http%3A%2F%2Flocalhost%3A35847%2Fauth%2Fcallback&response_type=code&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcclog+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fexperimentsandconfigs+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Faicode&state=7MeNNCdQgc08VnE--N4lZw&dsh=S1830845020%3A1786809323507126&o2v=1&service=lso&flowName=GeneralOAuthFlow&opparams=%253F&continue=https%3A%2F%2Faccounts.google.com%2Fsignin%2Foauth%2Fconsent%3Fauthuser%3Dunknown%26part%3DAJi8hAOtFWihQM8eYogY8Lacjg2xfAq6r1vlcaD2JFoj-dhj2f2_7qaoPlAZ9fZhB4_QiAA0uMEomjC_xf1mTS7rrA5rpvuNVPslS9p68yZlE3PQ-5vJSPyqa9P8ARt_ZbaJKp8SFV5bJMdjqlk7FrTj5lgKhztzxG02jNeyrgUoaf_6BBZEjErwCVC6cZntflWfZma-6TiGRnd9htLGZ6bhp0RVR7YAvsIZhW4Y1uas5oebZ6JYj0pwTiSW4uyF7GWl9yB31EOA3uock5yw-Po7mE6RqU2SwjafP89k0ywhvdN11F5VEpCzlHVilIKxKvNNvSu06_EXnErEeXU7V1WI-fzIEQnz9Xl_6mk-_owGZlGlKih8s-94NuljxEAea50B9T0EOYwXAiC7eo9VzyD13zA_ToeLgJrOP1X-05n2VdNUul1vaxMhcdAZQ78a2iN2gMiuPXxKC8YlLJwgbFXHlUzwNnxujYG7lynY8lUNFm3t8D4d2DFHSxYlPygP7AYNjJeNNm5M%26flowName%3DGeneralOAuthFlow%26as%3DS1830845020%253A1786809323507126%26client_id%3D1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com%26requestPath%3D%252Fsignin%252Foauth%252Fconsent%23&app_domain=http%3A%2F%2Flocalhost%3A35847"
+    },
+    {
+      "time": "2026-08-15 14:20:39",
+      "type": "Browser (Chrome)",
+      "detail": "Credit History — https://one.google.com/ai/activity?utm_source=antigravity&utm_medium=web&utm_campaign=argon_settings_page_ai_credits_activity_page&email=kh.merouane.abderrahmane%40gmail.com&pli=1&g1_landing_page=0"
+    },
+    {
+      "time": "2026-08-15 14:20:37",
+      "type": "Browser (Chrome)",
+      "detail": "Credit History — https://accounts.google.com/AccountChooser?Email=kh.merouane.abderrahmane%40gmail.com&continue=https%3A%2F%2Fone.google.com%2Fai%2Factivity%3Futm_source%3Dantigravity%26utm_medium%3Dweb%26utm_campaign%3Dargon_settings_page_ai_credits_activity_page%26email%3Dkh.merouane.abderrahmane%2540gmail.com"
+    },
+    {
+      "time": "2026-08-15 14:20:37",
+      "type": "Browser (Chrome)",
+      "detail": "Credit History — https://accounts.google.com/ServiceLogin?continue=https%3A%2F%2Fone.google.com%2Fai%2Factivity%3Futm_source%3Dantigravity%26utm_medium%3Dweb%26utm_campaign%3Dargon_settings_page_ai_credits_activity_page%26email%3Dkh.merouane.abderrahmane%2540gmail.com&sacu=1&passive=1209600&dsh=S33811657%3A1786800037179902&authuser=0"
+    },
+    {
+      "time": "2026-08-15 14:20:37",
+      "type": "Browser (Chrome)",
+      "detail": "Credit History — https://one.google.com/ai/activity?utm_source=antigravity&utm_medium=web&utm_campaign=argon_settings_page_ai_credits_activity_page&email=kh.merouane.abderrahmane@gmail.com&pli=1"
+    },
+    {
+      "time": "2026-08-15 14:20:36",
+      "type": "Browser (Chrome)",
+      "detail": "Credit History — https://antigravity.google/g1-activity?utm_source=antigravity&utm_medium=web&utm_campaign=argon_settings_page_ai_credits_activity_page&email=kh.merouane.abderrahmane%40gmail.com"
+    },
+    {
+      "time": "2026-08-15 13:40:49",
+      "type": "Opened File",
+      "detail": "/home/adonis/network-scanner/client.py"
+    },
+    {
+      "time": "2026-08-15 09:57:50",
+      "type": "Browser (Chrome)",
+      "detail": "Google Antigravity Auth Success — http://localhost:45225/auth/callback?state=Oc8Akn3DlySXs6edA4YMyA&iss=https://accounts.google.com&code=4/0ATsMZqAKyrO3siiP9eOmMTE2onB1O2I5QQOIogs9DbBkFmgx1jvLOvFMq-5Tt-YjifTIDA&scope=email%20profile%20https://www.googleapis.com/auth/cloud-platform%20https://www.googleapis.com/auth/userinfo.email%20https://www.googleapis.com/auth/userinfo.profile%20https://www.googleapis.com/auth/cclog%20https://www.googleapis.com/auth/experimentsandconfigs%20https://www.googleapis.com/auth/aicode%20openid&authuser=0&prompt=consent"
+    },
+    {
+      "time": "2026-08-15 09:57:50",
+      "type": "Browser (Chrome)",
+      "detail": "Google Antigravity Auth Success — https://antigravity.google/auth-success?app=antigravity"
+    },
+    {
+      "time": "2026-08-15 09:57:47",
+      "type": "Browser (Chrome)",
+      "detail": "Sign in - Google Accounts — https://accounts.google.com/signin/oauth/firstparty/nativeapp?authuser=0&part=AJi8hAMPiCATkNOISCrc7IMgez4xjizhw6DQhJ7j66GEN54eSAdiUMOZiUmRfpzHbjdysZ4trNUKH7GBFWip_QMGkk336sQPs78DPBpFAqHEfTlFS7pzZNPfdc6SQQjva6-FQN1twIX9XscAUH1x8lARPJIrpteWOLK4F_niJYJ1sPCB1VzEdWfq9mga6BfYitTVxSh5C5i5y6kAXcat6HOTuESNInqleywVJhf_AVzdpG0pIIgdDgvIxUNP5ugcZzYm0-_FTLd4MLpVuweab-AVaiA0G9GoxLfgGm4tlTXcwDVUb1DZflshNxXtk8aJnjMoWdQ2un9Sj-E0kz3eCepx3bhlXhy-aLOSTZu07DBjyvkKct90cJuTEWGQ_6Etb5XnO1ZgXHGqV1ZKjNvp5BwMp8r09e0mEr5fgjaccNu4L5uJeG7ymt-Kyh1x8idcxWtkcQW3tfIOEoMgf2vIaXNsqy85CV7wrqJrLUOpVeRVA-pm3lV5btffgpTanlpPdMqiCbov97UK&flowName=GeneralOAuthFlow&as=S-771087846:1786784243811581&client_id=1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com&requestPath=/signin/oauth/consent&pli=1&rapt=AEjHL4NIqK4foMfhoa-_j8ntzJ5olnehI9PHOy6i-PlCu1BNHW6uTdcN0KIbiM47V1e8_uX6YxlXy5Ci4WHukhVXaMAHgeS1YZTuxt02g0zRdgVsB18f4Vc"
+    },
+    {
+      "time": "2026-08-15 09:57:46",
+      "type": "Browser (Chrome)",
+      "detail": "Sign in - Google Accounts — https://accounts.google.com/CheckCookie?continue=https://accounts.google.com/signin/oauth/consent?authuser%3D0%26part%3DAJi8hAMPiCATkNOISCrc7IMgez4xjizhw6DQhJ7j66GEN54eSAdiUMOZiUmRfpzHbjdysZ4trNUKH7GBFWip_QMGkk336sQPs78DPBpFAqHEfTlFS7pzZNPfdc6SQQjva6-FQN1twIX9XscAUH1x8lARPJIrpteWOLK4F_niJYJ1sPCB1VzEdWfq9mga6BfYitTVxSh5C5i5y6kAXcat6HOTuESNInqleywVJhf_AVzdpG0pIIgdDgvIxUNP5ugcZzYm0-_FTLd4MLpVuweab-AVaiA0G9GoxLfgGm4tlTXcwDVUb1DZflshNxXtk8aJnjMoWdQ2un9Sj-E0kz3eCepx3bhlXhy-aLOSTZu07DBjyvkKct90cJuTEWGQ_6Etb5XnO1ZgXHGqV1ZKjNvp5BwMp8r09e0mEr5fgjaccNu4L5uJeG7ymt-Kyh1x8idcxWtkcQW3tfIOEoMgf2vIaXNsqy85CV7wrqJrLUOpVeRVA-pm3lV5btffgpTanlpPdMqiCbov97UK%26flowName%3DGeneralOAuthFlow%26as%3DS-771087846:1786784243811581%26client_id%3D1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com%26requestPath%3D/signin/oauth/consent%26pli%3D1%26rapt%3DAEjHL4NIqK4foMfhoa-_j8ntzJ5olnehI9PHOy6i-PlCu1BNHW6uTdcN0KIbiM47V1e8_uX6YxlXy5Ci4WHukhVXaMAHgeS1YZTuxt02g0zRdgVsB18f4Vc&rart=ANgoxcdjj4PYGw4LWXGRPf3kASiJMK-H3Og8OcTYenZNxtFGjBU8ZDIyc1rlbAIP5t8hZRPLuKepVpCO9FcjphvNn8GpkaFRWunPbCB-TJdfnKpi5Wqj8ZJhos5ExCWSEaciGd8OQl_6&flowName=GlifWebSignIn&chtml=LoginDoneHtml&gidl=EgIIAA&authuser=0"
+    },
+    {
+      "time": "2026-08-15 09:57:46",
+      "type": "Browser (Chrome)",
+      "detail": "Sign in - Google Accounts — https://accounts.youtube.com/accounts/SetSID?ssdc=1&sidt=ALWU2cvzyzmsOeDFTi67U4Kt87cd/EmEyaiFRzhrZTv%2B271B9OjGpdfT/c2Iy2FIzVRuJ75elHZBgP2dPNwvuwReGuIAg6v289SA6UmQeC44G%2B%2BgCuA/K/gWuwsParVv3Z8SWNZ6Qku1pLXOrBa0CcRCnsD7EUK0/flNUg4pRi3fcayMaRs9psRMIKURkZrR3LzdSzw62iULTvScP32vsqndWJLBGpdQBraDAVgEsz2fnwpX0Qe8qe0citGRn3IXWrLIwXHk14attMeeXO9Pdhkz9IttwrtO9TY6m0Y0UoiS0nNej%2B%2BDSIGFey0agaw5c4DcCZ6HCaXWVYdnyMJJge05aTx2Iv45Z5S4Q9CxgEgbjY43FVOgmH3m8JeGh4AukqOI/xS%2B4y8Pdiijro/K9V%2B3O4Ss9qFEtaS27Og4hj3xOvh5m%2BQzlYsPfHcFvsuVYn7nTCcsRO2%2B2lj/CfLZeuNgMz0z6TB6Gum2WkJ1puLjZ3SN6GE6h5RBaVHN7ABdvTHRB9eTNKPvDUHGMApEemeLkQ52zp04G1cPl7kU3u0pVNQlCUJSdbO1lwWwlg9nHTd%2BiaFwnWaP0zDTmARw/l/nrvFWT9cEHO3UTAO7SsNZaxKOwSOKyljDbLEP852sMNJsP5XDAfpHNOyqkRzRsxJBB%2BXZAiOGuFlA2c1QAohOJA3o0%2B8J0Cjwns3pXOJi9d5gaM%2BYvLCm4tOjS2agQA1AGR003UO/OU/bzkRLK10r2mtIWD/kMzYT1t/JwNPFNfCDLHIgh22L6qyN4Qk03Q55VojZfWvdd8oysr9TuwRz%2BbBPoz16GemxNwbszqSe8pMRcQzRsbdmlYU%2B7yjMHu/w7ktmWoiF9a5j5s0BKSqK6LR%2BDx9X/H8QqvhtTVRhkziBiSFYZfn6cYCrEdYWhoyTSENXjuqKmFPwo1RTzHt7hKWZZnMo%2BxxNnsDvW/sXKDqPlxvwglet8pg/iS9M43a/ndyLsif8vBrYJFmCQ3DifyBG6WgvY9uVyO8lZjPI9uKbcJ4//amBJXA6s6raT3Wv6MJvHYnrBNTiV9f1muSUE4vnhxViRsQ1WLf%2BgNL1ju%2BbxAYF1TMD5KhVS96u9BO6csRzBmY5OIAPQyJunZQUqEA%2BAkuBNEIhdD5XLRMM0WUef3%2BIZ9lbtisA8lIe2yzw6m/rTxig2yQH5uH9HIxieiG50EgqL6Zr4qZqfMkUPBYkpBzkbvZuUY8S7GG%2BE3VjseoSeu1jsh1hGb5yZ5oDtDrschcUc/f736nuLG5ew1ey80m24rJ1XLKDGaBAZahNjCM6NYcth/JYTtrlY0wxJxKovGofMJw3QszZUiEE5h2M7yk2eoLwFlJKXy4JNGuv9I5PKSBPanXb43mXlZrHEszRg9k4xwPFCcB/x9yJMkwbxdXSMGgMXwHvuRuzSXNWJZduUKKdA1q2QAsEqLjr1/65bLNxROQXZGRirs8LxbREFPtYPkfBht%2BHidOU9pehXkc9ChdCJaRhUhHR4lrh1rlkZCBebBNdSiPHkQ1n4SLIOW/4tMuF6glk1YMCfRNhO2soRlXFqHI/CVJJieKXgm3XWp0fqh3SerpbTGAKN%2BNrpmcYC1Ik8UZ9BpDpS9s2708DCtSmrCkOTR/7mpB9HbWDqKBgfg6WKaif2Zh1sIvJcDBv7TjBle3kB1KXqhFnvKrFaQ6s0XLhz9PW4gnJU%2Bxr2miHCejoU%2B4ERDtOBOwfKcqX/022KzbhjTIcvmjkg2huW3HyfFXyP/I0B8CMxiyQoNYKMC66AjDGyLO8pvrGHcM85/zRB5cMzfmLGwqEn6013t4SFsB8WQhXV0KSYv0PL/fNdNt0HlwYO/hgKaHdShCLV0azTJNE1sBs8TnzKRD8CHjzGxxHln9lkYcflphJCBFXuGXVwT9PuDSqh8aUbM%2BhBhustOW5Bda48JdWSDRBg3kQpin7VYYgtFJ5eWdQIxv84FSdUx3nFZXhNBstAkZmpNPvV8DNXnIj/4HQIwBb483otgQ7/el1RSS6Q%2BPinga3OoYW6EqOIIoFuX2h1lcW7Biz%2BUvg60ot781JK4wdfSvivfm%2B48B7CmVNYx0hqGLV%2Byf//2ZPy5D4EQJ6o1xMP6xcih5M1VLfzGZxRLnpXEZ/txFvPeL6l/zFd9lfn/T4JpHRj8tZbvWk4Tknxfztemhs/kE5lFnFCdU8vycsPMFY9uO7NnLqAXVhNgWWXoqLQfSzlbdx1WDhSw3eP%2Bc9z4C3HKIuTJKyVFRdF6/Ldd5rofX8Bwy1SePW8%2B34m%2B6za/WI3tUnz%2BLy8cAeZHqEgigLjON9Zao1QHvv3tfM7UeNpT7CZq8WIreVvfdgR4G/d6EnWUrHL4onpBqYxfDja7WXRTPiDJ4pm%2Bj3bfRMG7mpI93APoamiIL5JksRPcTGWqaLD7z%2BXfBcGEcEjrVR1XUfz8r85F6HzMWbKV8TBzBESm07WmCvT7k3y/5V/oQcV0cjCmZny6qHcj5IB6SAE2lwbZX17o8FWF7H%2BSPnEBDfE6/C3d4s0g7i%2Bjht18Y1jx60Uok8/d6ruvwPCGF/HIlljuY0Lx5g9nzPgXuq5iz4S3F4sP0wewS9t%2BfeDN/spRyXeEaOqIfAyLLDk9JDNNgZaO4pTxseClc30m1aC046USwI3kexRFRbem176Ly/290%3D&continue=https://accounts.google.com/signin/oauth/consent?authuser%3D0%26part%3DAJi8hAMPiCATkNOISCrc7IMgez4xjizhw6DQhJ7j66GEN54eSAdiUMOZiUmRfpzHbjdysZ4trNUKH7GBFWip_QMGkk336sQPs78DPBpFAqHEfTlFS7pzZNPfdc6SQQjva6-FQN1twIX9XscAUH1x8lARPJIrpteWOLK4F_niJYJ1sPCB1VzEdWfq9mga6BfYitTVxSh5C5i5y6kAXcat6HOTuESNInqleywVJhf_AVzdpG0pIIgdDgvIxUNP5ugcZzYm0-_FTLd4MLpVuweab-AVaiA0G9GoxLfgGm4tlTXcwDVUb1DZflshNxXtk8aJnjMoWdQ2un9Sj-E0kz3eCepx3bhlXhy-aLOSTZu07DBjyvkKct90cJuTEWGQ_6Etb5XnO1ZgXHGqV1ZKjNvp5BwMp8r09e0mEr5fgjaccNu4L5uJeG7ymt-Kyh1x8idcxWtkcQW3tfIOEoMgf2vIaXNsqy85CV7wrqJrLUOpVeRVA-pm3lV5btffgpTanlpPdMqiCbov97UK%26flowName%3DGeneralOAuthFlow%26as%3DS-771087846:1786784243811581%26client_id%3D1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com%26requestPath%3D/signin/oauth/consent%26pli%3D1%26rapt%3DAEjHL4NIqK4foMfhoa-_j8ntzJ5olnehI9PHOy6i-PlCu1BNHW6uTdcN0KIbiM47V1e8_uX6YxlXy5Ci4WHukhVXaMAHgeS1YZTuxt02g0zRdgVsB18f4Vc&tcc=1&dbus=DZ"
+    },
+    {
+      "time": "2026-08-15 09:57:46",
+      "type": "Browser (Chrome)",
+      "detail": "Sign in - Google Accounts — https://accounts.google.dz/accounts/SetSID?ssdc=1&sidt=ALWU2cvxwbrnq5eA343eJGRar/lAttGGlFnXvkK2OgUwKirAe9k7DX%2BLBelM7Uv2q18Kvs0a7GtIRWgYIzM467I8XhH366fPSzLcoIcBw%2BhHhr1A9%2BCSThvEZh5%2BOLEoX6F8YtYANVS1zRanBJUwaAZaih1zDrbMq8yixDG6oDyWwQWehCkc7gkLUWu%2BFescyXjwyvSdfFUZhtQ7dhXNNeZf%2BOHdQ0%2BKwMrw/L9/3dsdr3Pmqpjf%2BjkPo/iq0CoF11J8kDBBan7JBXCSGsWpgeNuEC1NVGYtKV0qUvRAEmfLCjcV9sihrNMIfXdXyFh5V1bYAb5JpTzfLgumNA41tyqto088KQLZez3gQrIsqaaSU2yP4qgv3IY0v0AXf7gmUcVwmiN2vHeWWtqkvcySWAIg2qaouPeD%2BR6mqfQQxTNMqVbN%2B8MXEtiBuskC2iR5Ao0L5n2QtTHDVE5Z/YGGdR982b0zn5hxqaFmk2IgpWKoNOt8W29FIH13TQ003AuYqVhP/O5bRPeAiBAj1unkpiItU5dIrvtnwDx%2Bqg68k7%2BfroVQU2N6VQK3GOsVi/U7AYE%2BDZrF76fltxp%2BOJIxI0zY31d4ynZ0u915XJWDijQii87IASZkViwyF36Yc9S8dWluaaEidQxm9Ab83er9Q6jPPjDXbW6VrSRVkofbkcwtS23FSGQ%2BQ9749fnEjsbhj%2BWS7SnrGSOpW4/79JL2EHlTUioB8Svk2CMVjl3lHVrBiUFVfR7e2zyeWnp70ceRga5S2XZVn2ODLaJMuz8WP8YkYxqDAIXbtT8GG1UUTWGShywS0Z8nqDfjNuiBCEDlhbYdpvV8P7DNtHhJ7YnINML1KqVms/A0Vj%2BXej1Gm5yUKoYXPYrZJzJeBePZk7pAMltPohv5HWPOZvjcIT0%2BK0NzPJFHB%2BmvXy0HUYB7oqBzG5gSGtylUqjUWG1IcHvSMtbBCG0Doi2EgAeo%2BZA1toJT4jXGw6PPincmrNeSLqD5Ag6Az5Bi1gg9FD6dkN0rwGylS3QVXz6zH4YWkS%2BXfAOaMqIknSy2aIbdqKhxNUpXO/blxGDZsQrMrOZFz%2B4gk1R1nVzvN4QpDkPxUZkvDiBKuadXNn5pBd%2BM3SBcgy6zI%2BqlL4ojImTBbiSMbvzVlJZUWEHeLIfrBOqQ2RgCodsVGMa0PgdwrVf7SrGPau8BJGGnNinO9Bfw3KKqp%2BVyeC5pt9MvrpqHkWaWsFGvoFHspw%2BmF%2B0UdlFQhzyj4EWSOXV58RzTsd0jHMAJABOgs6UPTo0Z0Q08W%2BK5bWfATZyUEPTj%2Bm0D8iOU7QMS0nW985GeeNAqDUd%2B%2BHyret%2BW03Ns2pHgx7Gwgb4wZQWakiJKZZJXuCNAdmecw9NgSoZxeMBKYj8k3YgiSqqTGu1uebw9lAkHMsxhNW37lRkSXGG5H%2BU8msQY%2B5r6FClKAidQAfRd3RrfyE/JZyENI/cn1DNe6g6TiXYC481EhJPzndx0PCHmW43fzphvmDh1XJ87Irbj6L%2BO12t4hFQOIUVvqRShOH1uE9xK4kg0trbMLbX/ENU/3%2B9q5srGn3WyU2oepm1o9mcZit3vG/x0DtLq4ba/jrXuT8AW1zewbHEs2y1pZvOIjmW70T5akz56osqDyWElcvyHJSmGtwpNmoZ4pjsQznXoCXnxXeDL4K3xGsTQWb5oC%2BSrgKpxBwaVZ0wQVG8HXakBDtXc1t93L9RzLo2XO24YiT%2Bep18dvWXQkRR%2BUPxybIc4nMd9Zc0T2Q57taiLxpw3e87NNuEc4Qc0syxEisXcHqckYu/2sbzLLWDtDKiRJ81/8WgztEqYR1Ja296oSIRzibGjDCx08s4wNR4qubyuBKEXPbl5ijQaWms/EOs9ZTWRUHuMxG/TS%2B4GGj4C17IFnRHzSvNRS61qItpGWMvN5X59UNil4a2k1AbsRWj7g2vxTJwQ6MzTm50aSHWQLEedkNxOYF8tmy/LornTcR3L4L88ervHxtgrM7TV0jbbZN7jhw9fEl0bfQqKigDvEuuqteT8pHA7RlflqjKuD%2Bd8cB5FWESj0FBtihGGULtwpzz0HDNGlEohfSesaWfPu7hAYnTQs47TVniFVHSz8iYyxiLieIXQ54O/GertUQ6DnuHgvQGi8LSuJ7nucIXFwfOKGIwEjbzl2GUTlOH729Q2IZ/dVztl6GtnYL1pZV086a6Q75wMtLbIn3hfZVxPTI/pdE6KGLn2V7aM5bOgjWQvZf2o1Vqn4VWfRQJNc8so2gLOjSQXS4bLPLIBQxkapGstQ2tc9I%2BoiMzeLZsaAlk7ldHcru1lh0N%2BGwJ0kxCLJ/jGuP34cmypUI%2BrdUH3PVj8esl3lr2dDvet6zZcocrE9AA4uF3dQqV%2BlVV6IYyQVsKOA2OATx0kaIYoVjWbkM%2B/uF92CBQ%2BDbGVf3qiLqnKxwOwi2m54negBOKaDXcSqgSbkibfzVmiR3S9DGUlAYsCd8v78L0yvXIPuUQLia%2BwlA0/AexTxYa/Duqpk370vxi%2BwUSH331eKI3bpnQo4dn%2B8iSXBEP2OPNSIpJ2wGXzISMk%2BZIbYHkGHyevDOKce1CI5xMeDaGpLh96CXATlmVsvZjt9X0Br/PnQcUacYqpM60Ldy8A0%2B9bBKa/GiyQhe8yPWezxtWmtJ/7VOz0KAUDqZU%3D&continue=https://accounts.google.com/signin/oauth/consent?authuser%3D0%26part%3DAJi8hAMPiCATkNOISCrc7IMgez4xjizhw6DQhJ7j66GEN54eSAdiUMOZiUmRfpzHbjdysZ4trNUKH7GBFWip_QMGkk336sQPs78DPBpFAqHEfTlFS7pzZNPfdc6SQQjva6-FQN1twIX9XscAUH1x8lARPJIrpteWOLK4F_niJYJ1sPCB1VzEdWfq9mga6BfYitTVxSh5C5i5y6kAXcat6HOTuESNInqleywVJhf_AVzdpG0pIIgdDgvIxUNP5ugcZzYm0-_FTLd4MLpVuweab-AVaiA0G9GoxLfgGm4tlTXcwDVUb1DZflshNxXtk8aJnjMoWdQ2un9Sj-E0kz3eCepx3bhlXhy-aLOSTZu07DBjyvkKct90cJuTEWGQ_6Etb5XnO1ZgXHGqV1ZKjNvp5BwMp8r09e0mEr5fgjaccNu4L5uJeG7ymt-Kyh1x8idcxWtkcQW3tfIOEoMgf2vIaXNsqy85CV7wrqJrLUOpVeRVA-pm3lV5btffgpTanlpPdMqiCbov97UK%26flowName%3DGeneralOAuthFlow%26as%3DS-771087846:1786784243811581%26client_id%3D1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com%26requestPath%3D/signin/oauth/consent%26pli%3D1%26rapt%3DAEjHL4NIqK4foMfhoa-_j8ntzJ5olnehI9PHOy6i-PlCu1BNHW6uTdcN0KIbiM47V1e8_uX6YxlXy5Ci4WHukhVXaMAHgeS1YZTuxt02g0zRdgVsB18f4Vc&tcc=1"
+    },
+    {
+      "time": "2026-08-15 09:57:46",
+      "type": "Browser (Chrome)",
+      "detail": "Sign in - Google Accounts — https://accounts.google.com/signin/oauth/consent?authuser=0&part=AJi8hAMPiCATkNOISCrc7IMgez4xjizhw6DQhJ7j66GEN54eSAdiUMOZiUmRfpzHbjdysZ4trNUKH7GBFWip_QMGkk336sQPs78DPBpFAqHEfTlFS7pzZNPfdc6SQQjva6-FQN1twIX9XscAUH1x8lARPJIrpteWOLK4F_niJYJ1sPCB1VzEdWfq9mga6BfYitTVxSh5C5i5y6kAXcat6HOTuESNInqleywVJhf_AVzdpG0pIIgdDgvIxUNP5ugcZzYm0-_FTLd4MLpVuweab-AVaiA0G9GoxLfgGm4tlTXcwDVUb1DZflshNxXtk8aJnjMoWdQ2un9Sj-E0kz3eCepx3bhlXhy-aLOSTZu07DBjyvkKct90cJuTEWGQ_6Etb5XnO1ZgXHGqV1ZKjNvp5BwMp8r09e0mEr5fgjaccNu4L5uJeG7ymt-Kyh1x8idcxWtkcQW3tfIOEoMgf2vIaXNsqy85CV7wrqJrLUOpVeRVA-pm3lV5btffgpTanlpPdMqiCbov97UK&flowName=GeneralOAuthFlow&as=S-771087846:1786784243811581&client_id=1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com&requestPath=/signin/oauth/consent&pli=1&rapt=AEjHL4NIqK4foMfhoa-_j8ntzJ5olnehI9PHOy6i-PlCu1BNHW6uTdcN0KIbiM47V1e8_uX6YxlXy5Ci4WHukhVXaMAHgeS1YZTuxt02g0zRdgVsB18f4Vc"
+    },
+    {
+      "time": "2026-08-15 09:57:27",
+      "type": "Browser (Chrome)",
+      "detail": "Sign in - Google Accounts — https://accounts.google.com/ServiceLogin?access_type=offline&app_domain=http%3A%2F%2Flocalhost%3A45225&authuser=0&client_id=1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com&code_challenge=870Yp3zLfHu3b5qus8xfvppTEtoqPDEoPoHKgH96Dgo&code_challenge_method=S256&continue=https%3A%2F%2Faccounts.google.com%2Fsignin%2Foauth%2Fconsent%3Fauthuser%3Dunknown%26part%3DAJi8hAMPiCATkNOISCrc7IMgez4xjizhw6DQhJ7j66GEN54eSAdiUMOZiUmRfpzHbjdysZ4trNUKH7GBFWip_QMGkk336sQPs78DPBpFAqHEfTlFS7pzZNPfdc6SQQjva6-FQN1twIX9XscAUH1x8lARPJIrpteWOLK4F_niJYJ1sPCB1VzEdWfq9mga6BfYitTVxSh5C5i5y6kAXcat6HOTuESNInqleywVJhf_AVzdpG0pIIgdDgvIxUNP5ugcZzYm0-_FTLd4MLpVuweab-AVaiA0G9GoxLfgGm4tlTXcwDVUb1DZflshNxXtk8aJnjMoWdQ2un9Sj-E0kz3eCepx3bhlXhy-aLOSTZu07DBjyvkKct90cJuTEWGQ_6Etb5XnO1ZgXHGqV1ZKjNvp5BwMp8r09e0mEr5fgjaccNu4L5uJeG7ymt-Kyh1x8idcxWtkcQW3tfIOEoMgf2vIaXNsqy85CV7wrqJrLUOpVeRVA-pm3lV5btffgpTanlpPdMqiCbov97UK%26flowName%3DGeneralOAuthFlow%26as%3DS-771087846%253A1786784243811581%26client_id%3D1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com%26requestPath%3D%252Fsignin%252Foauth%252Fconsent%23&dsh=S-771087846%3A1786784243811581&flowName=GeneralOAuthFlow&o2v=1&opparams=%253F&passive=true&prompt=consent&redirect_uri=http%3A%2F%2Flocalhost%3A45225%2Fauth%2Fcallback&response_type=code&sacu=1&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcclog%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fexperimentsandconfigs%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Faicode&service=lso&state=Oc8Akn3DlySXs6edA4YMyA"
+    },
+    {
+      "time": "2026-08-15 09:57:27",
+      "type": "Browser (Chrome)",
+      "detail": "Sign in - Google Accounts — https://accounts.google.com/signin/oauth/consent?authuser=0&part=AJi8hAMPiCATkNOISCrc7IMgez4xjizhw6DQhJ7j66GEN54eSAdiUMOZiUmRfpzHbjdysZ4trNUKH7GBFWip_QMGkk336sQPs78DPBpFAqHEfTlFS7pzZNPfdc6SQQjva6-FQN1twIX9XscAUH1x8lARPJIrpteWOLK4F_niJYJ1sPCB1VzEdWfq9mga6BfYitTVxSh5C5i5y6kAXcat6HOTuESNInqleywVJhf_AVzdpG0pIIgdDgvIxUNP5ugcZzYm0-_FTLd4MLpVuweab-AVaiA0G9GoxLfgGm4tlTXcwDVUb1DZflshNxXtk8aJnjMoWdQ2un9Sj-E0kz3eCepx3bhlXhy-aLOSTZu07DBjyvkKct90cJuTEWGQ_6Etb5XnO1ZgXHGqV1ZKjNvp5BwMp8r09e0mEr5fgjaccNu4L5uJeG7ymt-Kyh1x8idcxWtkcQW3tfIOEoMgf2vIaXNsqy85CV7wrqJrLUOpVeRVA-pm3lV5btffgpTanlpPdMqiCbov97UK&flowName=GeneralOAuthFlow&as=S-771087846:1786784243811581&client_id=1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com&requestPath=/signin/oauth/consent&pli=1#"
+    },
+    {
+      "time": "2026-08-15 09:57:27",
+      "type": "Browser (Chrome)",
+      "detail": "Sign in - Google Accounts — https://accounts.google.com/ServiceLogin?rart=ANgoxcdjj4PYGw4LWXGRPf3kASiJMK-H3Og8OcTYenZNxtFGjBU8ZDIyc1rlbAIP5t8hZRPLuKepVpCO9FcjphvNn8GpkaFRWunPbCB-TJdfnKpi5Wqj8ZJhos5ExCWSEaciGd8OQl_6&continue=https%3A%2F%2Faccounts.google.com%2Fsignin%2Foauth%2Fconsent%3Fauthuser%3D0%26part%3DAJi8hAMPiCATkNOISCrc7IMgez4xjizhw6DQhJ7j66GEN54eSAdiUMOZiUmRfpzHbjdysZ4trNUKH7GBFWip_QMGkk336sQPs78DPBpFAqHEfTlFS7pzZNPfdc6SQQjva6-FQN1twIX9XscAUH1x8lARPJIrpteWOLK4F_niJYJ1sPCB1VzEdWfq9mga6BfYitTVxSh5C5i5y6kAXcat6HOTuESNInqleywVJhf_AVzdpG0pIIgdDgvIxUNP5ugcZzYm0-_FTLd4MLpVuweab-AVaiA0G9GoxLfgGm4tlTXcwDVUb1DZflshNxXtk8aJnjMoWdQ2un9Sj-E0kz3eCepx3bhlXhy-aLOSTZu07DBjyvkKct90cJuTEWGQ_6Etb5XnO1ZgXHGqV1ZKjNvp5BwMp8r09e0mEr5fgjaccNu4L5uJeG7ymt-Kyh1x8idcxWtkcQW3tfIOEoMgf2vIaXNsqy85CV7wrqJrLUOpVeRVA-pm3lV5btffgpTanlpPdMqiCbov97UK%26flowName%3DGeneralOAuthFlow%26as%3DS-771087846%253A1786784243811581%26client_id%3D1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com%26requestPath%3D%252Fsignin%252Foauth%252Fconsent%26pli%3D1&authuser=0"
+    },
+    {
+      "time": "2026-08-15 09:57:27",
+      "type": "Browser (Chrome)",
+      "detail": "Sign in - Google Accounts — https://accounts.google.com/InteractiveLogin?authuser=0&continue=https://accounts.google.com/signin/oauth/consent?authuser%3D0%26part%3DAJi8hAMPiCATkNOISCrc7IMgez4xjizhw6DQhJ7j66GEN54eSAdiUMOZiUmRfpzHbjdysZ4trNUKH7GBFWip_QMGkk336sQPs78DPBpFAqHEfTlFS7pzZNPfdc6SQQjva6-FQN1twIX9XscAUH1x8lARPJIrpteWOLK4F_niJYJ1sPCB1VzEdWfq9mga6BfYitTVxSh5C5i5y6kAXcat6HOTuESNInqleywVJhf_AVzdpG0pIIgdDgvIxUNP5ugcZzYm0-_FTLd4MLpVuweab-AVaiA0G9GoxLfgGm4tlTXcwDVUb1DZflshNxXtk8aJnjMoWdQ2un9Sj-E0kz3eCepx3bhlXhy-aLOSTZu07DBjyvkKct90cJuTEWGQ_6Etb5XnO1ZgXHGqV1ZKjNvp5BwMp8r09e0mEr5fgjaccNu4L5uJeG7ymt-Kyh1x8idcxWtkcQW3tfIOEoMgf2vIaXNsqy85CV7wrqJrLUOpVeRVA-pm3lV5btffgpTanlpPdMqiCbov97UK%26flowName%3DGeneralOAuthFlow%26as%3DS-771087846%253A1786784243811581%26client_id%3D1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com%26requestPath%3D%252Fsignin%252Foauth%252Fconsent%26pli%3D1&rart=ANgoxcdjj4PYGw4LWXGRPf3kASiJMK-H3Og8OcTYenZNxtFGjBU8ZDIyc1rlbAIP5t8hZRPLuKepVpCO9FcjphvNn8GpkaFRWunPbCB-TJdfnKpi5Wqj8ZJhos5ExCWSEaciGd8OQl_6&dsh=S-82998999:1786784246032791"
+    },
+    {
+      "time": "2026-08-15 09:57:27",
+      "type": "Browser (Chrome)",
+      "detail": "Sign in - Google Accounts — https://accounts.google.com/v3/signin/challenge/dp?TL=ACv9tzFGwMPTAhapoaNfGB7FRTKXAp_giyPMY54tFZ-bDBCWpTmS6zir7QMdugmB&authuser=0&cid=3&continue=https%3A%2F%2Faccounts.google.com%2Fsignin%2Foauth%2Fconsent%3Fauthuser%3D0%26part%3DAJi8hAMPiCATkNOISCrc7IMgez4xjizhw6DQhJ7j66GEN54eSAdiUMOZiUmRfpzHbjdysZ4trNUKH7GBFWip_QMGkk336sQPs78DPBpFAqHEfTlFS7pzZNPfdc6SQQjva6-FQN1twIX9XscAUH1x8lARPJIrpteWOLK4F_niJYJ1sPCB1VzEdWfq9mga6BfYitTVxSh5C5i5y6kAXcat6HOTuESNInqleywVJhf_AVzdpG0pIIgdDgvIxUNP5ugcZzYm0-_FTLd4MLpVuweab-AVaiA0G9GoxLfgGm4tlTXcwDVUb1DZflshNxXtk8aJnjMoWdQ2un9Sj-E0kz3eCepx3bhlXhy-aLOSTZu07DBjyvkKct90cJuTEWGQ_6Etb5XnO1ZgXHGqV1ZKjNvp5BwMp8r09e0mEr5fgjaccNu4L5uJeG7ymt-Kyh1x8idcxWtkcQW3tfIOEoMgf2vIaXNsqy85CV7wrqJrLUOpVeRVA-pm3lV5btffgpTanlpPdMqiCbov97UK%26flowName%3DGeneralOAuthFlow%26as%3DS-771087846%253A1786784243811581%26client_id%3D1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com%26requestPath%3D%252Fsignin%252Foauth%252Fconsent%26pli%3D1&dsh=S-82998999%3A1786784246032791&flowName=GlifWebSignIn&rart=ANgoxcdjj4PYGw4LWXGRPf3kASiJMK-H3Og8OcTYenZNxtFGjBU8ZDIyc1rlbAIP5t8hZRPLuKepVpCO9FcjphvNn8GpkaFRWunPbCB-TJdfnKpi5Wqj8ZJhos5ExCWSEaciGd8OQl_6&rpbg=1"
+    },
+    {
+      "time": "2026-08-15 09:57:24",
+      "type": "Browser (Chrome)",
+      "detail": "Sign in - Google Accounts — https://accounts.google.com/o/oauth2/auth?access_type=offline&client_id=1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com&code_challenge=870Yp3zLfHu3b5qus8xfvppTEtoqPDEoPoHKgH96Dgo&code_challenge_method=S256&prompt=consent&redirect_uri=http%3A%2F%2Flocalhost%3A45225%2Fauth%2Fcallback&response_type=code&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcclog+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fexperimentsandconfigs+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Faicode&state=Oc8Akn3DlySXs6edA4YMyA"
+    },
+    {
+      "time": "2026-08-15 09:57:24",
+      "type": "Browser (Chrome)",
+      "detail": "Sign in - Google Accounts — https://accounts.google.com/v3/signin/accountchooser?access_type=offline&client_id=1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com&code_challenge=870Yp3zLfHu3b5qus8xfvppTEtoqPDEoPoHKgH96Dgo&code_challenge_method=S256&prompt=consent&redirect_uri=http%3A%2F%2Flocalhost%3A45225%2Fauth%2Fcallback&response_type=code&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.profile+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcclog+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fexperimentsandconfigs+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Faicode&state=Oc8Akn3DlySXs6edA4YMyA&dsh=S-771087846%3A1786784243811581&o2v=1&service=lso&flowName=GeneralOAuthFlow&opparams=%253F&continue=https%3A%2F%2Faccounts.google.com%2Fsignin%2Foauth%2Fconsent%3Fauthuser%3Dunknown%26part%3DAJi8hAMPiCATkNOISCrc7IMgez4xjizhw6DQhJ7j66GEN54eSAdiUMOZiUmRfpzHbjdysZ4trNUKH7GBFWip_QMGkk336sQPs78DPBpFAqHEfTlFS7pzZNPfdc6SQQjva6-FQN1twIX9XscAUH1x8lARPJIrpteWOLK4F_niJYJ1sPCB1VzEdWfq9mga6BfYitTVxSh5C5i5y6kAXcat6HOTuESNInqleywVJhf_AVzdpG0pIIgdDgvIxUNP5ugcZzYm0-_FTLd4MLpVuweab-AVaiA0G9GoxLfgGm4tlTXcwDVUb1DZflshNxXtk8aJnjMoWdQ2un9Sj-E0kz3eCepx3bhlXhy-aLOSTZu07DBjyvkKct90cJuTEWGQ_6Etb5XnO1ZgXHGqV1ZKjNvp5BwMp8r09e0mEr5fgjaccNu4L5uJeG7ymt-Kyh1x8idcxWtkcQW3tfIOEoMgf2vIaXNsqy85CV7wrqJrLUOpVeRVA-pm3lV5btffgpTanlpPdMqiCbov97UK%26flowName%3DGeneralOAuthFlow%26as%3DS-771087846%253A1786784243811581%26client_id%3D1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com%26requestPath%3D%252Fsignin%252Foauth%252Fconsent%23&app_domain=http%3A%2F%2Flocalhost%3A45225"
+    },
+    {
+      "time": "2026-08-15 09:45:17",
+      "type": "Opened File",
+      "detail": "/usr/share/dconf/profile/gdm"
+    },
+    {
+      "time": "2026-08-15 09:38:24",
+      "type": "Opened File",
+      "detail": "/usr/share/arp-scan/ieee-oui.txt"
+    },
+    {
+      "time": "2026-08-15 09:22:42",
+      "type": "Opened File",
+      "detail": "/home/adonis/network-scanner"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git log --oneline"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git diff"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git diff feat/LPH-PF-07-swagger-auth"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git diff feat/LPH-PF-07-swagger-auth --help"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git diff feat/LPH-PF-07-swagger-auth"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git switch feat/LPH-PF-07-swagger-auth"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git diff origin/fix/LPH-PF-11-django-admin-user"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git branch"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git switch review/lph-pf-05"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git diff feat/LPH-PF-07-swagger-auth"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git branch"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "history"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py migrate"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "cd backend/"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py migrate"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "hostory"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "istory"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "history"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo systemctl stop postgresql"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "docker compose down"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "docker compose up -d"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py migrate"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py seed_demo"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py runserver"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git branch"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git switch feat/LPH-PF-07-swagger-auth"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "grep -R \"SessionAuthentication\" ."
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "grep -R \"JWTAuthentication\" ."
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "grep -R \"authentication_classes\" ."
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "grep -R \"login/\" apps/ config/"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git switch view/lph-pf-11"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git status"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git branch"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py runserver"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "cd backend/"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py createsuperuser"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git status"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git switch view/lph-pf-11"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run pytest apps/accounts/tests"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py check"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py createsuperuser"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py runserver"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv python manage.py migrate"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv manage.py migrate"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python  manage.py migrate"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py createsuperuser"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py runserver"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git switch feat/LPH-PF-07-swagger-auth"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git merge view/lph-pf-11"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "http://127.0.0.1:8000/admin/login/"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py migrate"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py check"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run pytest"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run pytest apps/accounts/tests"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py runserver"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git diff"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git status"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run pytest apps/accounts/tests"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run test"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py test"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "history"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run ruff check"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run ruff check  --fix"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git git diff"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git diff"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git status"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git diff --stat"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git restore   apps/accounts/access.py   apps/accounts/migrations/0001_initial.py   apps/accounts/serializers.py   apps/accounts/tests/test_permissions.py   apps/accounts/urls.py   apps/accounts/views.py   apps/organisations   config/exceptions   config/responses.py   config/settings/base.py   config/viewsets.py"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git status"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run ruff check"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run ruff check apps/accounts/permissions.py apps/accounts/tests/test_api_docs.py config/urls.py"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git diff --check"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git status"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py test apps/accounts/tests/"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py test"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run ruff check apps/accounts/permissions.py apps/accounts/tests/test_api_docs.py config/urls.py"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py test"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py test apps/accounts/tests/"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git diff --stat"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git diff"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py runserver"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git add apps/accounts/permissions.py         apps/accounts/tests/test_api_docs.py         config/urls.py"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git commit -m \"feat(PF-07): restrict Swagger access to technical staff\""
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git status"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git branch"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git log --graph --oneline --decorate --all --max-count=30"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git diff origin/main...HEAD --stat"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git rev-list --reverse --oneline origin/main..HEAD"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git switch -c feat/LPH-PF-07-clean origin/main"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git cherry-pick 2ff7e5e"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git cherry-pick 2d61f4d"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git cherry-pick 9f5b1f7"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git switch feat/LPH-PF-07-swagger-auth"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git branch"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python ruff --help"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "history"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run ruff --help"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run ruff format config/urls.py apps/accounts/tests/test_api_docs.py apps/accounts/permissions.py"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "history"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py test apps/accounts/tests/test_api_docs.py"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py test apps.accounts.tests.test_api_docs.py"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py test apps.accounts.tests.test_api_docs"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py check"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py test apps.accounts.tests.test_api_docs"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git status"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git branch"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run ruff check apps/accounts/tests/test_api_docs.py apps/accounts/permissions.py config/urls.py"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py test apps.accounts.tests.test_api_docs"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py check"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git diff"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git branch"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git cherry-pick --abort"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git status"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git diff"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git status"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git add apps/accounts/permissions.py apps/accounts/tests/test_api_docs.py config/settings/base.py config/urls.py"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git commit -m \"feat(PF-07): add session auth tests and align Swagger permissions\""
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push origin feat/LPH-PF-07-swagger-auth"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "All checks passed!"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py test apps.accounts.tests.test_api_docs"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py test apps.accounts.tests.test_api_docs -v"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py pytest apps.accounts.tests.test_api_docs -v"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py test apps.accounts.tests.test_api_docs --v"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py test apps.accounts.tests.test_api_docs"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py test apps.accounts.tests.test_api_docs"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "history"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py check"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "docker compose downm"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "docker compose down"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "docker compose up -d"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo systemctl stop postgresql"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "history"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo systemctl stop postgresql"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo systemctl  daemon-reload"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo systemctl stop postgresql"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "docker compose up -d"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py check"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py migrate"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "docker compose down"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "docker compose up -d"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py migrate"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py runserver"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git branch"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git fetch"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "history"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git branch"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git branch -a"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git -c switch Djalel_final remote-02/Djalel_Work_Final"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git switch -c Djalel_final remote-02/Djalel_Work_Final"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git status"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git restore src/app/components/home/Header.js"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git switch -c Djalel_final remote-02/Djalel_Work_Final"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npm i"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npx prisma migrate -dev"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npx prisma migrate dev"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npx prisma generate"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npm run dev"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git switch -c feat/implementing-the-login-with-masjid-credentials"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npm run dev"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git status"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git add ."
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git commit -m \"implemented the new login flow, fixed some style issues related to the dashboard topbar\""
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git switch Djalel_final"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git switch feat/implementing-the-login-with-masjid-credentials"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push remote-02 Merouane-Final"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push remote-02/Merouane-Final"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push remote-02 Merouane-Final"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git fetch"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push remote-02 Merouane-Final"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git branch -a"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push remote-02 Merouane-Final"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git status"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git branch -r"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push remote-02 Merouane-Final"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push remote-02 HEAD:Merouane-Final"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git switch main"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git status"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git switch frontakrem"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git fetch remote-02 frontakrem:frontakrem"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git switch feat/implementing-the-login-with-masjid-credentials"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npm run dev"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npx prisma generate"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npm run dev"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git branch"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git add ."
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git commit -m \"added the doc\""
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push remote-02 HEAD:Merouane-Final"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git add docs/"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git commit -m \"completed the final version of the documentation\""
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push remote-02 HEAD:Merouane-Final"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git branch"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git switch -c review/lph-03 origin/fix/lph-pf-03-f821-errors-and-import-endpoints"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git branch"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git status"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git log --oneline"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git branch"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git switch feat/LPH-PF-07-swagger-auth"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git status"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git fetch origin"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git switch feat/LPH-PF-07-swagger-auth"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git pull --ff-only origin feat/LPH-PF-07-swagger-auth"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git branch backup/pf07-before-cleanup-20260804"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git branch"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git reset --hard origin/main"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git cherry-pick 2ff7e5e 2d61f4d 9f5b1f7 156f5a6"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git diff --check origin/main...HEAD"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py check"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run pytest"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "docker compose down"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo systemctl stop postgresql"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "docker compose down"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "docker compose up -d"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py check"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run pytest"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git log --oneline --decorate -4"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git log --oneline --decorate"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git status"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git log"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "history"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push --force-with-lease origin feat/LPH-PF-07-swagger-auth"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git status"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git diff --check origin/main...HEAD"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run python manage.py check"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "uv run pytest"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "history"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git fetch"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git brnach -a"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git brabnch -a"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git branch -a"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git switch -c akrem-final HEAD remote-02/final-akrem"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git switch -c akrem-final remote-02/final-akrem"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git branch"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git status"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npm i"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npx prisma generate"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npm run dev"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git add ."
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git commit -m \"fixed the respnsiveness issue\""
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push remote-02/Merouane-Final"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push remote-02 Merouane-Final"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push HEAD Merouane-Final"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push HEAD/Merouane-Final"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push remote-02 HEAD/Merouane-Final"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "history"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push remote-02 HEAD:Merouane-Final"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push remote-02 remote-02/Merouane-Final:main"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git add ."
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git status"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git commit -m \"test implementation \""
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push remote-02 main"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push remote-02 remote-02/Merouane-Final:main"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push remote-02 remote-02/Merouane-Final"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git fetch"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git status"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push remote-02 H"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push remote-02 remote-02/Merouane-Final:main"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git pull origin main"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git status"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git fetch"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git branch -a"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push origin origin/HEAD"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push origin HEAD"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git status"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git fetch"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push remote-02 remote-02/Merouane-Final:main"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push origin origin/Merouane-Final:main"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npm i"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npx prisma generate"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npm run build"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npm run dev"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npx prisma migrate dev"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npx prisma generate"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npm run dev"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npx prisma migrate dev"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npx prisma generate"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npm run dev"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npx vitest run"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "µnpx vitest run tests/analysis"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npx vitest run tests/analysis"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git add ."
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git commit -m \"test implementation and final reviews\""
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git init"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git add ."
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git commit -m \"test implementation and final reviews\""
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push origin main"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push origin/main"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push origin origin/main"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git fetch"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push origin origin/main"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push origin/main"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push origin  HEAD main"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push origin  HEAD/main"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push origin main"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "history"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push origin origin/Merouane-Final:main"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git pull"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git pull Merouane-Final"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git pull origin/Merouane-Final"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git pull origin  origin/Merouane-Final"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git pull origin  Merouane-Final"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git push origin origin/Merouane-Final:main"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git pull origin  Merouane-Final"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npm i && npx prisma migrate dev && npx psima generate"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npx prisma migrate dev && npx psima generate"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npx psima generate"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npx prisma migrate dev"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npm i"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npx prisma migrate dev"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npx prisma generate"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npm run build"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npm run dev"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "history"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npx vitest run"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "history"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git fetch"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git branch"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git fetch"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "history"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git switch  -c TEST_FINAL remote-02/FINAL_TEST"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git status"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git log --oneline"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git switch  -c AKREM_FINAL remote-02/final-akrem"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git status"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git log --oneline"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git diff TEST_FINAL"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git switch TEST_FINAL"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git branch merging_branch_with_akrem_work"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git branch"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git switch merging_branch_with_akrem_work"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git diff TEST_FINAL"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git diff akrem-final"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git diff akrem-final --minimal"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git diff akrem-final --abbrev"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git diff akrem-final --compact-summary"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git merge akrem-final"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git merge akrem-final --allow-unrelated-histories"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git switch TEST_FINAL"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git merge --quit"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git switch TEST_FINAL"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git merge --quit"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git switch TEST_FINAL"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git branch"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git switch TEST_FINAL"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git status"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git branch"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "git status"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npm i"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npx prisma migrate dev"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npx prisma generate"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npm run dev"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "node test-sync-suite.mjs --password \"imam1111\" --mosque cmsexl13m0001cgeytn0mer03 > sync-terminal.txt 2>&1"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "node test-full-suite.mjs --password \"imam1111\" --mosque cmsexl13m0001cgeytn0mer03 > full-terminal.txt 2>&1"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npm run dev"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npx prisma studio"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npm i"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npx prisma migrate dev"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npx prisma generate"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npm run dev"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "pm i"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npm i"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npx prisma migrate dev"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npx prisma generate"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "node test-sync-suite.mjs --password \"imam1111\" --mosque cmsexl13m0001cgeytn0mer03 2>&1 | Tee-Object -FilePath sync-terminal.txt"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "node test-full-suite.mjs --password \"imam1111\" --mosque cmsexl13m0001cgeytn0mer03 2>&1 | Tee-Object -FilePath full-terminal.txt"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npm run dev"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npm i"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npx prisma migrate dev"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npx prisma generate"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "npm run dev"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "history"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "cd Downloads/"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "ls"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo tar -xzf Antigravity.tar.gz"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "cd Antigravity-x64/"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "ls"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo apt update && sudo apt install build-essential"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "ls -a"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo ./antigravity"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "tree ."
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "chmod +x antigravity"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "./antigravity"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "chmod +777 chrome-sandbox"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo chmod +x chrome-sandbox"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "chmod +x antigravity"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "./antigravity"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "ls -l chrome-sandbox"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo chmod 4755 chrome-sandbox"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "ls -l chrome-sandbox"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "# Should display: -rwsr-xr-x 1 root root ... chrome-sandbox"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "./antigravity"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo mv ~/Downloads/Antigravity-x64 /opt/antigravity"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo ln -s /opt/antigravity/antigravity /usr/local/bin/antigravity"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "cat <<EOF > ~/.local/share/applications/antigravity.desktop"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "[Desktop Entry]"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "Name=Antigravity"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "Exec=/opt/antigravity/antigravity %U"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "Terminal=false"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "Type=Application"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "Categories=Development;"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "EOF"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "curl -fsSL https://antigravity.google/cli/install.sh | bash"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "agy"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "agy"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "/home/adonis/network-scanner/.venv/bin/python /home/adonis/network-scanner/scanner.py"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo /home/adonis/network-scanner/.venv/bin/python /home/adonis/network-scanner/scanner.py"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "/home/adonis/network-scanner/.venv/bin/python /home/adonis/network-scanner/scanner.py"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo .venv/bin/python ./scanner.py"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo netdiscover"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo apt install netdiscover"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo netdiscover"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo netdiscover -i wlp0s20f3 -r 172.16.0.0/16"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo netdiscover --help"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "time sudo arp-scan --localnet"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "arp-scan --help"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "time sudo arp-scan --localnet --resolve"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "time sudo arp-scan --localnet -d"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "time sudo netdiscover -P -i wlp0s20f3 -r 172.16.0.0/16"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "time sudo arp-scan --localnet -d"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "time sudo arp-scan --localnet"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo python ./server.py"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo .venv/bin/python ./server.py"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "import threading"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo .venv/bin/python ./server.py"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo .venv/bin/python server.py"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo .venv/bin/python ./client.py"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "pip install psutil"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo .venv/bin/python ./client.py"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "1"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo .venv/bin/python ./client.py"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo apt-get install arp-scan"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo arp-scan"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo arp-scan --localnet"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "ip addr show wlp0s20f3"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "ip route"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo arp-scan --localnet"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "ls -l /usr/share/arp-scan/"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "find /usr/share -iname \"*oui*\" 2>/dev/null | head -20"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "which arp-scan"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "head -5 /usr/share/arp-scan/ieee-oui.txt"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "grep -v '^#' /usr/share/arp-scan/ieee-oui.txt | head -10"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "grep -i \"C0-BF-BE\" /usr/share/arp-scan/ieee-oui.txt"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "grep -i \"E4-FD-45\" /usr/share/arp-scan/ieee-oui.txt"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "grep -i \"C0BFBE\" /usr/share/arp-scan/ieee-oui.txt"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "grep -i \"E4FD45\" /usr/share/arp-scan/ieee-oui.txt"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "grep -i \"AC712E\" /usr/share/arp-scan/ieee-oui.txt"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "grep -v '^#' /usr/share/arp-scan/ieee-oui.txt | tail -10"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo nmap -O 172.16.1.232"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo apt install nmap"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo nmap -O 172.16.1.232"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "ip addr show wlp0s20f3"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo nmap -O 172.16.1.238"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo nmap  172.16.1.238"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "nmap -sn 172.16.1.238"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo nmap -sV --top-ports 20 172.16.1.238"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "nmap -sn -R 172.16.1.232"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "nmap -sn  172.16.1.232"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo nmap -s  172.16.1.232"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "nmap -sn -n 172.16.1.232"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "nmap -sn -R 172.16.1.232"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "nmap -sn  172.16.1.232 --system-dns"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "nmap -sn -v 172.16.1.232"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "avahi-resolve-address 172.16.1.232"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo apt install avahi-utils"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "avahi-resolve-address 172.16.1.232"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "avahi-resolve 172.16.1.232"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "avahi-resolve-address 172.16.1.232"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "avahi-resolve-host-name 172.16.1.232"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "avahi-browse 172.16.1.232"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "avahi-browse-domains"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "avahi-browse 172.16.1.232"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "avahi-daemon"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudoo avahi-daemon"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo avahi-daemon"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "avahi-browse-domains"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo apt install net-tools"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "netplan"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "netplan get all"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo netplan get all"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo netplan info"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo netplan vxplan"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo netplan get vxplan"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo netplan get"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "mkdir network-scanner"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "cd network-scanner"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "python3 -m venv .venv"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "source .venv/bin/activate"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "pip install scapy"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "python -c \"from scapy.all import ARP; print('Scapy OK')\""
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "nano scanner.py"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo .venv/bin/python scanner.py"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo nmap -O 172.16.1.238"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "ip a"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo nmap -O 172.16.0.0/24"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo arp -a"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo apt install arp"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "sudo nmap -O 172.16.0.0/24"
+    },
+    {
+      "time": "Unknown",
+      "type": "Shell Command",
+      "detail": "history"
+    }
+  ]
+}
