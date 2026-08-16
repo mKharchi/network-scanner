@@ -2,7 +2,13 @@ import datetime
 import json
 import os
 import threading
-from database import get_connection
+
+try:
+    from database import get_connection
+except ImportError:
+    from ..database import get_connection
+
+from server_components.log_storage import store_log_file
 
 # ============================================================
 # SHARED STATE
@@ -11,6 +17,56 @@ from database import get_connection
 clients = {}
 clients_lock = threading.Lock()
 next_client_id = 1
+
+def get_forbidden_processes():
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT process_name, severity, description FROM forbidden_processes WHERE enabled = TRUE")
+        return cursor.fetchall()
+    except Exception as e:
+        print(f"Error fetching forbidden processes: {e}")
+        return []
+    finally:
+        if cursor: cursor.close()
+        if conn and conn.is_connected(): conn.close()
+
+def handle_client_alert(mac, alert_data):
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT id FROM clients WHERE mac = %s", (mac,))
+        row = cursor.fetchone()
+        if not row:
+            return
+        client_db_id = row[0]
+        
+        cursor.execute("""
+            INSERT INTO alerts (
+                client_id, log_id, alert_type, severity, 
+                detected_at, activity_time, title, description, status
+            ) VALUES (%s, NULL, %s, %s, %s, %s, %s, %s, 'NEW')
+        """, (
+            client_db_id, 
+            alert_data.get("alert_type"), 
+            alert_data.get("severity", "MEDIUM"), 
+            alert_data.get("detected_at"), 
+            alert_data.get("activity_time"), 
+            alert_data.get("title"), 
+            alert_data.get("description")
+        ))
+        conn.commit()
+        print(f"\n[!] ALERT RECEIVED from {mac}: {alert_data.get('title')}")
+    except Exception as e:
+        print(f"Error saving alert: {e}")
+    finally:
+        if cursor: cursor.close()
+        if conn and conn.is_connected(): conn.close()
 
 
 # ============================================================
@@ -51,6 +107,8 @@ def receive_message(conn):
 
 def log_connection(mac, status):
     """Log connection or disconnection to the MySQL database."""
+    conn = None
+    cursor = None
     try:
         conn = get_connection()
         cursor = conn.cursor()
@@ -80,13 +138,16 @@ def log_connection(mac, status):
     except Exception as e:
         print(f"Failed to write connection log: {e}")
     finally:
-        if 'conn' in locals() and conn.is_connected():
+        if cursor:
             cursor.close()
+        if conn and conn.is_connected():
             conn.close()
 
 
 def update_client_db(mac, client_id, hostname, ip, os_info):
     """Persist/update client metadata in the MySQL database."""
+    conn = None
+    cursor = None
     try:
         conn = get_connection()
         cursor = conn.cursor()
@@ -114,20 +175,17 @@ def update_client_db(mac, client_id, hostname, ip, os_info):
     except Exception as e:
         print(f"Failed to update client in DB: {e}")
     finally:
-        if 'conn' in locals() and conn.is_connected():
+        if cursor:
             cursor.close()
+        if conn and conn.is_connected():
             conn.close()
 
 
-
-
-from storage.log_storage import store_log_file
 def store_activity_log_file(mac, log_data):
     """
     Store the complete activity log as a JSON file
     and store only its metadata in MySQL.
     """
-
     if not log_data:
         return
 
@@ -141,49 +199,34 @@ def store_activity_log_file(mac, log_data):
         # ----------------------------------------------------
         # Find client
         # ----------------------------------------------------
-
         cursor.execute(
             "SELECT id, client_id FROM clients WHERE mac = %s",
             (mac,)
         )
-
         row = cursor.fetchone()
 
         if not row:
-            print(
-                f"Cannot store activity log: "
-                f"client {mac} not found."
-            )
+            print(f"Cannot store activity log: client {mac} not found.")
             return
 
         client_db_id = row[0]
+        print(f"Storing activity log for client {row[1]} (DB ID: {client_db_id})")
         client_id = row[1]
 
         # ----------------------------------------------------
         # Store complete log on filesystem
         # ----------------------------------------------------
-
-        file_path = store_log_file(
-            client_id,
-            log_data
-        )
+        file_path = store_log_file(f"client-{client_db_id}", log_data)
 
         # ----------------------------------------------------
         # Extract metadata
         # ----------------------------------------------------
-
-        period = log_data.get(
-            "period"
-        )
-
-        generated_at = log_data.get(
-            "generated_at"
-        )
+        period = log_data.get("period")
+        generated_at = log_data.get("generated_at")
 
         # ----------------------------------------------------
         # Store metadata in MySQL
         # ----------------------------------------------------
-
         cursor.execute(
             """
             INSERT INTO activity_logs (
@@ -211,22 +254,17 @@ def store_activity_log_file(mac, log_data):
         )
 
     except Exception as error:
-
         if conn:
             conn.rollback()
-
-        print(
-            f"Failed to store activity log: "
-            f"{error}"
-        )
+        print(f"Failed to store activity log: {error}")
 
     finally:
-
         if cursor:
             cursor.close()
-
         if conn and conn.is_connected():
             conn.close()
+
+
 # ============================================================
 # CLIENT REGISTRY
 # ============================================================
@@ -237,7 +275,6 @@ def register_client(client_info, conn):
     mac = client_info["mac"]
 
     with clients_lock:
-
         # ---- Reconnecting client ----
         if mac in clients:
             client = clients[mac]
@@ -335,67 +372,38 @@ def print_response(client_id, command, response):
         print(f"{'='*64}")
 
     elif command == "GET_ACTIVITY_LOG" and response.get("type") == "RESPONSE":
-
         log_data = response.get("data", {})
 
         client = get_client(client_id)
-
         if client:
             store_activity_log_file(
                 client["mac"],
                 log_data
             )
 
-        entries = log_data.get(
-            "activity",
-            []
-        )
+        entries = log_data.get("activity", [])
 
-        print(
-            f"\n{'='*66}"
-        )
-
-        print(
-            f"  USER ACTIVITY LOG  |  "
-            f"since: {log_data.get('since', '?')}"
-        )
-
-        print(
-            f"{'='*66}"
-        )
+        print(f"\n{'='*66}")
+        print(f"  USER ACTIVITY LOG  |  since: {log_data.get('since', '?')}")
+        print(f"{'='*66}")
 
         if not entries:
-
             print("  No activity found.")
-
         else:
-
             current_type = None
-
             for entry in entries:
-
                 if entry["type"] != current_type:
-
                     current_type = entry["type"]
-
-                    print(
-                        f"\n  ── {current_type} ──"
-                    )
+                    print(f"\n  ── {current_type} ──")
 
                 timestamp = (
                     entry["time"]
                     if entry["time"] != "Unknown"
                     else "(no timestamp)"
                 )
+                print(f"  [{timestamp}]  {entry['detail']}")
 
-                print(
-                    f"  [{timestamp}]  "
-                    f"{entry['detail']}"
-                )
-
-        print(
-            f"{'='*66}"
-        )
+        print(f"{'='*66}")
 
     else:
         print(json.dumps(response, indent=4))
@@ -421,12 +429,18 @@ def send_command(client_id, command, args=None):
     try:
         send_message(conn, message)
 
-        response = receive_message(conn)
+        while True:
+            response = receive_message(conn)
 
-        if response is None:
-            print("Client disconnected.")
-            remove_client(client["mac"])
-            return
+            if response is None:
+                print("Client disconnected.")
+                remove_client(client["mac"])
+                return
+                
+            if response.get("type") == "ALERT":
+                handle_client_alert(client["mac"], response.get("alert", {}))
+            else:
+                break
 
         print_response(client_id, command, response)
 

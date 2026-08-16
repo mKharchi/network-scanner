@@ -1,20 +1,21 @@
-from http import server
 import json
+import os
 import socket
 import threading
 
-from server_lib import (
+from server_components.server_lib import (
     clients_lock,
     clients,
     receive_message,
     register_client,
     send_message,
     server_menu,
+    get_forbidden_processes,
 )
 from database import initiate_db
 
-HOST = "0.0.0.0"
-PORT = 5000
+HOST = os.getenv("SERVER_HOST", "0.0.0.0")
+PORT = int(os.getenv("SERVER_PORT", "5000"))
 
 
 # ============================================================
@@ -22,35 +23,41 @@ PORT = 5000
 # ============================================================
 
 def accept_clients(server):
-
     while True:
-    
+        try:
             conn, address = server.accept()
             print(f"\nIncoming connection from {address}")
-    
+
             try:
                 registration = receive_message(conn)
-    
+
                 if not registration:
                     conn.close()
                     continue
-    
+
                 print("\nRegistration received:")
                 print(json.dumps(registration, indent=4))
-    
+
                 if registration.get("type") != "REGISTER":
                     print("Invalid registration.")
                     conn.close()
                     continue
-    
+
                 client_id = register_client(registration["data"], conn)
-    
+
                 send_message(conn, {"type": "REGISTERED", "client_id": client_id})
-    
+                
+                req = receive_message(conn)
+                if req and req.get("type") == "REQUEST" and req.get("command") == "GET_FORBIDDEN_PROCESSES":
+                    fb_list = get_forbidden_processes()
+                    send_message(conn, {"type": "FORBIDDEN_PROCESSES", "data": fb_list})
+
             except (ConnectionResetError, BrokenPipeError, json.JSONDecodeError, OSError):
                 print("Error while registering client.")
                 conn.close()
-    
+
+        except OSError:
+            break
 
 
 def start_server():
@@ -81,8 +88,7 @@ def start_server():
 
     # Keep terminal interaction in main thread
     server_menu()
-    # Accept incoming client connections
- 
+
 
 # ============================================================
 # MAIN

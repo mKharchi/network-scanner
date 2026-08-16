@@ -1,5 +1,5 @@
-import json
 import glob
+import json
 import os
 import platform
 import re
@@ -20,23 +20,18 @@ import psutil
 
 def get_ip():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
     try:
         sock.connect(("8.8.8.8", 80))
         ip = sock.getsockname()[0]
-
     except OSError:
         ip = "Unknown"
-
     finally:
         sock.close()
-
     return ip
 
 
 def get_mac():
     mac = uuid.getnode()
-
     return ":".join(
         f"{(mac >> i) & 0xff:02x}"
         for i in range(40, -1, -8)
@@ -71,11 +66,8 @@ def get_system_info():
 
 def get_network_info():
     interfaces = {}
-
     for name, addresses in psutil.net_if_addrs().items():
-
         interfaces[name] = []
-
         for address in addresses:
             interfaces[name].append({
                 "family":    str(address.family),
@@ -83,7 +75,6 @@ def get_network_info():
                 "netmask":   address.netmask,
                 "broadcast": address.broadcast
             })
-
     return interfaces
 
 
@@ -155,7 +146,6 @@ def format_size(bytes_size):
 
 def get_memory_info():
     memory = psutil.virtual_memory()
-
     return {
         "total":         format_size(memory.total),
         "available":     format_size(memory.available),
@@ -170,7 +160,6 @@ def get_memory_info():
 
 def get_disk_info():
     disk = psutil.disk_usage("/")
-
     return {
         "total":         disk.total,
         "used":          disk.used,
@@ -185,23 +174,19 @@ def get_disk_info():
 
 def get_processes():
     processes = []
-
     for process in psutil.process_iter(["pid", "name", "username", "status"]):
         try:
             if process.info["status"] == psutil.STATUS_ZOMBIE:
                 continue
             processes.append(process.info)
-
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
-
     return processes
 
 
 def kill_process(process_name):
     killed_count = 0
     errors = []
-
     for proc in psutil.process_iter(["pid", "name"]):
         try:
             if proc.info["name"] == process_name:
@@ -404,9 +389,9 @@ def get_activity_log(period="1d"):
     Collect user activity and filter to the requested period.
     period: '1d' = last 24 h, '1w' = last 7 days, '1m' = last 30 days.
     """
-    periods = {"1d": 1, "1w": 7, "1m": 30}
-    days = periods.get(period, 1)
-    cutoff = datetime.now() - timedelta(days=days)
+    periods = {"1h": timedelta(hours=1), "1d": timedelta(days=1), "1w": timedelta(days=7), "1m": timedelta(days=30)}
+    delta = periods.get(period, timedelta(days=1))
+    cutoff = datetime.now() - delta
     cutoff_str   = cutoff.strftime("%Y-%m-%d %H:%M:%S")
     cutoff_epoch = cutoff.timestamp()
 
@@ -415,7 +400,6 @@ def get_activity_log(period="1d"):
     home = os.path.expanduser("~")
 
     def add(time_str, entry_type, detail):
-        # Drop entries with parseable timestamps that are before the cutoff
         if time_str not in ("Unknown", "Recent"):
             try:
                 if datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S") < cutoff:
@@ -532,17 +516,15 @@ def get_activity_log(period="1d"):
     )
 
     return {
-    "period": period,
-    "since": cutoff_str,
-    "generated_at": datetime.now().strftime(
-        "%Y-%m-%d %H:%M:%S"
-    ),
-    "activity": activity
-}
+        "period": period,
+        "since": cutoff_str,
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "activity": activity
+    }
 
 
 # ============================================================
-# COMMAND HANDLER  (dispatcher)
+# COMMAND HANDLER (dispatcher)
 # ============================================================
 
 def handle_command(message):
