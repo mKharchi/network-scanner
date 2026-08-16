@@ -35,6 +35,142 @@ def get_forbidden_processes():
         if conn and conn.is_connected(): conn.close()
 
 ALERT_SEVERITIES = {"LOW", "MEDIUM", "HIGH", "CRITICAL"}
+WORKING_HOURS_DISABLED = "DISABLED"
+WORKING_HOURS_WITHIN = "WITHIN"
+WORKING_HOURS_OUTSIDE = "OUTSIDE"
+WORKING_HOURS_UNKNOWN = "UNKNOWN"
+
+
+def get_working_hours_status(checked_at=None):
+    """Classify a server-local time against the configured working-hours rows.
+
+    ``working_hours.day_of_week`` follows ``datetime.weekday()``: Monday is 0
+    and Sunday is 6. A schedule ending at a given time excludes that exact
+    end boundary, so 18:00 is outside a 09:30–18:00 workday.
+    """
+    checked_at = checked_at or datetime.datetime.now()
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT TIME_TO_SEC(start_time), TIME_TO_SEC(end_time)
+            FROM working_hours
+            WHERE day_of_week = %s AND enabled = TRUE
+            """,
+            (checked_at.weekday(),),
+        )
+        schedule = cursor.fetchone()
+
+        if not schedule:
+            cursor.execute(
+                "SELECT EXISTS(SELECT 1 FROM working_hours WHERE enabled = TRUE)"
+            )
+            monitoring_enabled = bool(cursor.fetchone()[0])
+            return (
+                WORKING_HOURS_OUTSIDE
+                if monitoring_enabled
+                else WORKING_HOURS_DISABLED
+            )
+
+        start_seconds, end_seconds = schedule
+        current_seconds = (
+            checked_at.hour * 3600
+            + checked_at.minute * 60
+            + checked_at.second
+        )
+
+        if start_seconds <= end_seconds:
+            is_within = start_seconds <= current_seconds < end_seconds
+        else:
+            # Supports an overnight schedule such as 22:00–06:00 as well.
+            is_within = current_seconds >= start_seconds or current_seconds < end_seconds
+
+        return WORKING_HOURS_WITHIN if is_within else WORKING_HOURS_OUTSIDE
+    except Exception as error:
+        print(f"Unable to check working hours: {error}")
+        return WORKING_HOURS_UNKNOWN
+    finally:
+        if cursor:
+            cursor.close()
+        if conn and conn.is_connected():
+            conn.close()
+
+
+def create_connection_alert(client_info, registered_at=None):
+    """Persist and display the appropriate server-side registration alert."""
+    registered_at = registered_at or datetime.datetime.now()
+    working_hours_status = get_working_hours_status(registered_at)
+
+    if working_hours_status == WORKING_HOURS_OUTSIDE:
+        alert_type = "CONNECTION_OUTSIDE_WORKING_HOURS"
+        severity = "MEDIUM"
+        title = "Client connected outside working hours"
+        policy_description = "outside configured working hours"
+    elif working_hours_status == WORKING_HOURS_DISABLED:
+        alert_type = "CLIENT_CONNECTED"
+        severity = "LOW"
+        title = "Client connected"
+        policy_description = "working-hours monitoring is disabled"
+    elif working_hours_status == WORKING_HOURS_UNKNOWN:
+        alert_type = "CLIENT_CONNECTED"
+        severity = "LOW"
+        title = "Client connected"
+        policy_description = "working-hours status could not be checked"
+    else:
+        alert_type = "CLIENT_CONNECTED"
+        severity = "LOW"
+        title = "Client connected"
+        policy_description = "during configured working hours"
+
+    hostname = client_info.get("hostname", "Unknown host")
+    mac = client_info.get("mac")
+    ip = client_info.get("ip", "Unknown IP")
+    description = (
+        f"{hostname} ({mac}, {ip}) registered at "
+        f"{registered_at.strftime('%Y-%m-%d %H:%M:%S')} {policy_description}."
+    )
+
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM clients WHERE mac = %s", (mac,))
+        client = cursor.fetchone()
+        if not client:
+            print(f"Cannot create registration alert: unknown client {mac}.")
+            return False
+
+        cursor.execute(
+            """
+            INSERT INTO alerts (
+                client_id, log_id, alert_type, severity,
+                detected_at, activity_time, title, description, status
+            ) VALUES (%s, NULL, %s, %s, %s, NULL, %s, %s, 'NEW')
+            """,
+            (
+                client[0],
+                alert_type,
+                severity,
+                registered_at,
+                title,
+                description,
+            ),
+        )
+        conn.commit()
+        print(f"\n[!] ALERT: {title} — {hostname} ({mac})", flush=True)
+        return True
+    except Exception as error:
+        print(f"Error saving registration alert: {error}")
+        return False
+    finally:
+        if cursor:
+            cursor.close()
+        if conn and conn.is_connected():
+            conn.close()
 
 
 def _parse_alert_time(value, field_name, *, required=False):
@@ -371,6 +507,7 @@ def register_client(client_info, conn):
             print(f"Client reconnected: {client['client_id']}")
             update_client_db(mac, client["client_id"], client_info["hostname"], client_info["ip"], client_info["os"])
             log_connection(mac, "reconnected")
+            create_connection_alert(client_info)
             return client["client_id"]
 
         # ---- New client ----
@@ -391,6 +528,7 @@ def register_client(client_info, conn):
         print(f"New client connected: {client_id}")
         update_client_db(mac, client_id, client_info["hostname"], client_info["ip"], client_info["os"])
         log_connection(mac, "connected")
+        create_connection_alert(client_info)
         return client_id
 
 
@@ -507,30 +645,6 @@ def print_response(client_id, command, response):
                 client["mac"],
                 log_data
             )
-
-        entries = log_data.get("activity", [])
-
-        print(f"\n{'='*66}")
-        print(f"  USER ACTIVITY LOG  |  since: {log_data.get('since', '?')}")
-        print(f"{'='*66}")
-
-        if not entries:
-            print("  No activity found.")
-        else:
-            current_type = None
-            for entry in entries:
-                if entry["type"] != current_type:
-                    current_type = entry["type"]
-                    print(f"\n  ── {current_type} ──")
-
-                timestamp = (
-                    entry["time"]
-                    if entry["time"] != "Unknown"
-                    else "(no timestamp)"
-                )
-                print(f"  [{timestamp}]  {entry['detail']}")
-
-        print(f"{'='*66}")
 
     else:
         print(json.dumps(response, indent=4))
