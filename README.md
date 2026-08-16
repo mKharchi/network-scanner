@@ -10,9 +10,11 @@ A Python-based TCP network monitoring and client management system with full sep
 network-scanner/
 ├── server/
 │   ├── server.py                     # Server entry point (TCP listener + CLI)
+│   ├── scanner.py                    # One-off server-local LAN discovery command
 │   ├── server_components/            # Server-side submodules
 │   │   ├── __init__.py
 │   │   ├── server_lib.py             # Client registry, commands, database logic
+│   │   ├── network_discovery.py      # Dynamic ARP-based LAN discovery
 │   │   └── log_storage.py            # Filesystem activity log storage
 │   ├── database.py                   # MySQL connection and schema initializer
 │   ├── scripts.sql                   # MySQL database schema definition
@@ -24,7 +26,6 @@ network-scanner/
 │   ├── client_lib.py                 # System info, process control, log collectors
 │   └── requirements.txt              # Client dependencies (psutil)
 │
-├── scanner.py                        # Standalone ARP network discovery utility
 ├── .gitignore
 └── README.md
 ```
@@ -37,7 +38,9 @@ The server requires **Python 3.9+** and a **MySQL** database.
 
 ### 1. Database Configuration
 
-The server automatically initializes tables from `server/scripts.sql` on startup. Configure the MySQL connection via environment variables:
+The server automatically initializes tables from `server/scripts.sql` on startup. It
+loads `server/.env` automatically; configure the MySQL connection and scanner via
+the following environment variables:
 
 | Variable | Default Value | Description |
 | :--- | :--- | :--- |
@@ -50,6 +53,14 @@ The server automatically initializes tables from `server/scripts.sql` on startup
 | `SERVER_PORT` | `5000` | Port for the TCP server |
 | `DISCONNECT_PING_DELAY_SECONDS` | `5` | Grace period before classifying an unexpected client disconnect |
 | `DISCONNECT_PING_TIMEOUT_SECONDS` | `3` | Timeout for the single client reachability ping |
+| `NETWORK_SCAN_INTERFACE` | detected | Optional IPv4 interface override for local LAN discovery |
+| `NETWORK_SCAN_SUBNET` | detected | Optional IPv4 CIDR override for local LAN discovery |
+| `NETWORK_SCAN_TIMEOUT_SECONDS` | `3` | ARP response wait time in seconds |
+| `NETWORK_SCAN_OUI_DATABASE` | `/usr/share/arp-scan/ieee-oui.txt` | Optional local OUI vendor database |
+| `NETWORK_SCAN_STORAGE_DIR` | `server/storage/network_scans` | Directory for completed scan-result JSON files |
+| `NETWORK_SCAN_OS_TARGETS` | empty | Comma-separated discovered IPv4 addresses for opt-in OS detection |
+| `NETWORK_SCAN_OS_TARGET_LIMIT` | `3` | Maximum number of OS-detection targets per scan |
+| `LOG_LEVEL` | `INFO` | Console logging threshold (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
 
 ### 2. Install & Run Server
 
@@ -62,6 +73,40 @@ pip install -r requirements.txt
 # Run the server
 python server.py
 ```
+
+### Manual LAN Discovery
+
+The server process can perform a best-effort IPv4 ARP scan of its own local
+network. It determines the active interface and subnet from `ip route` and
+`ip addr`; it does not scan a hard-coded network.
+
+Run it directly from the `server/` directory:
+
+```bash
+python scanner.py
+```
+
+Or select **Run local network discovery** from the server CLI. ARP scanning
+requires the `scapy` dependency installed from `server/requirements.txt` and
+permission to send raw packets. Hostname and vendor lookup are optional; a
+failure to enrich one device does not fail the scan.
+
+Completed discovery results are saved as timestamped JSON files under
+`server/storage/network_scans/` by default. Set `NETWORK_SCAN_STORAGE_DIR` to
+use a different storage location.
+
+Before enrichment, each discovered MAC is compared in one database query with
+the registered `clients` table. Results use `MANAGED`, `UNMANAGED`, or
+`UNKNOWN` classification. A database lookup failure is `UNKNOWN`, not an
+unmanaged-device finding. Managed records reuse the client agent's hostname
+and OS information before any network lookup is attempted.
+
+OS detection is disabled by default and must be explicitly targeted, for
+example `NETWORK_SCAN_OS_TARGETS=172.16.1.232`. It uses the system `nmap`
+command (install it separately) and runs only for addresses found by the ARP
+scan, capped at three targets by default. Missing Nmap, timeout, permission,
+or fingerprint failures leave the OS fields unknown without failing the scan.
+Nmap host discovery uses two probes only: ICMP echo and TCP SYN to port 443.
 
 ---
 
