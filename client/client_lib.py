@@ -161,10 +161,10 @@ def get_memory_info():
 def get_disk_info():
     disk = psutil.disk_usage("/")
     return {
-        "total":         disk.total,
-        "used":          disk.used,
-        "free":          disk.free,
-        "usage_percent": disk.percent
+        "total":         format_size(disk.total),
+        "used":          format_size(disk.used),
+        "free":          format_size(disk.free),
+        "usage_percent": f"{disk.percent:.2f}%"
     }
 
 

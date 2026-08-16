@@ -1,8 +1,12 @@
 import datetime
+import ipaddress
 import json
 import os
+import platform
 import queue
+import subprocess
 import threading
+import time
 
 try:
     from database import get_connection
@@ -18,6 +22,29 @@ from server_components.log_storage import store_log_file
 clients = {}
 clients_lock = threading.Lock()
 next_client_id = 1
+pending_disconnect_checks = {}
+
+
+def _read_positive_float(name, default):
+    try:
+        return max(0.0, float(os.getenv(name, default)))
+    except ValueError:
+        return float(default)
+
+
+def _read_positive_int(name, default):
+    try:
+        return max(1, int(os.getenv(name, default)))
+    except ValueError:
+        return int(default)
+
+
+DISCONNECT_PING_DELAY_SECONDS = _read_positive_float(
+    "DISCONNECT_PING_DELAY_SECONDS", "5"
+)
+DISCONNECT_PING_TIMEOUT_SECONDS = _read_positive_int(
+    "DISCONNECT_PING_TIMEOUT_SECONDS", "3"
+)
 
 def get_forbidden_processes():
     conn = None
@@ -171,6 +198,127 @@ def create_connection_alert(client_info, registered_at=None):
             cursor.close()
         if conn and conn.is_connected():
             conn.close()
+
+
+def create_server_alert(mac, alert_type, severity, title, description, detected_at=None):
+    """Store and immediately display a server-originated alert."""
+    detected_at = detected_at or datetime.datetime.now()
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM clients WHERE mac = %s", (mac,))
+        client = cursor.fetchone()
+        if not client:
+            print(f"Cannot create {alert_type} alert: unknown client {mac}.")
+            return False
+
+        cursor.execute(
+            """
+            INSERT INTO alerts (
+                client_id, log_id, alert_type, severity,
+                detected_at, activity_time, title, description, status
+            ) VALUES (%s, NULL, %s, %s, %s, NULL, %s, %s, 'NEW')
+            """,
+            (client[0], alert_type, severity, detected_at, title, description),
+        )
+        conn.commit()
+        print(f"\n[!] ALERT: {title} — {mac}", flush=True)
+        return True
+    except Exception as error:
+        print(f"Error saving {alert_type} alert: {error}")
+        return False
+    finally:
+        if cursor:
+            cursor.close()
+        if conn and conn.is_connected():
+            conn.close()
+
+
+def create_disconnect_alert(client, expected_disconnect):
+    hostname = client.get("hostname", "Unknown host")
+    ip = client.get("ip", "Unknown IP")
+    reason = "at the server's request" if expected_disconnect else "unexpectedly"
+    return create_server_alert(
+        client["mac"],
+        "CLIENT_DISCONNECTED",
+        "LOW",
+        "Client disconnected",
+        f"{hostname} ({client['mac']}, {ip}) disconnected {reason}.",
+    )
+
+
+def create_agent_stopped_alert(client):
+    hostname = client.get("hostname", "Unknown host")
+    ip = client.get("ip", "Unknown IP")
+    return create_server_alert(
+        client["mac"],
+        "CLIENT_AGENT_STOPPED",
+        "HIGH",
+        "Client agent stopped",
+        (
+            f"{hostname} ({client['mac']}, {ip}) remains reachable after its "
+            "monitoring-client connection was lost."
+        ),
+    )
+
+
+def ping_client(ip):
+    """Return whether a client IP responds to one bounded ICMP ping."""
+    try:
+        address = str(ipaddress.ip_address(ip))
+    except ValueError:
+        print(f"Cannot ping invalid client IP: {ip!r}")
+        return False
+
+    if platform.system() == "Windows":
+        command = [
+            "ping", "-n", "1", "-w",
+            str(DISCONNECT_PING_TIMEOUT_SECONDS * 1000), address,
+        ]
+    else:
+        command = [
+            "ping", "-c", "1", "-W",
+            str(DISCONNECT_PING_TIMEOUT_SECONDS), address,
+        ]
+
+    try:
+        return subprocess.run(
+            command,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=DISCONNECT_PING_TIMEOUT_SECONDS + 1,
+            check=False,
+        ).returncode == 0
+    except (OSError, subprocess.TimeoutExpired) as error:
+        print(f"Ping check failed for {address}: {error}")
+        return False
+
+
+def verify_client_disconnect(mac, client, check_token):
+    """After a grace period, classify an unexpected disconnect once."""
+    time.sleep(DISCONNECT_PING_DELAY_SECONDS)
+
+    with clients_lock:
+        if pending_disconnect_checks.get(mac) is not check_token:
+            return
+        if mac in clients:
+            pending_disconnect_checks.pop(mac, None)
+            return
+
+    reachable = ping_client(client.get("ip", ""))
+
+    with clients_lock:
+        # A reconnect may have happened while the ping was running.
+        if pending_disconnect_checks.get(mac) is not check_token or mac in clients:
+            return
+        pending_disconnect_checks.pop(mac, None)
+
+    if reachable:
+        create_agent_stopped_alert(client)
+    else:
+        print(f"Client {mac} is unreachable; keeping disconnect alert informational.")
 
 
 def _parse_alert_time(value, field_name, *, required=False):
@@ -494,6 +642,10 @@ def register_client(client_info, conn):
     mac = client_info["mac"]
 
     with clients_lock:
+        # A registration during the grace period cancels the pending agent
+        # verification for the previous connection.
+        pending_disconnect_checks.pop(mac, None)
+
         # ---- Reconnecting client ----
         if mac in clients:
             client = clients[mac]
@@ -551,6 +703,12 @@ def remove_client(mac, connection=None):
         if connection is not None and client and client["connection"] is not connection:
             return
         client = clients.pop(mac, None)
+        if client:
+            expected_disconnect = client.get("disconnect_expected", False)
+            check_token = None
+            if not expected_disconnect:
+                check_token = object()
+                pending_disconnect_checks[mac] = check_token
 
     if client:
         # Wake a command that is waiting for a response before closing the
@@ -563,6 +721,14 @@ def remove_client(mac, connection=None):
 
         print(f"Removed {client['client_id']}")
         log_connection(mac, "disconnected")
+        create_disconnect_alert(client, expected_disconnect)
+
+        if check_token is not None:
+            threading.Thread(
+                target=verify_client_disconnect,
+                args=(mac, client.copy(), check_token),
+                daemon=True,
+            ).start()
 
 
 def receive_client_messages(mac, conn):
@@ -672,6 +838,13 @@ def send_command(client_id, command, args=None):
         # places command responses in this queue and handles ALERT frames
         # immediately, even while the server is waiting at its menu prompt.
         with client["send_lock"]:
+            if command == "DISCONNECT":
+                # The client was asked to leave, so its later TCP close must
+                # not be interpreted as a stopped/crashed agent.
+                with clients_lock:
+                    current_client = clients.get(client["mac"])
+                    if current_client is client and client["connection"] is conn:
+                        client["disconnect_expected"] = True
             send_message(conn, message)
 
         while True:

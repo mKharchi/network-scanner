@@ -48,6 +48,8 @@ The server automatically initializes tables from `server/scripts.sql` on startup
 | `DB_PASSWORD` | `scanner_password` | Database password |
 | `SERVER_HOST` | `0.0.0.0` | IP to bind the TCP server |
 | `SERVER_PORT` | `5000` | Port for the TCP server |
+| `DISCONNECT_PING_DELAY_SECONDS` | `5` | Grace period before classifying an unexpected client disconnect |
+| `DISCONNECT_PING_TIMEOUT_SECONDS` | `3` | Timeout for the single client reachability ping |
 
 ### 2. Install & Run Server
 
