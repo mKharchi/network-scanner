@@ -13,6 +13,9 @@ from process_scanner import scan_for_forbidden_processes
 import threading
 import time
 from datetime import datetime
+from dotenv import load_dotenv
+
+load_dotenv()
 
 SERVER_IP = os.getenv("SERVER_IP", "127.0.0.1")
 SERVER_PORT = int(os.getenv("SERVER_PORT", "5000"))
@@ -23,12 +26,13 @@ socket_lock = threading.Lock()
 forbidden_processes = []
 reported_alerts = set()
 
-def background_scanner():
+def background_scanner(client_socket):
     global forbidden_processes, reported_alerts
-    time.sleep(10)
+    time.sleep(10) #sleep for
     
     while True:
         try:
+            print("Background scanner running...")
             # Generate 1h activity log
             log_data = get_activity_log("1h")
             with open("hourly_log.json", "w") as f:
@@ -46,6 +50,23 @@ def background_scanner():
                         "type": "ALERT",
                         "alert": a
                     })
+
+            print(f"Background scanner found {len(new_alerts)} new alerts.")
+
+            # Send immediately
+            with alert_queue_lock:
+                alerts_to_send = list(alert_queue)
+                alert_queue.clear()
+
+            if alerts_to_send:
+                with socket_lock:
+                    for a in alerts_to_send:
+                        try:
+                            send_message(client_socket, a)
+                            print(f"Sent ALERT (async): {a['alert']['title']}")
+                        except Exception as e:
+                            print(f"Failed to send async alert: {e}")
+
         except Exception as e:
             print(f"Background scanner error: {e}")
             
@@ -98,7 +119,11 @@ def start_client():
                 print(f"Received {len(forbidden_processes)} forbidden processes.")
                 
                 # Start background scanner
-                t = threading.Thread(target=background_scanner, daemon=True)
+                t = threading.Thread(
+                    target=background_scanner,
+                    args=(client,),
+                    daemon=True,
+                )
                 t.start()
                 continue
 

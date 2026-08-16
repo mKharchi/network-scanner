@@ -11,6 +11,7 @@ from server_components.server_lib import (
     send_message,
     server_menu,
     get_forbidden_processes,
+    receive_client_messages,
 )
 from database import initiate_db
 
@@ -51,6 +52,14 @@ def accept_clients(server):
                 if req and req.get("type") == "REQUEST" and req.get("command") == "GET_FORBIDDEN_PROCESSES":
                     fb_list = get_forbidden_processes()
                     send_message(conn, {"type": "FORBIDDEN_PROCESSES", "data": fb_list})
+
+                # From this point on alerts can arrive independently of a
+                # server command, so dedicate one reader to this connection.
+                threading.Thread(
+                    target=receive_client_messages,
+                    args=(registration["data"]["mac"], conn),
+                    daemon=True,
+                ).start()
 
             except (ConnectionResetError, BrokenPipeError, json.JSONDecodeError, OSError):
                 print("Error while registering client.")
