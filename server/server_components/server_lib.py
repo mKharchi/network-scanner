@@ -1,6 +1,7 @@
 import datetime
 import json
 import os
+import queue
 import threading
 
 try:
@@ -33,7 +34,58 @@ def get_forbidden_processes():
         if cursor: cursor.close()
         if conn and conn.is_connected(): conn.close()
 
+ALERT_SEVERITIES = {"LOW", "MEDIUM", "HIGH", "CRITICAL"}
+
+
+def _parse_alert_time(value, field_name, *, required=False):
+    """Return a database-safe timestamp or raise ValueError."""
+    if value is None:
+        if required:
+            return datetime.datetime.now()
+        return None
+
+    if not isinstance(value, str):
+        raise ValueError(f"{field_name} must be a timestamp string")
+
+    try:
+        return datetime.datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+    except ValueError as error:
+        raise ValueError(
+            f"{field_name} must use YYYY-MM-DD HH:MM:SS"
+        ) from error
+
+
 def handle_client_alert(mac, alert_data):
+    """Validate, persist, and display an asynchronous client alert."""
+    if not isinstance(alert_data, dict):
+        print(f"Rejected malformed alert from {mac}: payload is not an object.")
+        return False
+
+    if alert_data.get("alert_type") != "FORBIDDEN_PROCESS":
+        print(f"Rejected unsupported alert from {mac}: {alert_data.get('alert_type')!r}")
+        return False
+
+    process_name = alert_data.get("process_name")
+    if not isinstance(process_name, str) or not process_name.strip():
+        print(f"Rejected malformed alert from {mac}: process_name is required.")
+        return False
+
+    claimed_severity = alert_data.get("severity")
+    if claimed_severity not in ALERT_SEVERITIES:
+        print(f"Rejected malformed alert from {mac}: invalid severity.")
+        return False
+
+    try:
+        detected_at = _parse_alert_time(
+            alert_data.get("detected_at"), "detected_at", required=True
+        )
+        activity_time = _parse_alert_time(
+            alert_data.get("activity_time"), "activity_time"
+        )
+    except ValueError as error:
+        print(f"Rejected malformed alert from {mac}: {error}")
+        return False
+
     conn = None
     cursor = None
     try:
@@ -43,8 +95,37 @@ def handle_client_alert(mac, alert_data):
         cursor.execute("SELECT id FROM clients WHERE mac = %s", (mac,))
         row = cursor.fetchone()
         if not row:
-            return
+            print(f"Rejected alert from unknown client {mac}.")
+            return False
         client_db_id = row[0]
+
+        # The database configuration, rather than the client payload, decides
+        # whether this process is forbidden and what severity it has.
+        cursor.execute(
+            """
+            SELECT process_name, severity, description
+            FROM forbidden_processes
+            WHERE process_name = %s AND enabled = TRUE
+            """,
+            (process_name.strip(),),
+        )
+        forbidden_process = cursor.fetchone()
+        if not forbidden_process:
+            print(
+                f"Rejected alert from {mac}: {process_name!r} is not an enabled "
+                "forbidden process."
+            )
+            return False
+
+        configured_name, severity, configured_description = forbidden_process
+        if severity not in ALERT_SEVERITIES:
+            print(f"Rejected alert from {mac}: invalid configured severity {severity!r}.")
+            return False
+
+        title = f"Forbidden process detected: {configured_name}"
+        description = configured_description or (
+            f"Forbidden process '{configured_name}' was detected on the client."
+        )
         
         cursor.execute("""
             INSERT INTO alerts (
@@ -53,17 +134,19 @@ def handle_client_alert(mac, alert_data):
             ) VALUES (%s, NULL, %s, %s, %s, %s, %s, %s, 'NEW')
         """, (
             client_db_id, 
-            alert_data.get("alert_type"), 
-            alert_data.get("severity", "MEDIUM"), 
-            alert_data.get("detected_at"), 
-            alert_data.get("activity_time"), 
-            alert_data.get("title"), 
-            alert_data.get("description")
+            "FORBIDDEN_PROCESS",
+            severity,
+            detected_at,
+            activity_time,
+            title,
+            description,
         ))
         conn.commit()
-        print(f"\n[!] ALERT RECEIVED from {mac}: {alert_data.get('title')}")
+        print(f"\n[!] ALERT RECEIVED from {mac}: {title}", flush=True)
+        return True
     except Exception as e:
         print(f"Error saving alert: {e}")
+        return False
     finally:
         if cursor: cursor.close()
         if conn and conn.is_connected(): conn.close()
@@ -282,6 +365,8 @@ def register_client(client_info, conn):
             client["ip"]         = client_info["ip"]
             client["os"]         = client_info["os"]
             client["connection"] = conn
+            client["responses"]  = queue.Queue()
+            client["send_lock"]  = threading.Lock()
 
             print(f"Client reconnected: {client['client_id']}")
             update_client_db(mac, client["client_id"], client_info["hostname"], client_info["ip"], client_info["os"])
@@ -298,7 +383,9 @@ def register_client(client_info, conn):
             "ip":         client_info["ip"],
             "mac":        mac,
             "os":         client_info["os"],
-            "connection": conn
+            "connection": conn,
+            "responses": queue.Queue(),
+            "send_lock": threading.Lock(),
         }
 
         print(f"New client connected: {client_id}")
@@ -315,11 +402,22 @@ def get_client(client_id):
     return None
 
 
-def remove_client(mac):
+def get_client_by_mac(mac):
     with clients_lock:
+        return clients.get(mac)
+
+
+def remove_client(mac, connection=None):
+    with clients_lock:
+        client = clients.get(mac)
+        if connection is not None and client and client["connection"] is not connection:
+            return
         client = clients.pop(mac, None)
 
     if client:
+        # Wake a command that is waiting for a response before closing the
+        # connection.  Queueing this sentinel is safe even when nobody waits.
+        client["responses"].put({"type": "DISCONNECTED"})
         try:
             client["connection"].close()
         except OSError:
@@ -327,6 +425,35 @@ def remove_client(mac):
 
         print(f"Removed {client['client_id']}")
         log_connection(mac, "disconnected")
+
+
+def receive_client_messages(mac, conn):
+    """Continuously consume one client's frames after registration.
+
+    A TCP connection can receive alerts at any time.  This is deliberately the
+    only post-registration reader for the connection; command handlers consume
+    responses from the per-client queue below instead of calling recv().
+    """
+    try:
+        while True:
+            message = receive_message(conn)
+            if message is None:
+                print(f"Client {mac} disconnected.")
+                return
+
+            message_type = message.get("type") if isinstance(message, dict) else None
+            if message_type == "ALERT":
+                handle_client_alert(mac, message.get("alert"))
+            elif message_type == "RESPONSE":
+                client = get_client_by_mac(mac)
+                if client and client["connection"] is conn:
+                    client["responses"].put(message)
+            else:
+                print(f"Unexpected message from {mac}: {message_type!r}")
+    except (ConnectionResetError, BrokenPipeError, OSError, json.JSONDecodeError) as error:
+        print(f"Connection with client {mac} lost: {error}")
+    finally:
+        remove_client(mac, conn)
 
 
 # ============================================================
@@ -427,26 +554,35 @@ def send_command(client_id, command, args=None):
         message["args"] = args
 
     try:
-        send_message(conn, message)
+        # receive_client_messages() is the sole reader for this socket.  It
+        # places command responses in this queue and handles ALERT frames
+        # immediately, even while the server is waiting at its menu prompt.
+        with client["send_lock"]:
+            send_message(conn, message)
 
         while True:
-            response = receive_message(conn)
+            response = client["responses"].get()
 
-            if response is None:
+            if response.get("type") == "DISCONNECTED":
                 print("Client disconnected.")
-                remove_client(client["mac"])
                 return
-                
-            if response.get("type") == "ALERT":
-                handle_client_alert(client["mac"], response.get("alert", {}))
-            else:
-                break
 
-        print_response(client_id, command, response)
+            # The server menu sends one command at a time, but keeping this
+            # check prevents a stale response from being presented as another
+            # command's result.
+            if response.get("command") != command:
+                print(
+                    f"Ignoring unexpected response for "
+                    f"{response.get('command')!r}."
+                )
+                continue
+
+            print_response(client_id, command, response)
+            break
 
     except (ConnectionResetError, BrokenPipeError, OSError):
         print("Connection with client lost.")
-        remove_client(client["mac"])
+        remove_client(client["mac"], conn)
 
 
 # ============================================================

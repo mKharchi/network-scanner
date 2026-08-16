@@ -351,179 +351,620 @@ def _read_chrome_history(db_path, browser_name, add, cutoff_epoch):
 
 
 def _read_firefox_history(db_path, add, cutoff_epoch):
-    if not os.path.exists(db_path):
+    """
+    Read Firefox browsing history from places.sqlite.
+
+    Firefox stores visit_date as microseconds since Unix epoch.
+    A temporary copy is used because Firefox may have the database open.
+    """
+    if not os.path.isfile(db_path):
         return
-    tmp = tempfile.mktemp(suffix=".db")
+
+    tmp = tempfile.mktemp(suffix=".sqlite")
+
     try:
         shutil.copy2(db_path, tmp)
+
         conn = sqlite3.connect(tmp)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
-        # Firefox stores visit_date as microseconds since Unix epoch
+
         ff_cutoff = int(cutoff_epoch * 1_000_000)
+
         cur.execute(
-            "SELECT p.title, p.url, "
-            "datetime(h.visit_date/1000000, 'unixepoch', 'localtime') as visit_time "
-            "FROM moz_historyvisits h JOIN moz_places p ON h.place_id = p.id "
-            "WHERE h.visit_date >= ? ORDER BY h.visit_date DESC LIMIT 200",
+            """
+            SELECT
+                p.title,
+                p.url,
+                h.visit_date
+            FROM moz_historyvisits h
+            JOIN moz_places p
+                ON h.place_id = p.id
+            WHERE h.visit_date >= ?
+              AND h.visit_date IS NOT NULL
+            ORDER BY h.visit_date DESC
+            LIMIT 500
+            """,
             (ff_cutoff,)
         )
-        for row in cur.fetchall():
+
+        rows = cur.fetchall()
+
+        for row in rows:
+            try:
+                visit_time = datetime.fromtimestamp(
+                    row["visit_date"] / 1_000_000
+                ).strftime("%Y-%m-%d %H:%M:%S")
+            except (ValueError, TypeError, OSError):
+                visit_time = "Unknown"
+
             add(
-                row["visit_time"] or "Unknown",
+                visit_time,
                 "Browser (Firefox)",
                 f"{row['title'] or '(no title)'} — {row['url']}"
             )
+
         conn.close()
-    except Exception:
-        pass
+
+    except (sqlite3.Error, OSError, shutil.Error) as e:
+        print(f"Failed to read Firefox history: {e}")
+
     finally:
         try:
             os.remove(tmp)
-        except Exception:
+        except OSError:
             pass
+def _read_shell_history(path, add, cutoff_epoch):
+    """
+    Read Bash/Zsh shell history.
 
+    Bash history with timestamps looks like:
+
+        #1786880318
+        export HISTTIMEFORMAT='%Y-%m-%d %H:%M:%S '
+
+        #1786880320
+        echo "$HISTTIMEFORMAT"
+
+    The #<epoch> line belongs to the command immediately following it.
+    """
+
+    try:
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            lines = f.readlines()
+    except (OSError, IOError):
+        return
+
+    current_timestamp = None
+    current_command = []
+
+    def flush_command():
+        nonlocal current_timestamp, current_command
+
+        if not current_command:
+            return
+
+        command = "\n".join(current_command).strip()
+
+        if not command:
+            current_command = []
+            return
+
+        # We only add commands for which we have a timestamp.
+        if current_timestamp is not None:
+            if current_timestamp >= cutoff_epoch:
+                ts = datetime.fromtimestamp(current_timestamp).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
+
+                add(
+                    ts,
+                    "Shell Command",
+                    command
+                )
+
+        current_command = []
+
+    for raw_line in lines:
+        line = raw_line.rstrip("\n")
+
+        # Bash timestamp marker: #<unix_timestamp>
+        timestamp_match = re.fullmatch(r"#(\d+)", line.strip())
+
+        if timestamp_match:
+            # Finish the previous command first.
+            flush_command()
+
+            try:
+                current_timestamp = int(timestamp_match.group(1))
+            except ValueError:
+                current_timestamp = None
+
+            continue
+
+        # Ignore empty lines unless they are part of a command.
+        if not line.strip():
+            if current_command:
+                current_command.append("")
+            continue
+
+        current_command.append(line)
+
+    # Flush the final command.
+    flush_command()
+
+def _find_firefox_profiles(home):
+    """
+    Find Firefox places.sqlite databases across common Linux
+    installation types.
+    """
+
+    profile_roots = [
+        # Native Firefox
+        os.path.join(
+            home,
+            ".mozilla",
+            "firefox"
+        ),
+
+        # Firefox Snap
+        os.path.join(
+            home,
+            "snap",
+            "firefox",
+            "common",
+            ".mozilla",
+            "firefox"
+        ),
+
+        # Firefox Flatpak
+        os.path.join(
+            home,
+            ".var",
+            "app",
+            "org.mozilla.firefox",
+            ".mozilla",
+            "firefox"
+        ),
+    ]
+
+    profiles = []
+
+    for root in profile_roots:
+
+        if not os.path.isdir(root):
+            continue
+
+        profiles.extend(
+            glob.glob(
+                os.path.join(
+                    root,
+                    "*",
+                    "places.sqlite"
+                )
+            )
+        )
+
+    # Remove duplicates while preserving order
+    return list(dict.fromkeys(profiles))
 
 def get_activity_log(period="1d"):
     """
     Collect user activity and filter to the requested period.
-    period: '1d' = last 24 h, '1w' = last 7 days, '1m' = last 30 days.
+
+    period:
+        '1h' = last hour
+        '1d' = last 24 hours
+        '1w' = last 7 days
+        '1m' = last 30 days
     """
-    periods = {"1h": timedelta(hours=1), "1d": timedelta(days=1), "1w": timedelta(days=7), "1m": timedelta(days=30)}
+
+    periods = {
+        "1h": timedelta(hours=1),
+        "1d": timedelta(days=1),
+        "1w": timedelta(days=7),
+        "1m": timedelta(days=30),
+    }
+
     delta = periods.get(period, timedelta(days=1))
-    cutoff = datetime.now() - delta
-    cutoff_str   = cutoff.strftime("%Y-%m-%d %H:%M:%S")
+
+    now = datetime.now()
+    cutoff = now - delta
+
+    cutoff_str = cutoff.strftime("%Y-%m-%d %H:%M:%S")
     cutoff_epoch = cutoff.timestamp()
 
     system = platform.system()
+
     activity = []
+
     home = os.path.expanduser("~")
 
+    # ------------------------------------------------------------
+    # Helper used by every activity source
+    # ------------------------------------------------------------
+
     def add(time_str, entry_type, detail):
+
         if time_str not in ("Unknown", "Recent"):
+
             try:
-                if datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S") < cutoff:
+                activity_time = datetime.strptime(
+                    time_str,
+                    "%Y-%m-%d %H:%M:%S"
+                )
+
+                if activity_time < cutoff:
                     return
-            except ValueError:
-                pass
-        activity.append({"time": time_str, "type": entry_type, "detail": detail})
+
+            except (ValueError, TypeError):
+                time_str = "Unknown"
+
+        activity.append({
+            "time": time_str,
+            "type": entry_type,
+            "detail": detail,
+        })
+
+    # ============================================================
+    # LINUX
+    # ============================================================
 
     if system == "Linux":
+
+        # --------------------------------------------------------
+        # Browser history
+        # --------------------------------------------------------
+
         browser_paths = {
-            "Chrome":   os.path.join(home, ".config/google-chrome/Default/History"),
-            "Chromium": os.path.join(home, ".config/chromium/Default/History"),
-            "Brave":    os.path.join(home, ".config/BraveSoftware/Brave-Browser/Default/History"),
-            "Edge":     os.path.join(home, ".config/microsoft-edge/Default/History"),
+            "Chrome": os.path.join(
+                home,
+                ".config/google-chrome/Default/History"
+            ),
+
+            "Chromium": os.path.join(
+                home,
+                ".config/chromium/Default/History"
+            ),
+
+            "Brave": os.path.join(
+                home,
+                ".config/BraveSoftware/Brave-Browser/Default/History"
+            ),
+
+            "Edge": os.path.join(
+                home,
+                ".config/microsoft-edge/Default/History"
+            ),
         }
+
         for name, path in browser_paths.items():
-            _read_chrome_history(path, name, add, cutoff_epoch)
+            _read_chrome_history(
+                path,
+                name,
+                add,
+                cutoff_epoch
+            )
 
-        ff_profiles = (
-            glob.glob(os.path.join(home, ".mozilla/firefox/*.default*/places.sqlite")) +
-            glob.glob(os.path.join(home, ".mozilla/firefox/*.default/places.sqlite"))
+        # --------------------------------------------------------
+        # Firefox history
+        # --------------------------------------------------------
+
+        ff_profiles = _find_firefox_profiles(home)
+
+        for firefox_db in ff_profiles:
+            _read_firefox_history(
+                firefox_db,
+                add,
+                cutoff_epoch
+            )
+
+        # --------------------------------------------------------
+        # Recently opened files
+        # --------------------------------------------------------
+
+        recent_xbel = os.path.join(
+            home,
+            ".local/share/recently-used.xbel"
         )
-        if ff_profiles:
-            _read_firefox_history(ff_profiles[0], add, cutoff_epoch)
 
-        recent_xbel = os.path.join(home, ".local/share/recently-used.xbel")
         if os.path.exists(recent_xbel):
+
             try:
-                with open(recent_xbel, "r", errors="ignore") as f:
+                with open(
+                    recent_xbel,
+                    "r",
+                    encoding="utf-8",
+                    errors="ignore"
+                ) as f:
+
                     content = f.read()
-                for m in re.finditer(r'<bookmark href="([^"]+)"[^>]*modified="([^"]+)"', content):
-                    path = m.group(1).replace("file://", "").replace("%20", " ")
-                    ts = m.group(2).replace("T", " ").split(".")[0]
-                    add(ts, "Opened File", path)
+
+                for match in re.finditer(
+                    r'<bookmark href="([^"]+)"[^>]*modified="([^"]+)"',
+                    content
+                ):
+
+                    path = (
+                        match.group(1)
+                        .replace("file://", "")
+                        .replace("%20", " ")
+                    )
+
+                    ts = (
+                        match.group(2)
+                        .replace("T", " ")
+                        .split(".")[0]
+                    )
+
+                    add(
+                        ts,
+                        "Opened File",
+                        path
+                    )
+
             except Exception:
                 pass
 
-        for history_file in [".bash_history", ".zsh_history"]:
-            hpath = os.path.join(home, history_file)
-            if os.path.exists(hpath):
-                try:
-                    with open(hpath, "r", errors="ignore") as f:
-                        lines = f.readlines()
-                    for line in lines[-500:]:
-                        line = line.strip()
-                        m = re.match(r"^:\s*(\d+):\d+;(.+)$", line)
-                        if m:
-                            ts = datetime.fromtimestamp(int(m.group(1))).strftime("%Y-%m-%d %H:%M:%S")
-                            add(ts, "Shell Command", m.group(2))
-                        elif line and not line.startswith(":"):
-                            add("Unknown", "Shell Command", line)
-                except Exception:
-                    pass
-                break
+        # --------------------------------------------------------
+        # Shell history
+        # --------------------------------------------------------
+
+        bash_history = os.path.join(
+            home,
+            ".bash_history"
+        )
+
+        zsh_history = os.path.join(
+            home,
+            ".zsh_history"
+        )
+
+        if os.path.exists(bash_history):
+
+            _read_shell_history(
+                bash_history,
+                add,
+                cutoff_epoch
+            )
+
+        if os.path.exists(zsh_history):
+
+            _read_shell_history(
+                zsh_history,
+                add,
+                cutoff_epoch
+            )
+
+    # ============================================================
+    # WINDOWS
+    # ============================================================
 
     elif system == "Windows":
-        app_data = os.environ.get("LOCALAPPDATA", "")
-        roaming   = os.environ.get("APPDATA", "")
+
+        app_data = os.environ.get(
+            "LOCALAPPDATA",
+            ""
+        )
+
+        roaming = os.environ.get(
+            "APPDATA",
+            ""
+        )
+
+        # --------------------------------------------------------
+        # Browser history
+        # --------------------------------------------------------
 
         browser_paths = {
-            "Chrome": os.path.join(app_data, r"Google\Chrome\User Data\Default\History"),
-            "Edge":   os.path.join(app_data, r"Microsoft\Edge\User Data\Default\History"),
-            "Brave":  os.path.join(app_data, r"BraveSoftware\Brave-Browser\User Data\Default\History"),
-        }
-        for name, path in browser_paths.items():
-            _read_chrome_history(path, name, add, cutoff_epoch)
+            "Chrome": os.path.join(
+                app_data,
+                r"Google\Chrome\User Data\Default\History"
+            ),
 
-        ff_base = os.path.join(roaming, r"Mozilla\Firefox\Profiles")
+            "Edge": os.path.join(
+                app_data,
+                r"Microsoft\Edge\User Data\Default\History"
+            ),
+
+            "Brave": os.path.join(
+                app_data,
+                r"BraveSoftware\Brave-Browser\User Data\Default\History"
+            ),
+        }
+
+        for name, path in browser_paths.items():
+
+            _read_chrome_history(
+                path,
+                name,
+                add,
+                cutoff_epoch
+            )
+
+        # --------------------------------------------------------
+        # Firefox
+        # --------------------------------------------------------
+
+        ff_base = os.path.join(
+            roaming,
+            r"Mozilla\Firefox\Profiles"
+        )
+
         if os.path.isdir(ff_base):
+
             for profile in os.listdir(ff_base):
-                places = os.path.join(ff_base, profile, "places.sqlite")
+
+                places = os.path.join(
+                    ff_base,
+                    profile,
+                    "places.sqlite"
+                )
+
                 if os.path.exists(places):
-                    _read_firefox_history(places, add, cutoff_epoch)
+
+                    _read_firefox_history(
+                        places,
+                        add,
+                        cutoff_epoch
+                    )
+
                     break
 
-        recent_dir = os.path.join(roaming, r"Microsoft\Windows\Recent")
+        # --------------------------------------------------------
+        # Recently opened files
+        # --------------------------------------------------------
+
+        recent_dir = os.path.join(
+            roaming,
+            r"Microsoft\Windows\Recent"
+        )
+
         if os.path.isdir(recent_dir):
-            for lnk in sorted(os.listdir(recent_dir), reverse=True):
-                full = os.path.join(recent_dir, lnk)
-                mtime = os.path.getmtime(full)
+
+            for lnk in sorted(
+                os.listdir(recent_dir),
+                reverse=True
+            ):
+
+                full = os.path.join(
+                    recent_dir,
+                    lnk
+                )
+
+                try:
+                    mtime = os.path.getmtime(full)
+                except OSError:
+                    continue
+
                 if mtime >= cutoff_epoch:
-                    ts = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
-                    add(ts, "Opened File", lnk.replace(".lnk", ""))
+
+                    ts = datetime.fromtimestamp(
+                        mtime
+                    ).strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    )
+
+                    add(
+                        ts,
+                        "Opened File",
+                        lnk.replace(".lnk", "")
+                    )
+
+    # ============================================================
+    # MACOS
+    # ============================================================
 
     elif system == "Darwin":
+
+        # --------------------------------------------------------
+        # Browser history
+        # --------------------------------------------------------
+
         browser_paths = {
-            "Chrome": os.path.join(home, "Library/Application Support/Google/Chrome/Default/History"),
-            "Edge":   os.path.join(home, "Library/Application Support/Microsoft Edge/Default/History"),
-            "Brave":  os.path.join(home, "Library/Application Support/BraveSoftware/Brave-Browser/Default/History"),
+            "Chrome": os.path.join(
+                home,
+                "Library/Application Support/Google/Chrome/Default/History"
+            ),
+
+            "Edge": os.path.join(
+                home,
+                "Library/Application Support/Microsoft Edge/Default/History"
+            ),
+
+            "Brave": os.path.join(
+                home,
+                "Library/Application Support/BraveSoftware/Brave-Browser/Default/History"
+            ),
         }
+
         for name, path in browser_paths.items():
-            _read_chrome_history(path, name, add, cutoff_epoch)
+
+            _read_chrome_history(
+                path,
+                name,
+                add,
+                cutoff_epoch
+            )
+
+        # --------------------------------------------------------
+        # Firefox
+        # --------------------------------------------------------
 
         ff_profiles = glob.glob(
-            os.path.join(home, "Library/Application Support/Firefox/Profiles/*.default*/places.sqlite")
+            os.path.join(
+                home,
+                "Library/Application Support/Firefox/Profiles/*.default*/places.sqlite"
+            )
         )
+
         if ff_profiles:
-            _read_firefox_history(ff_profiles[0], add, cutoff_epoch)
+
+            _read_firefox_history(
+                ff_profiles[0],
+                add,
+                cutoff_epoch
+            )
+
+        # --------------------------------------------------------
+        # macOS recently used files
+        # --------------------------------------------------------
 
         try:
+
             out = subprocess.check_output(
-                ["mdfind", "-onlyin", home, "kMDItemLastUsedDate != ''",
-                 "-attr", "kMDItemDisplayName", "-attr", "kMDItemLastUsedDate"],
-                timeout=5, stderr=subprocess.DEVNULL
-            ).decode("utf-8", errors="ignore")
+                [
+                    "mdfind",
+                    "-onlyin",
+                    home,
+                    "kMDItemLastUsedDate != ''",
+                    "-attr",
+                    "kMDItemDisplayName",
+                    "-attr",
+                    "kMDItemLastUsedDate",
+                ],
+                timeout=5,
+                stderr=subprocess.DEVNULL,
+            ).decode(
+                "utf-8",
+                errors="ignore"
+            )
+
             for line in out.splitlines()[:50]:
-                add("Recent", "Opened File", line.strip())
+
+                add(
+                    "Recent",
+                    "Opened File",
+                    line.strip()
+                )
+
         except Exception:
             pass
 
+    # ============================================================
+    # SORT
+    # ============================================================
+
     activity.sort(
-        key=lambda e: (0 if e["time"] == "Unknown" else 1, e["time"]),
+        key=lambda e: (
+            0 if e["time"] == "Unknown" else 1,
+            e["time"]
+        ),
         reverse=True
     )
+
+    # ============================================================
+    # RESULT
+    # ============================================================
 
     return {
         "period": period,
         "since": cutoff_str,
-        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "activity": activity
-    }
-
-
-# ============================================================
+        "generated_at": datetime.now().strftime(
+            "%Y-%m-%d %H:%M:%S"
+        ),
+        "activity": activity,
+    }# ============================================================
 # COMMAND HANDLER (dispatcher)
 # ============================================================
 
