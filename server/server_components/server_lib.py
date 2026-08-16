@@ -966,7 +966,8 @@ def server_menu():
         print("==============================================")
         print("1. List connected clients")
         print("2. Select client")
-        print("3. Exit")
+        print("3. Run local network discovery")
+        print("4. Exit")
 
         choice = input("\nSelect option: ").strip()
 
@@ -984,6 +985,22 @@ def server_menu():
                 print("Client not found.")
 
         elif choice == "3":
+            try:
+                from server_components.network_discovery import (
+                    NetworkDiscoveryError,
+                    run_manual_scan,
+                )
+
+                context, devices, result_path = run_manual_scan()
+                print(
+                    f"\nNetwork discovery completed on {context['interface']} "
+                    f"({context['network']}): {len(devices)} device(s) found."
+                )
+                print(f"Saved result: {result_path}")
+            except NetworkDiscoveryError as error:
+                print(f"Network discovery failed: {error}")
+
+        elif choice == "4":
             print("Server shutting down.")
             with clients_lock:
                 for client in list(clients.values()):

@@ -3,6 +3,8 @@ import os
 import socket
 import threading
 
+from dotenv import load_dotenv
+
 from server_components.server_lib import (
     clients_lock,
     clients,
@@ -14,6 +16,11 @@ from server_components.server_lib import (
     receive_client_messages,
 )
 from database import initiate_db
+from server_components.network_discovery import configure_logging
+
+
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+configure_logging()
 
 HOST = os.getenv("SERVER_HOST", "0.0.0.0")
 PORT = int(os.getenv("SERVER_PORT", "5000"))
