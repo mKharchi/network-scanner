@@ -18,7 +18,10 @@ def scan_for_forbidden_processes(log_data, forbidden_processes, reported_alerts)
             for entry in log_data["activity"]:
                 if process_name.lower() in entry["detail"].lower() or process_name.lower() in entry["type"].lower():
                     time_str = entry["time"]
-                    alert_id = hashlib.md5(f"{process_name}_{time_str}".encode()).hexdigest()
+                    detail = entry.get("detail", "")
+                    alert_id = hashlib.sha256(
+                        f"{process_name}\0{time_str}\0{detail}".encode()
+                    ).hexdigest()
                     if alert_id not in reported_alerts:
                         reported_alerts.add(alert_id)
                         new_alerts.append({

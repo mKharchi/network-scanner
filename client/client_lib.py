@@ -348,8 +348,6 @@ def _read_chrome_history(db_path, browser_name, add, cutoff_epoch):
             os.remove(tmp)
         except Exception:
             pass
-
-
 def _read_firefox_history(db_path, add, cutoff_epoch):
     """
     Read Firefox browsing history from places.sqlite.
@@ -414,6 +412,66 @@ def _read_firefox_history(db_path, add, cutoff_epoch):
             os.remove(tmp)
         except OSError:
             pass
+
+
+def _read_safari_history(db_path, add, cutoff_epoch):
+    """Read macOS Safari history from its History.db SQLite database."""
+    if not os.path.isfile(db_path):
+        return
+
+    tmp = tempfile.mktemp(suffix=".db")
+    try:
+        shutil.copy2(db_path, tmp)
+        conn = sqlite3.connect(tmp)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        # Safari records seconds since 2001-01-01, unlike Unix timestamps.
+        safari_epoch_offset = 978307200
+        safari_cutoff = cutoff_epoch - safari_epoch_offset
+        cursor.execute(
+            """
+            SELECT
+                i.url,
+                v.title,
+                datetime(v.visit_time + ?, 'unixepoch', 'localtime') AS visit_time
+            FROM history_visits AS v
+            JOIN history_items AS i ON i.id = v.history_item
+            WHERE v.visit_time >= ?
+            ORDER BY v.visit_time DESC
+            LIMIT 500
+            """,
+            (safari_epoch_offset, safari_cutoff),
+        )
+
+        for row in cursor.fetchall():
+            add(
+                row["visit_time"] or "Unknown",
+                "Browser (Safari)",
+                f"{row['title'] or '(no title)'} — {row['url']}",
+            )
+        conn.close()
+    except (sqlite3.Error, OSError, shutil.Error):
+        # History collection is optional; a locked or unavailable browser
+        # database must not prevent the rest of the activity log.
+        pass
+    finally:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+
+
+def _read_chromium_profiles(profile_root, browser_name, add, cutoff_epoch):
+    """Read Default and named profiles for a Chromium-family browser."""
+    if not os.path.isdir(profile_root):
+        return
+
+    history_files = glob.glob(os.path.join(profile_root, "*", "History"))
+    for history_file in sorted(set(history_files)):
+        _read_chrome_history(history_file, browser_name, add, cutoff_epoch)
+
+
 def _read_shell_history(path, add, cutoff_epoch):
     """
     Read Bash/Zsh shell history.
@@ -616,31 +674,31 @@ def get_activity_log(period="1d"):
         # Browser history
         # --------------------------------------------------------
 
-        browser_paths = {
+        browser_roots = {
             "Chrome": os.path.join(
                 home,
-                ".config/google-chrome/Default/History"
+                ".config/google-chrome"
             ),
 
             "Chromium": os.path.join(
                 home,
-                ".config/chromium/Default/History"
+                ".config/chromium"
             ),
 
             "Brave": os.path.join(
                 home,
-                ".config/BraveSoftware/Brave-Browser/Default/History"
+                ".config/BraveSoftware/Brave-Browser"
             ),
 
             "Edge": os.path.join(
                 home,
-                ".config/microsoft-edge/Default/History"
+                ".config/microsoft-edge"
             ),
         }
 
-        for name, path in browser_paths.items():
-            _read_chrome_history(
-                path,
+        for name, profile_root in browser_roots.items():
+            _read_chromium_profiles(
+                profile_root,
                 name,
                 add,
                 cutoff_epoch
@@ -756,27 +814,27 @@ def get_activity_log(period="1d"):
         # Browser history
         # --------------------------------------------------------
 
-        browser_paths = {
+        browser_roots = {
             "Chrome": os.path.join(
                 app_data,
-                r"Google\Chrome\User Data\Default\History"
+                r"Google\Chrome\User Data"
             ),
 
             "Edge": os.path.join(
                 app_data,
-                r"Microsoft\Edge\User Data\Default\History"
+                r"Microsoft\Edge\User Data"
             ),
 
             "Brave": os.path.join(
                 app_data,
-                r"BraveSoftware\Brave-Browser\User Data\Default\History"
+                r"BraveSoftware\Brave-Browser\User Data"
             ),
         }
 
-        for name, path in browser_paths.items():
+        for name, profile_root in browser_roots.items():
 
-            _read_chrome_history(
-                path,
+            _read_chromium_profiles(
+                profile_root,
                 name,
                 add,
                 cutoff_epoch
@@ -861,27 +919,27 @@ def get_activity_log(period="1d"):
         # Browser history
         # --------------------------------------------------------
 
-        browser_paths = {
+        browser_roots = {
             "Chrome": os.path.join(
                 home,
-                "Library/Application Support/Google/Chrome/Default/History"
+                "Library/Application Support/Google/Chrome"
             ),
 
             "Edge": os.path.join(
                 home,
-                "Library/Application Support/Microsoft Edge/Default/History"
+                "Library/Application Support/Microsoft Edge"
             ),
 
             "Brave": os.path.join(
                 home,
-                "Library/Application Support/BraveSoftware/Brave-Browser/Default/History"
+                "Library/Application Support/BraveSoftware/Brave-Browser"
             ),
         }
 
-        for name, path in browser_paths.items():
+        for name, profile_root in browser_roots.items():
 
-            _read_chrome_history(
-                path,
+            _read_chromium_profiles(
+                profile_root,
                 name,
                 add,
                 cutoff_epoch
@@ -905,6 +963,12 @@ def get_activity_log(period="1d"):
                 add,
                 cutoff_epoch
             )
+
+        _read_safari_history(
+            os.path.join(home, "Library", "Safari", "History.db"),
+            add,
+            cutoff_epoch,
+        )
 
         # --------------------------------------------------------
         # macOS recently used files
@@ -964,7 +1028,10 @@ def get_activity_log(period="1d"):
             "%Y-%m-%d %H:%M:%S"
         ),
         "activity": activity,
-    }# ============================================================
+    }
+
+
+# ============================================================
 # COMMAND HANDLER (dispatcher)
 # ============================================================
 
