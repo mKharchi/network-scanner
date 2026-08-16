@@ -39,3 +39,7 @@ ENV/
 # Stored activity log files (preserve directory via .gitkeep)
 server/storage/logs/
 *.db
+
+# Client-side generated monitoring state
+client/hourly_log.json
+client/reported_alerts.json

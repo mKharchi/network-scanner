@@ -19,16 +19,71 @@ load_dotenv()
 
 SERVER_IP = os.getenv("SERVER_IP", "127.0.0.1")
 SERVER_PORT = int(os.getenv("SERVER_PORT", "5000"))
+ALERT_STATE_FILE = os.path.join(os.path.dirname(__file__), "reported_alerts.json")
 
-alert_queue = []
-alert_queue_lock = threading.Lock()
 socket_lock = threading.Lock()
+scanner_lock = threading.Lock()
 forbidden_processes = []
-reported_alerts = set()
+
+
+def load_reported_alerts():
+    """Restore a bounded local deduplication state from the previous run."""
+    try:
+        with open(ALERT_STATE_FILE, "r", encoding="utf-8") as state_file:
+            alert_ids = json.load(state_file)
+        if isinstance(alert_ids, list):
+            return set(alert_id for alert_id in alert_ids if isinstance(alert_id, str))
+    except (OSError, json.JSONDecodeError):
+        pass
+    return set()
+
+
+def save_reported_alerts(alert_ids):
+    """Persist only the recent alert IDs; never retain an unbounded history."""
+    try:
+        with open(ALERT_STATE_FILE, "w", encoding="utf-8") as state_file:
+            json.dump(sorted(alert_ids), state_file)
+    except OSError as error:
+        print(f"Could not save alert deduplication state: {error}")
+
+
+reported_alerts = load_reported_alerts()
+
+
+def scan_activity_log(log_data):
+    """Create alerts for one collected activity log without duplicating events."""
+    global reported_alerts
+
+    with scanner_lock:
+        new_alerts, reported_alerts = scan_for_forbidden_processes(
+            log_data, forbidden_processes, reported_alerts
+        )
+        save_reported_alerts(reported_alerts)
+
+    detected_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    for alert in new_alerts:
+        alert["detected_at"] = detected_at
+
+    return [{"type": "ALERT", "alert": alert} for alert in new_alerts]
+
+
+def send_alerts(client_socket, alerts, source):
+    """Send alert frames before the command response, preserving frame order."""
+    if not alerts:
+        return
+
+    with socket_lock:
+        for alert in alerts:
+            try:
+                send_message(client_socket, alert)
+                print(f"Sent ALERT ({source}): {alert['alert']['title']}")
+            except OSError as error:
+                print(f"Failed to send alert ({source}): {error}")
+                return
+
 
 def background_scanner(client_socket):
-    global forbidden_processes, reported_alerts
-    time.sleep(10) #sleep for
+    time.sleep(10)
     
     while True:
         try:
@@ -38,34 +93,9 @@ def background_scanner(client_socket):
             with open("hourly_log.json", "w") as f:
                 json.dump(log_data, f)
                 
-            # Scan
-            new_alerts, reported_alerts = scan_for_forbidden_processes(
-                log_data, forbidden_processes, reported_alerts
-            )
-            
-            with alert_queue_lock:
-                for a in new_alerts:
-                    a["detected_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    alert_queue.append({
-                        "type": "ALERT",
-                        "alert": a
-                    })
-
-            print(f"Background scanner found {len(new_alerts)} new alerts.")
-
-            # Send immediately
-            with alert_queue_lock:
-                alerts_to_send = list(alert_queue)
-                alert_queue.clear()
-
-            if alerts_to_send:
-                with socket_lock:
-                    for a in alerts_to_send:
-                        try:
-                            send_message(client_socket, a)
-                            print(f"Sent ALERT (async): {a['alert']['title']}")
-                        except Exception as e:
-                            print(f"Failed to send async alert: {e}")
+            alerts = scan_activity_log(log_data)
+            print(f"Background scanner found {len(alerts)} new alerts.")
+            send_alerts(client_socket, alerts, "hourly scan")
 
         except Exception as e:
             print(f"Background scanner error: {e}")
@@ -141,15 +171,18 @@ def start_client():
 
             result = handle_command(message)
 
-            with alert_queue_lock:
-                alerts_to_send = list(alert_queue)
-                alert_queue.clear()
+            # A server-requested activity log (including the standard 24-hour
+            # request) is another detection opportunity.  Send any resulting
+            # alerts before the response containing the full log.
+            if command == "GET_ACTIVITY_LOG" and isinstance(result, dict):
+                alerts = scan_activity_log(result)
+                print(
+                    f"Activity-log scan ({result.get('period', 'unknown')}) "
+                    f"found {len(alerts)} new alerts."
+                )
+                send_alerts(client, alerts, "server-requested activity log")
 
             with socket_lock:
-                for a in alerts_to_send:
-                    send_message(client, a)
-                    print(f"Sent ALERT: {a['alert']['title']}")
-                
                 send_message(client, {
                     "type":    "RESPONSE",
                     "command": command,
