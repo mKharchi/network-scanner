@@ -90,3 +90,14 @@ CREATE TABLE IF NOT EXISTS working_hours (
     UNIQUE(day_of_week)
 );
 INSERT IGNORE INTO forbidden_processes (process_name, severity, enabled, description) VALUES ('discord', 'HIGH', TRUE, 'Social media/gaming communication platform - not authorized for work use');
+
+-- day_of_week uses Python's datetime.weekday(): Monday=0 through Sunday=6.
+-- The centre is open Saturday through Thursday, 09:30 (inclusive) to 18:00
+-- (exclusive). Friday deliberately has no enabled schedule.
+INSERT IGNORE INTO working_hours (day_of_week, start_time, end_time, enabled) VALUES
+    (0, '09:30:00', '18:00:00', TRUE),
+    (1, '09:30:00', '18:00:00', TRUE),
+    (2, '09:30:00', '18:00:00', TRUE),
+    (3, '09:30:00', '18:00:00', TRUE),
+    (5, '09:30:00', '18:00:00', TRUE),
+    (6, '09:30:00', '18:00:00', TRUE);
