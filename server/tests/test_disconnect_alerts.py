@@ -11,6 +11,8 @@ import sys
 import types
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 
 SERVER_DIRECTORY = Path(__file__).resolve().parents[1]
@@ -121,6 +123,20 @@ class DisconnectAlertTests(unittest.TestCase):
         self.assertTrue(client["connection"].closed)
         self.assertEqual(disconnect_alerts, [(client, True)])
         self.assertNotIn(client["mac"], server_lib.pending_disconnect_checks)
+
+    def test_reachability_ping_sends_exactly_two_packets(self):
+        with patch.object(server_lib.platform, "system", return_value="Linux"), patch.object(
+            server_lib.subprocess,
+            "run",
+            return_value=SimpleNamespace(returncode=0),
+        ) as run:
+            self.assertTrue(server_lib.ping_client("172.16.1.10"))
+
+        self.assertEqual(run.call_args.args[0][:3], ["ping", "-c", "2"])
+        self.assertEqual(
+            run.call_args.kwargs["timeout"],
+            (server_lib.DISCONNECT_PING_TIMEOUT_SECONDS * 2) + 1,
+        )
 
 
 if __name__ == "__main__":

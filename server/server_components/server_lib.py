@@ -21,7 +21,6 @@ from server_components.log_storage import store_log_file
 
 clients = {}
 clients_lock = threading.Lock()
-next_client_id = 1
 pending_disconnect_checks = {}
 
 
@@ -265,7 +264,7 @@ def create_agent_stopped_alert(client):
 
 
 def ping_client(ip):
-    """Return whether a client IP responds to one bounded ICMP ping."""
+    """Return whether a client IP responds to a bounded two-packet ICMP ping."""
     try:
         address = str(ipaddress.ip_address(ip))
     except ValueError:
@@ -274,12 +273,12 @@ def ping_client(ip):
 
     if platform.system() == "Windows":
         command = [
-            "ping", "-n", "1", "-w",
+            "ping", "-n", "2", "-w",
             str(DISCONNECT_PING_TIMEOUT_SECONDS * 1000), address,
         ]
     else:
         command = [
-            "ping", "-c", "1", "-W",
+            "ping", "-c", "2", "-W",
             str(DISCONNECT_PING_TIMEOUT_SECONDS), address,
         ]
 
@@ -288,7 +287,7 @@ def ping_client(ip):
             command,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            timeout=DISCONNECT_PING_TIMEOUT_SECONDS + 1,
+            timeout=(DISCONNECT_PING_TIMEOUT_SECONDS * 2) + 1,
             check=False,
         ).returncode == 0
     except (OSError, subprocess.TimeoutExpired) as error:
@@ -511,6 +510,11 @@ def log_connection(mac, status):
             conn.close()
 
 
+def _client_id_for_mac(mac):
+    """Return a restart-safe client identifier derived from its local identity."""
+    return f"client-{mac.replace(':', '').replace('-', '').lower()}"
+
+
 def update_client_db(mac, client_id, hostname, ip, os_info):
     """Persist/update client metadata in the MySQL database."""
     conn = None
@@ -539,8 +543,10 @@ def update_client_db(mac, client_id, hostname, ip, os_info):
         ''', (client_id, hostname, ip, mac, system, release, version, machine))
 
         conn.commit()
+        return True
     except Exception as e:
         print(f"Failed to update client in DB: {e}")
+        return False
     finally:
         if cursor:
             cursor.close()
@@ -637,9 +643,10 @@ def store_activity_log_file(mac, log_data):
 # ============================================================
 
 def register_client(client_info, conn):
-    global next_client_id
-
-    mac = client_info["mac"]
+    mac = client_info["mac"].upper().replace("-", ":")
+    client_info = dict(client_info)
+    client_info["mac"] = mac
+    client_id = _client_id_for_mac(mac)
 
     with clients_lock:
         # A registration during the grace period cancels the pending agent
@@ -649,22 +656,32 @@ def register_client(client_info, conn):
         # ---- Reconnecting client ----
         if mac in clients:
             client = clients[mac]
+
+            if not update_client_db(
+                mac, client_id, client_info["hostname"], client_info["ip"], client_info["os"]
+            ):
+                print(f"Client registration rejected because {mac} could not be saved to MySQL.")
+                return None
+
             client["hostname"]   = client_info["hostname"]
             client["ip"]         = client_info["ip"]
             client["os"]         = client_info["os"]
+            client["client_id"]  = client_id
             client["connection"] = conn
             client["responses"]  = queue.Queue()
             client["send_lock"]  = threading.Lock()
 
             print(f"Client reconnected: {client['client_id']}")
-            update_client_db(mac, client["client_id"], client_info["hostname"], client_info["ip"], client_info["os"])
             log_connection(mac, "reconnected")
             create_connection_alert(client_info)
             return client["client_id"]
 
         # ---- New client ----
-        client_id = f"client-{next_client_id}"
-        next_client_id += 1
+        if not update_client_db(
+            mac, client_id, client_info["hostname"], client_info["ip"], client_info["os"]
+        ):
+            print(f"Client registration rejected because {mac} could not be saved to MySQL.")
+            return None
 
         clients[mac] = {
             "client_id":  client_id,
@@ -678,7 +695,6 @@ def register_client(client_info, conn):
         }
 
         print(f"New client connected: {client_id}")
-        update_client_db(mac, client_id, client_info["hostname"], client_info["ip"], client_info["os"])
         log_connection(mac, "connected")
         create_connection_alert(client_info)
         return client_id
@@ -1002,7 +1018,7 @@ def server_menu():
         print("==============================================")
         print("1. List connected clients")
         print("2. Select client")
-        print("3. Run local network discovery")
+        print("3. Merge client network-discovery reports")
         print("4. Exit")
 
         choice = input("\nSelect option: ").strip()
@@ -1029,8 +1045,7 @@ def server_menu():
 
                 context, devices, result_path = run_manual_scan()
                 print(
-                    f"\nNetwork discovery completed on {context['interface']} "
-                    f"({context['network']}): {len(devices)} device(s) found."
+                    f"\nClient network reports merged: {len(devices)} device(s) found."
                 )
                 print(f"Saved result: {result_path}")
             except NetworkDiscoveryError as error:

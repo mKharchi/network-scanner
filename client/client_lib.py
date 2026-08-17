@@ -30,7 +30,35 @@ def get_ip():
     return ip
 
 
-def get_mac():
+def get_mac(active_ip=None):
+    """Return the MAC for the interface carrying the active IPv4 address.
+
+    ``uuid.getnode()`` can select a virtual, disconnected, or otherwise
+    unrelated adapter on multi-interface machines (especially Windows).  The
+    registration identity must instead be the adapter whose IPv4 address is
+    actually used to reach the server.
+    """
+    active_ip = active_ip or get_ip()
+    link_families = {
+        getattr(psutil, "AF_LINK", None),
+        getattr(socket, "AF_PACKET", None),
+    }
+    link_families.discard(None)
+
+    for addresses in psutil.net_if_addrs().values():
+        has_active_ip = any(
+            address.family == socket.AF_INET and address.address == active_ip
+            for address in addresses
+        )
+        if not has_active_ip:
+            continue
+        for address in addresses:
+            mac_address = address.address.strip().lower()
+            if address.family in link_families and mac_address and mac_address != "00:00:00:00:00:00":
+                return mac_address.replace("-", ":")
+
+    # Keep a best-effort fallback for unusual platforms, but make it visible
+    # to callers that normal interface discovery was not possible.
     mac = uuid.getnode()
     return ":".join(
         f"{(mac >> i) & 0xff:02x}"
@@ -51,10 +79,11 @@ def get_os():
     }
 
 
-def get_system_info():
+def get_system_info(ip_address=None):
+    ip_address = ip_address or get_ip()
     return {
-        "ip":       get_ip(),
-        "mac":      get_mac(),
+        "ip":       ip_address,
+        "mac":      get_mac(ip_address),
         "hostname": get_hostname(),
         "os":       get_os()
     }
@@ -1091,10 +1120,10 @@ def handle_command(message):
 # REGISTRATION MESSAGE
 # ============================================================
 
-def create_registration_message():
+def create_registration_message(ip_address=None):
     return {
         "type": "REGISTER",
-        "data": get_system_info()
+        "data": get_system_info(ip_address)
     }
 
 

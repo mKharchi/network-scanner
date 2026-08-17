@@ -1,7 +1,8 @@
-"""Best-effort IPv4 LAN discovery for the server process.
+"""Network-discovery helpers and client-report aggregation.
 
-This module deliberately only discovers and identifies devices. It does not
-persist results, decide whether a device is managed, or generate alerts.
+The legacy server-local ARP and OS-discovery helpers remain available for
+compatibility, but the running server does not invoke them.  Network presence
+is discovered by monitoring clients and this module aggregates their reports.
 """
 
 import ipaddress
@@ -12,9 +13,13 @@ import re
 import socket
 import subprocess
 import xml.etree.ElementTree as element_tree
+from datetime import datetime, timezone
 
 from server_components.network_scan_storage import store_network_scan
 from server_components.network_device_classification import classify_devices
+from server_components.network_device_storage import (
+    get_recent_client_neighbour_observations,
+)
 
 
 LOGGER = logging.getLogger(__name__)
@@ -508,19 +513,107 @@ def discover_devices(
     )
 
 
+def merge_discovery_sources(server_devices, client_observations, *, observed_at=None):
+    """Aggregate server ARP and fresh client ARP observations by MAC address.
+
+    The server's direct ARP response is the preferred current IP when both
+    sources see a device. Client-only devices remain in the result and retain
+    the reporting client and observation time for later inspection.
+    """
+    observed_at = observed_at or datetime.now(timezone.utc).isoformat()
+    devices_by_mac = {}
+
+    for device in server_devices:
+        mac_address = _normalise_mac_address(device.get("mac_address"))
+        if not mac_address:
+            continue
+        merged_device = dict(device)
+        merged_device["mac_address"] = mac_address
+        merged_device["observation_sources"] = [
+            {
+                "source_type": "SERVER_SCAN",
+                "ip_address": merged_device.get("ip_address"),
+                "observed_at": observed_at,
+            }
+        ]
+        devices_by_mac[mac_address] = merged_device
+
+    for observation in client_observations:
+        mac_address = _normalise_mac_address(observation.get("mac_address"))
+        if not mac_address:
+            continue
+        source = {
+            "source_type": "CLIENT_ARP",
+            "source_client_database_id": observation.get("source_client_database_id"),
+            "source_client_id": observation.get("source_client_id"),
+            "source_client_hostname": observation.get("source_client_hostname"),
+            "ip_address": observation.get("ip_address"),
+            "interface": observation.get("interface"),
+            "entry_type": observation.get("entry_type"),
+            "hostname": observation.get("hostname"),
+            "vendor": observation.get("vendor"),
+            "observed_at": observation.get("observed_at"),
+        }
+        merged_device = devices_by_mac.get(mac_address)
+        if merged_device is None:
+            merged_device = {
+                "ip_address": observation.get("ip_address"),
+                "mac_address": mac_address,
+                "hostname": observation.get("hostname"),
+                "vendor": observation.get("vendor"),
+                "os_name": None,
+                "os_family": None,
+                "os_confidence": None,
+                "observation_sources": [],
+            }
+            devices_by_mac[mac_address] = merged_device
+        else:
+            if not merged_device.get("hostname") and observation.get("hostname"):
+                merged_device["hostname"] = observation["hostname"]
+            if not merged_device.get("vendor") and observation.get("vendor"):
+                merged_device["vendor"] = observation["vendor"]
+        merged_device["observation_sources"].append(source)
+
+    return list(devices_by_mac.values())
+
+
 def run_manual_scan():
-    """Run a server-local discovery scan and return its context and results."""
-    context = get_local_network()
-    LOGGER.info(
-        "Network scan started: interface=%s network=%s gateway=%s",
-        context["interface"],
-        context["network"],
-        context["gateway"],
+    """Aggregate fresh client neighbour reports without scanning from the server.
+
+    Server-local ARP discovery, hostname lookup, and OS detection are
+    intentionally not called here.  Those helper functions are retained for
+    backwards compatibility only; clients are the sole discovery agents.
+    """
+    context = {
+        "interface": "client-reported",
+        "local_ip": None,
+        "network": "client-reported",
+        "gateway": None,
+    }
+    LOGGER.info("Network aggregation started from client neighbour reports.")
+    scan_started_at = datetime.now(timezone.utc)
+
+    try:
+        client_observations = get_recent_client_neighbour_observations(
+            now=scan_started_at.replace(tzinfo=None)
+        )
+    except Exception as error:
+        LOGGER.warning("Could not load recent client ARP observations: %s", error)
+        client_observations = []
+
+    discovered_devices = merge_discovery_sources(
+        [],
+        client_observations,
+        observed_at=scan_started_at.isoformat(),
     )
-    discovered_devices = discover_arp_devices(context)
+    LOGGER.info(
+        "Client discovery reports merged: %d observation(s), %d unique device(s).",
+        len(client_observations),
+        len(discovered_devices),
+    )
     classified_devices = classify_devices(discovered_devices)
-    devices = enrich_devices(classified_devices)
-    LOGGER.info("Network scan completed: %d devices discovered", len(devices))
+    devices = classified_devices
+    LOGGER.info("Network aggregation completed: %d devices discovered", len(devices))
     result_path = store_network_scan(context, devices)
     LOGGER.info("Network scan result saved to %s", result_path)
     return context, devices, result_path

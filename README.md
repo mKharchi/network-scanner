@@ -52,14 +52,9 @@ the following environment variables:
 | `SERVER_HOST` | `0.0.0.0` | IP to bind the TCP server |
 | `SERVER_PORT` | `5000` | Port for the TCP server |
 | `DISCONNECT_PING_DELAY_SECONDS` | `5` | Grace period before classifying an unexpected client disconnect |
-| `DISCONNECT_PING_TIMEOUT_SECONDS` | `3` | Timeout for the single client reachability ping |
-| `NETWORK_SCAN_INTERFACE` | detected | Optional IPv4 interface override for local LAN discovery |
-| `NETWORK_SCAN_SUBNET` | detected | Optional IPv4 CIDR override for local LAN discovery |
-| `NETWORK_SCAN_TIMEOUT_SECONDS` | `3` | ARP response wait time in seconds |
-| `NETWORK_SCAN_OUI_DATABASE` | `/usr/share/arp-scan/ieee-oui.txt` | Optional local OUI vendor database |
+| `DISCONNECT_PING_TIMEOUT_SECONDS` | `3` | Timeout per packet for the two-packet client reachability ping |
 | `NETWORK_SCAN_STORAGE_DIR` | `server/storage/network_scans` | Directory for completed scan-result JSON files |
-| `NETWORK_SCAN_OS_TARGETS` | empty | Comma-separated discovered IPv4 addresses for opt-in OS detection |
-| `NETWORK_SCAN_OS_TARGET_LIMIT` | `3` | Maximum number of OS-detection targets per scan |
+| `NETWORK_CLIENT_OBSERVATION_MAX_AGE_SECONDS` | `3600` | Maximum age of client ARP observations included in a server scan |
 | `LOG_LEVEL` | `INFO` | Console logging threshold (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
 
 ### 2. Install & Run Server
@@ -74,11 +69,14 @@ pip install -r requirements.txt
 python server.py
 ```
 
-### Manual LAN Discovery
+### Manual LAN Discovery Aggregation
 
-The server process can perform a best-effort IPv4 ARP scan of its own local
-network. It determines the active interface and subnet from `ip route` and
-`ip addr`; it does not scan a hard-coded network.
+Network discovery is performed entirely on the monitoring clients. Each
+client reads its local ARP/neighbour table at startup and periodically sends a
+snapshot to the server. Before reporting, the client resolves hostnames with
+its local DNS/mDNS and looks up vendors in its local OUI database. The server
+only merges recent client reports; it does not transmit ARP, ping, Nmap, DNS,
+or mDNS discovery traffic.
 
 Run it directly from the `server/` directory:
 
@@ -86,27 +84,23 @@ Run it directly from the `server/` directory:
 python scanner.py
 ```
 
-Or select **Run local network discovery** from the server CLI. ARP scanning
-requires the `scapy` dependency installed from `server/requirements.txt` and
-permission to send raw packets. Hostname and vendor lookup are optional; a
-failure to enrich one device does not fail the scan.
+Or select **Merge client network-discovery reports** from the server CLI. The
+result contains reports no older than
+`NETWORK_CLIENT_OBSERVATION_MAX_AGE_SECONDS`.
 
 Completed discovery results are saved as timestamped JSON files under
 `server/storage/network_scans/` by default. Set `NETWORK_SCAN_STORAGE_DIR` to
 use a different storage location.
 
-Before enrichment, each discovered MAC is compared in one database query with
+During aggregation, each discovered MAC is compared in one database query with
 the registered `clients` table. Results use `MANAGED`, `UNMANAGED`, or
 `UNKNOWN` classification. A database lookup failure is `UNKNOWN`, not an
 unmanaged-device finding. Managed records reuse the client agent's hostname
 and OS information before any network lookup is attempted.
 
-OS detection is disabled by default and must be explicitly targeted, for
-example `NETWORK_SCAN_OS_TARGETS=172.16.1.232`. It uses the system `nmap`
-command (install it separately) and runs only for addresses found by the ARP
-scan, capped at three targets by default. Missing Nmap, timeout, permission,
-or fingerprint failures leave the OS fields unknown without failing the scan.
-Nmap host discovery uses two probes only: ICMP echo and TCP SYN to port 443.
+The legacy server-local ARP and OS-detection functions remain in the codebase
+for compatibility, but are not invoked by the server or the standalone scan
+command.
 
 ---
 
@@ -122,6 +116,9 @@ Configure the server connection via environment variables:
 | :--- | :--- | :--- |
 | `SERVER_IP` | `127.0.0.1` | IP address of the monitoring server |
 | `SERVER_PORT` | `5000` | Port of the monitoring server |
+| `NETWORK_NEIGHBOUR_SCAN_INTERVAL_SECONDS` | `3600` | Interval between client-owned neighbour-table discovery reports |
+| `NETWORK_NEIGHBOUR_HOSTNAME_LOOKUP_LIMIT` | `64` | Maximum neighbours whose hostname is resolved per client report (`0` disables it) |
+| `NETWORK_OUI_DATABASE` | detected local files | Optional client-specific OUI database for vendor lookups |
 
 ### 2. Install & Run Client
 

@@ -53,6 +53,10 @@ def accept_clients(server):
 
                 client_id = register_client(registration["data"], conn)
 
+                if not client_id:
+                    conn.close()
+                    continue
+
                 send_message(conn, {"type": "REGISTERED", "client_id": client_id})
                 
                 req = receive_message(conn)
