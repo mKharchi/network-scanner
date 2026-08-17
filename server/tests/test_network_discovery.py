@@ -169,6 +169,62 @@ class NetworkDiscoveryTests(unittest.TestCase):
         self.assertEqual(devices[0]["vendor"], None)
         self.assertEqual(devices[0]["os_name"], None)
 
+    def test_merge_discovery_sources_correlates_by_mac_and_preserves_sources(self):
+        merged_devices = network_discovery.merge_discovery_sources(
+            [
+                {
+                    "ip_address": "172.16.0.102",
+                    "mac_address": "AA:BB:CC:DD:EE:FF",
+                    "hostname": None,
+                    "vendor": None,
+                    "os_name": None,
+                    "os_family": None,
+                    "os_confidence": None,
+                }
+            ],
+            [
+                {
+                    "ip_address": "172.16.0.99",
+                    "mac_address": "aa:bb:cc:dd:ee:ff",
+                    "entry_type": "dynamic",
+                    "interface": "eth0",
+                    "observed_at": "2026-08-17T10:00:00+00:00",
+                    "source_client_database_id": 7,
+                    "source_client_id": "client-reporter-a",
+                    "source_client_hostname": "reporter-a",
+                },
+                {
+                    "ip_address": "172.16.0.103",
+                    "mac_address": "12:22:33:44:55:66",
+                    "entry_type": "static",
+                    "interface": "wlan0",
+                    "observed_at": "2026-08-17T10:01:00+00:00",
+                    "source_client_database_id": 8,
+                    "source_client_id": "client-reporter-b",
+                    "source_client_hostname": "reporter-b",
+                },
+            ],
+            observed_at="2026-08-17T10:02:00+00:00",
+        )
+
+        self.assertEqual(len(merged_devices), 2)
+        scanned_device = next(
+            device for device in merged_devices if device["mac_address"] == "AA:BB:CC:DD:EE:FF"
+        )
+        self.assertEqual(scanned_device["ip_address"], "172.16.0.102")
+        self.assertEqual(
+            [source["source_type"] for source in scanned_device["observation_sources"]],
+            ["SERVER_SCAN", "CLIENT_ARP"],
+        )
+        client_only_device = next(
+            device for device in merged_devices if device["mac_address"] == "12:22:33:44:55:66"
+        )
+        self.assertEqual(client_only_device["ip_address"], "172.16.0.103")
+        self.assertEqual(
+            client_only_device["observation_sources"][0]["source_client_id"],
+            "client-reporter-b",
+        )
+
     def test_hostname_normalisation_decodes_avahi_octal_escapes(self):
         self.assertEqual(
             network_discovery._normalise_hostname(r"\040none\041.local"),
@@ -322,6 +378,44 @@ class NetworkDiscoveryTests(unittest.TestCase):
         command = run.call_args.args[0]
         self.assertIn("-PE", command)
         self.assertIn("-PS443", command)
+
+    def test_manual_scan_merges_client_reports_without_server_discovery(self):
+        client_observations = [
+            {
+                "ip_address": "192.168.10.26",
+                "mac_address": "12:22:33:44:55:66",
+                "entry_type": "dynamic",
+                "interface": "eth0",
+                "observed_at": "2026-08-17T10:00:00+00:00",
+                "source_client_database_id": 7,
+                "source_client_id": "client-reporter-a",
+                "source_client_hostname": "reporter-a",
+            }
+        ]
+        with patch.object(
+            network_discovery, "get_local_network", side_effect=AssertionError("server scan called")
+        ), patch.object(
+            network_discovery, "discover_arp_devices", side_effect=AssertionError("server scan called")
+        ), patch.object(
+            network_discovery,
+            "get_recent_client_neighbour_observations",
+            return_value=client_observations,
+        ), patch.object(
+            network_discovery, "classify_devices", side_effect=lambda devices: devices
+        ), patch.object(
+            network_discovery, "enrich_devices", side_effect=AssertionError("server enrichment called")
+        ), patch.object(
+            network_discovery, "store_network_scan", return_value="/tmp/scan.json"
+        ):
+            returned_context, devices, result_path = network_discovery.run_manual_scan()
+
+        self.assertEqual(returned_context["network"], "client-reported")
+        self.assertEqual(result_path, "/tmp/scan.json")
+        self.assertEqual(len(devices), 1)
+        client_only_device = devices[0]
+        self.assertEqual(
+            client_only_device["observation_sources"][0]["source_type"], "CLIENT_ARP"
+        )
 
     def test_detect_os_returns_unknown_when_nmap_is_unavailable(self):
         with patch.object(

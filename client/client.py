@@ -21,6 +21,7 @@ load_dotenv()
 SERVER_IP = os.getenv("SERVER_IP", "127.0.0.1")
 SERVER_PORT = int(os.getenv("SERVER_PORT", "5000"))
 ALERT_STATE_FILE = os.path.join(os.path.dirname(__file__), "reported_alerts.json")
+DEFAULT_NETWORK_NEIGHBOUR_SCAN_INTERVAL_SECONDS = 3600
 
 socket_lock = threading.Lock()
 scanner_lock = threading.Lock()
@@ -52,8 +53,12 @@ reported_alerts = load_reported_alerts()
 
 
 def send_network_neighbours(client_socket):
-    """Report one local neighbour-cache snapshot through the registered socket."""
-    neighbours = NetworkNeighbourCollector().collect()
+    """Report one client-local neighbour discovery snapshot to the server.
+
+    This only reads the OS neighbour/ARP table. It does not send ICMP packets
+    or cause the server to perform any network discovery.
+    """
+    neighbours = NetworkNeighbourCollector().collect(enrich=True)
     message = {
         "type": "NETWORK_NEIGHBOURS",
         "data": {
@@ -67,6 +72,30 @@ def send_network_neighbours(client_socket):
         print(f"Reported {len(neighbours)} network neighbour entries.")
     except OSError as error:
         print(f"Could not report network neighbours: {error}")
+
+
+def _network_neighbour_scan_interval_seconds():
+    """Return a safe interval for client-owned neighbour-table scans."""
+    value = os.getenv(
+        "NETWORK_NEIGHBOUR_SCAN_INTERVAL_SECONDS",
+        str(DEFAULT_NETWORK_NEIGHBOUR_SCAN_INTERVAL_SECONDS),
+    )
+    try:
+        return max(1, int(value))
+    except ValueError:
+        print(
+            "Invalid NETWORK_NEIGHBOUR_SCAN_INTERVAL_SECONDS="
+            f"{value!r}; using {DEFAULT_NETWORK_NEIGHBOUR_SCAN_INTERVAL_SECONDS}."
+        )
+        return DEFAULT_NETWORK_NEIGHBOUR_SCAN_INTERVAL_SECONDS
+
+
+def background_network_neighbour_scanner(client_socket):
+    """Periodically perform and report client-owned local neighbour scans."""
+    interval_seconds = _network_neighbour_scan_interval_seconds()
+    while True:
+        time.sleep(interval_seconds)
+        send_network_neighbours(client_socket)
 
 
 def scan_activity_log(log_data):
@@ -140,7 +169,7 @@ def start_client():
     # Register
     # --------------------------------------------------------
     with socket_lock:
-        send_message(client, create_registration_message())
+        send_message(client, create_registration_message(client.getsockname()[0]))
     print("Registration sent.")
 
     # --------------------------------------------------------
@@ -167,9 +196,15 @@ def start_client():
                 forbidden_processes = message.get("data", [])
                 print(f"Received {len(forbidden_processes)} forbidden processes.")
 
-                # Milestone 1 sends one authenticated snapshot after initial
-                # registration. Periodic reporting is a later scheduling task.
+                # The initial client-owned discovery snapshot is followed by
+                # periodic client-owned reports.
                 send_network_neighbours(client)
+
+                threading.Thread(
+                    target=background_network_neighbour_scanner,
+                    args=(client,),
+                    daemon=True,
+                ).start()
                 
                 # Start background scanner
                 t = threading.Thread(

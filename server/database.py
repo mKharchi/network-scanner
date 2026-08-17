@@ -16,6 +16,24 @@ def get_connection():
     )
 
 
+def _ensure_network_device_metadata_columns(cursor):
+    """Add client-enriched metadata columns for installations with older schema."""
+    cursor.execute(
+        """
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'network_devices'
+        """
+    )
+    existing_columns = {row[0] for row in cursor.fetchall()}
+    for column_name in ("hostname", "vendor"):
+        if column_name not in existing_columns:
+            cursor.execute(
+                f"ALTER TABLE network_devices ADD COLUMN {column_name} VARCHAR(255) NULL"
+            )
+
+
 def initiate_db():
     """
     Initialize the MySQL database schema by executing scripts.sql.
@@ -40,6 +58,8 @@ def initiate_db():
             statement = statement.strip()
             if statement:
                 cursor.execute(statement)
+
+        _ensure_network_device_metadata_columns(cursor)
 
         connection.commit()
         print("Database initialized successfully.")

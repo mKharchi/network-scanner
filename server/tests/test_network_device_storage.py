@@ -29,6 +29,7 @@ class FakeCursor:
     def __init__(self):
         self.executed = []
         self._last_query = ""
+        self.rows = []
 
     def execute(self, query, params=None):
         self.executed.append((query, params))
@@ -41,6 +42,9 @@ class FakeCursor:
             return (13,)
         return None
 
+    def fetchall(self):
+        return self.rows
+
     def close(self):
         pass
 
@@ -51,7 +55,7 @@ class FakeConnection:
         self.committed = False
         self.rolled_back = False
 
-    def cursor(self):
+    def cursor(self, **kwargs):
         return self.cursor_instance
 
     def commit(self):
@@ -132,8 +136,8 @@ class NetworkDeviceStorageTests(unittest.TestCase):
             for query, params in connection.cursor_instance.executed
             if "INSERT INTO network_device_observations" in query
         )
-        self.assertEqual(observation[:3], (13, 7, "172.16.0.102"))
-        self.assertEqual(observation[4:6], ("dynamic", datetime(2026, 8, 17, 10, 0, 0)))
+        self.assertEqual(observation[:4], (13, "CLIENT_ARP", 7, "172.16.0.102"))
+        self.assertEqual(observation[5:7], ("dynamic", datetime(2026, 8, 17, 10, 0, 0)))
 
     def test_handler_uses_registered_connection_mac_not_payload_identity(self):
         received = {}
@@ -151,6 +155,65 @@ class NetworkDeviceStorageTests(unittest.TestCase):
         self.assertTrue(accepted)
         self.assertEqual(received["reporter_mac"], "AA:BB:CC:DD:EE:FF")
         self.assertEqual(received["neighbours"], [{"mac_address": "12:22:33:44:55:66"}])
+
+    def test_server_scan_observations_are_persisted_with_their_source(self):
+        connection = FakeConnection()
+        original_get_connection = network_device_storage.get_connection
+        network_device_storage.get_connection = lambda: connection
+        try:
+            stored = network_device_storage.store_server_scan_observations(
+                [{"ip_address": "172.16.0.102", "mac_address": "12:22:33:44:55:66"}],
+                observed_at=datetime(2026, 8, 17, 10, 0, 0),
+            )
+        finally:
+            network_device_storage.get_connection = original_get_connection
+
+        self.assertEqual(stored, 1)
+        observation = next(
+            params
+            for query, params in connection.cursor_instance.executed
+            if "INSERT INTO network_device_observations" in query
+        )
+        self.assertEqual(observation[:3], (13, "SERVER_SCAN", None))
+        self.assertEqual(observation[4], None)
+        self.assertEqual(observation[5], "discovered")
+
+    def test_recent_client_observations_keep_latest_record_per_reporting_client(self):
+        connection = FakeConnection()
+        connection.cursor_instance.rows = [
+            {
+                "mac_address": "AA:BB:CC:DD:EE:FF",
+                "ip_address": "172.16.0.102",
+                "interface_name": "eth0",
+                "entry_type": "dynamic",
+                "observed_at": datetime(2026, 8, 17, 10, 0, 0),
+                "source_client_database_id": 7,
+                "source_client_id": "client-reporter-a",
+                "source_client_hostname": "reporter-a",
+            },
+            {
+                "mac_address": "AA:BB:CC:DD:EE:FF",
+                "ip_address": "172.16.0.99",
+                "interface_name": "eth0",
+                "entry_type": "static",
+                "observed_at": datetime(2026, 8, 17, 9, 59, 0),
+                "source_client_database_id": 7,
+                "source_client_id": "client-reporter-a",
+                "source_client_hostname": "reporter-a",
+            },
+        ]
+        original_get_connection = network_device_storage.get_connection
+        network_device_storage.get_connection = lambda: connection
+        try:
+            observations = network_device_storage.get_recent_client_neighbour_observations(
+                now=datetime(2026, 8, 17, 10, 0, 30), max_age_seconds=60
+            )
+        finally:
+            network_device_storage.get_connection = original_get_connection
+
+        self.assertEqual(len(observations), 1)
+        self.assertEqual(observations[0]["ip_address"], "172.16.0.102")
+        self.assertEqual(observations[0]["source_client_id"], "client-reporter-a")
 
 
 if __name__ == "__main__":

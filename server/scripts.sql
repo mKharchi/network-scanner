@@ -94,6 +94,8 @@ CREATE TABLE IF NOT EXISTS network_devices (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     mac_address VARCHAR(17) NOT NULL UNIQUE,
     ip_address VARCHAR(45) NULL,
+    hostname VARCHAR(255) NULL,
+    vendor VARCHAR(255) NULL,
     first_seen DATETIME NOT NULL,
     last_seen DATETIME NOT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

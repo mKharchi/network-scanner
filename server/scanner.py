@@ -1,7 +1,7 @@
-"""Run a one-off, server-local LAN discovery scan.
+"""Aggregate the latest client-reported LAN discoveries once.
 
-This convenience entry point delegates to the server discovery module so the
-standalone utility and the server menu use the same implementation.
+The retained server-local discovery helpers are deliberately not called by
+this entry point.
 """
 
 from server_components.network_discovery import (
@@ -19,7 +19,7 @@ def main():
         print(f"Network discovery failed: {error}")
         return 1
 
-    print(f"\nNetwork discovery completed: {len(devices)} device(s) found.")
+    print(f"\nClient network reports merged: {len(devices)} device(s) found.")
     print(f"Saved result: {result_path}")
     return 0
 

@@ -2,8 +2,9 @@
 
 import ipaddress
 import logging
+import os
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 try:
     from database import get_connection
@@ -14,6 +15,7 @@ except ImportError:
 LOGGER = logging.getLogger(__name__)
 MAC_ADDRESS_PATTERN = re.compile(r"^[0-9A-F]{2}(?::[0-9A-F]{2}){5}$")
 MAX_NEIGHBOURS_PER_REPORT = 1024
+DEFAULT_CLIENT_OBSERVATION_MAX_AGE_SECONDS = 3600
 
 
 def _normalise_mac_address(value):
@@ -24,6 +26,15 @@ def _normalise_mac_address(value):
         return None
     first_octet = int(mac_address[:2], 16)
     return None if mac_address == "FF:FF:FF:FF:FF:FF" or first_octet & 1 else mac_address
+
+
+def _normalise_metadata(value):
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    if not value or len(value) > 255 or any(character in "\r\n\x00" for character in value):
+        return None
+    return value
 
 
 def validate_neighbour_report(payload):
@@ -79,16 +90,47 @@ def validate_neighbour_report(payload):
                     and neighbour["interface"].strip()
                     else None
                 ),
+                "hostname": _normalise_metadata(neighbour.get("hostname")),
+                "vendor": _normalise_metadata(neighbour.get("vendor")),
             }
         )
     return validated
 
 
-def store_client_neighbour_observations(reporter_mac, neighbours, *, observed_at=None):
-    """Upsert devices and append immutable observations from one client report."""
-    reporter_mac = _normalise_mac_address(reporter_mac)
-    if not reporter_mac:
-        raise ValueError("reporting client MAC is invalid")
+def _upsert_device(cursor, neighbour, observed_at):
+    cursor.execute(
+        """
+        INSERT INTO network_devices (
+            mac_address, ip_address, hostname, vendor, first_seen, last_seen
+        ) VALUES (%s, %s, %s, %s, %s, %s)
+        ON DUPLICATE KEY UPDATE
+            ip_address = VALUES(ip_address),
+            hostname = COALESCE(VALUES(hostname), hostname),
+            vendor = COALESCE(VALUES(vendor), vendor),
+            last_seen = VALUES(last_seen),
+            updated_at = CURRENT_TIMESTAMP
+        """,
+        (
+            neighbour["mac_address"],
+            neighbour["ip_address"],
+            neighbour.get("hostname"),
+            neighbour.get("vendor"),
+            observed_at,
+            observed_at,
+        ),
+    )
+    cursor.execute(
+        "SELECT id FROM network_devices WHERE mac_address = %s",
+        (neighbour["mac_address"],),
+    )
+    device = cursor.fetchone()
+    if not device:
+        raise RuntimeError("upserted network device could not be read")
+    return device[0]
+
+
+def _store_observations(reporter_mac, neighbours, source_type, *, observed_at=None):
+    """Store normalized device records from one trusted discovery source."""
     observed_at = observed_at or datetime.now(timezone.utc).replace(tzinfo=None)
 
     connection = None
@@ -96,63 +138,174 @@ def store_client_neighbour_observations(reporter_mac, neighbours, *, observed_at
     try:
         connection = get_connection()
         cursor = connection.cursor()
-        cursor.execute("SELECT id FROM clients WHERE mac = %s", (reporter_mac,))
-        reporter = cursor.fetchone()
-        if not reporter:
-            raise ValueError("reporting client is not registered")
-        reporter_client_id = reporter[0]
+        reporter_client_id = None
+        if reporter_mac:
+            cursor.execute("SELECT id FROM clients WHERE mac = %s", (reporter_mac,))
+            reporter = cursor.fetchone()
+            if not reporter:
+                raise ValueError("reporting client is not registered")
+            reporter_client_id = reporter[0]
 
         for neighbour in neighbours:
-            cursor.execute(
-                """
-                INSERT INTO network_devices (mac_address, ip_address, first_seen, last_seen)
-                VALUES (%s, %s, %s, %s)
-                ON DUPLICATE KEY UPDATE
-                    ip_address = VALUES(ip_address),
-                    last_seen = VALUES(last_seen),
-                    updated_at = CURRENT_TIMESTAMP
-                """,
-                (
-                    neighbour["mac_address"],
-                    neighbour["ip_address"],
-                    observed_at,
-                    observed_at,
-                ),
-            )
-            cursor.execute(
-                "SELECT id FROM network_devices WHERE mac_address = %s",
-                (neighbour["mac_address"],),
-            )
-            device = cursor.fetchone()
-            if not device:
-                raise RuntimeError("upserted network device could not be read")
+            device_id = _upsert_device(cursor, neighbour, observed_at)
             cursor.execute(
                 """
                 INSERT INTO network_device_observations (
                     device_id, source_type, source_client_id, ip_address,
                     interface_name, entry_type, observed_at
-                ) VALUES (%s, 'CLIENT_ARP', %s, %s, %s, %s, %s)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
-                    device[0],
+                    device_id,
+                    source_type,
                     reporter_client_id,
                     neighbour["ip_address"],
-                    neighbour["interface"],
+                    neighbour.get("interface"),
                     neighbour["entry_type"],
                     observed_at,
                 ),
             )
         connection.commit()
-        LOGGER.info(
-            "Stored %d client ARP observation(s) from reporting client %s.",
-            len(neighbours),
-            reporter_mac,
-        )
         return len(neighbours)
     except Exception:
         if connection:
             connection.rollback()
         raise
+    finally:
+        if cursor:
+            cursor.close()
+        if connection and connection.is_connected():
+            connection.close()
+
+
+def store_client_neighbour_observations(reporter_mac, neighbours, *, observed_at=None):
+    """Upsert devices and append immutable observations from one client report."""
+    reporter_mac = _normalise_mac_address(reporter_mac)
+    if not reporter_mac:
+        raise ValueError("reporting client MAC is invalid")
+    stored = _store_observations(
+        reporter_mac, neighbours, "CLIENT_ARP", observed_at=observed_at
+    )
+    LOGGER.info(
+        "Stored %d client ARP observation(s) from reporting client %s.",
+        stored,
+        reporter_mac,
+    )
+    return stored
+
+
+def store_server_scan_observations(devices, *, observed_at=None):
+    """Persist server ARP discoveries as ``SERVER_SCAN`` observations."""
+    normalized = []
+    for device in devices:
+        if not isinstance(device, dict):
+            continue
+        try:
+            ip_address = ipaddress.ip_address(device.get("ip_address"))
+        except (TypeError, ValueError):
+            continue
+        mac_address = _normalise_mac_address(device.get("mac_address"))
+        if ip_address.version != 4 or not mac_address:
+            continue
+        normalized.append(
+            {
+                "ip_address": str(ip_address),
+                "mac_address": mac_address,
+                "entry_type": "discovered",
+                "interface": None,
+            }
+        )
+    stored = _store_observations(None, normalized, "SERVER_SCAN", observed_at=observed_at)
+    LOGGER.info("Stored %d server scan observation(s).", stored)
+    return stored
+
+
+def _read_client_observation_max_age_seconds():
+    value = os.getenv(
+        "NETWORK_CLIENT_OBSERVATION_MAX_AGE_SECONDS",
+        str(DEFAULT_CLIENT_OBSERVATION_MAX_AGE_SECONDS),
+    )
+    try:
+        return max(1, int(value))
+    except ValueError:
+        LOGGER.warning(
+            "Invalid NETWORK_CLIENT_OBSERVATION_MAX_AGE_SECONDS=%r; using %s.",
+            value,
+            DEFAULT_CLIENT_OBSERVATION_MAX_AGE_SECONDS,
+        )
+        return DEFAULT_CLIENT_OBSERVATION_MAX_AGE_SECONDS
+
+
+def get_recent_client_neighbour_observations(*, now=None, max_age_seconds=None):
+    """Return the latest fresh observation for every device/client source pair."""
+    now = now or datetime.now(timezone.utc).replace(tzinfo=None)
+    max_age_seconds = (
+        _read_client_observation_max_age_seconds()
+        if max_age_seconds is None
+        else max(1, int(max_age_seconds))
+    )
+    observed_since = now - timedelta(seconds=max_age_seconds)
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_connection()
+        cursor = connection.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT
+                device.mac_address,
+                device.hostname,
+                device.vendor,
+                observation.ip_address,
+                observation.interface_name,
+                observation.entry_type,
+                observation.observed_at,
+                client.id AS source_client_database_id,
+                client.client_id AS source_client_id,
+                client.hostname AS source_client_hostname
+            FROM network_device_observations AS observation
+            INNER JOIN network_devices AS device ON device.id = observation.device_id
+            INNER JOIN clients AS client ON client.id = observation.source_client_id
+            WHERE observation.source_type = 'CLIENT_ARP'
+              AND observation.observed_at >= %s
+            ORDER BY observation.observed_at DESC
+            """,
+            (observed_since,),
+        )
+
+        observations = []
+        seen_sources = set()
+        for row in cursor.fetchall():
+            mac_address = _normalise_mac_address(row.get("mac_address"))
+            source_client_id = row.get("source_client_id")
+            if not mac_address or not source_client_id:
+                continue
+            key = (mac_address, source_client_id)
+            if key in seen_sources:
+                continue
+            seen_sources.add(key)
+            observed_at = row.get("observed_at")
+            observations.append(
+                {
+                    "ip_address": row.get("ip_address"),
+                    "mac_address": mac_address,
+                    "hostname": _normalise_metadata(row.get("hostname")),
+                    "vendor": _normalise_metadata(row.get("vendor")),
+                    "entry_type": row.get("entry_type"),
+                    "interface": row.get("interface_name"),
+                    "observed_at": (
+                        observed_at.replace(tzinfo=timezone.utc).isoformat()
+                        if isinstance(observed_at, datetime)
+                        else None
+                    ),
+                    "source_client_database_id": row.get("source_client_database_id"),
+                    "source_client_id": source_client_id,
+                    "source_client_hostname": row.get("source_client_hostname"),
+                }
+            )
+        LOGGER.info("Loaded %d recent client ARP observation(s).", len(observations))
+        return observations
     finally:
         if cursor:
             cursor.close()
