@@ -10,6 +10,7 @@ from client_lib import (
     get_activity_log,
 )
 from process_scanner import scan_for_forbidden_processes
+from network_neighbour_collector import NetworkNeighbourCollector
 import threading
 import time
 from datetime import datetime
@@ -48,6 +49,24 @@ def save_reported_alerts(alert_ids):
 
 
 reported_alerts = load_reported_alerts()
+
+
+def send_network_neighbours(client_socket):
+    """Report one local neighbour-cache snapshot through the registered socket."""
+    neighbours = NetworkNeighbourCollector().collect()
+    message = {
+        "type": "NETWORK_NEIGHBOURS",
+        "data": {
+            "observed_at": datetime.now().astimezone().isoformat(),
+            "neighbours": neighbours,
+        },
+    }
+    try:
+        with socket_lock:
+            send_message(client_socket, message)
+        print(f"Reported {len(neighbours)} network neighbour entries.")
+    except OSError as error:
+        print(f"Could not report network neighbours: {error}")
 
 
 def scan_activity_log(log_data):
@@ -147,6 +166,10 @@ def start_client():
                 global forbidden_processes
                 forbidden_processes = message.get("data", [])
                 print(f"Received {len(forbidden_processes)} forbidden processes.")
+
+                # Milestone 1 sends one authenticated snapshot after initial
+                # registration. Periodic reporting is a later scheduling task.
+                send_network_neighbours(client)
                 
                 # Start background scanner
                 t = threading.Thread(

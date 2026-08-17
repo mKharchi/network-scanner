@@ -731,6 +731,40 @@ def remove_client(mac, connection=None):
             ).start()
 
 
+def handle_network_neighbour_report(
+    reporter_mac,
+    payload,
+    *,
+    report_validator=None,
+    observation_storer=None,
+):
+    """Ingest one report using the MAC bound to the registered TCP session.
+
+    ``reporter_mac`` is supplied by the server connection registry, never by
+    the client message. Optional dependencies keep validation and persistence
+    independently testable without a database.
+    """
+    if report_validator is None or observation_storer is None:
+        from server_components.network_device_storage import (
+            store_client_neighbour_observations,
+            validate_neighbour_report,
+        )
+
+        report_validator = report_validator or validate_neighbour_report
+        observation_storer = observation_storer or store_client_neighbour_observations
+
+    try:
+        neighbours = report_validator(payload)
+        stored = observation_storer(reporter_mac, neighbours)
+        print(f"Stored {stored} network neighbour observation(s) from {reporter_mac}.")
+        return True
+    except ValueError as error:
+        print(f"Rejected network neighbours from {reporter_mac}: {error}")
+    except Exception as error:
+        print(f"Failed to store network neighbours from {reporter_mac}: {error}")
+    return False
+
+
 def receive_client_messages(mac, conn):
     """Continuously consume one client's frames after registration.
 
@@ -748,6 +782,8 @@ def receive_client_messages(mac, conn):
             message_type = message.get("type") if isinstance(message, dict) else None
             if message_type == "ALERT":
                 handle_client_alert(mac, message.get("alert"))
+            elif message_type == "NETWORK_NEIGHBOURS":
+                handle_network_neighbour_report(mac, message.get("data"))
             elif message_type == "RESPONSE":
                 client = get_client_by_mac(mac)
                 if client and client["connection"] is conn:
