@@ -8,9 +8,11 @@ from client_lib import (
     receive_message,
     send_message,
     get_activity_log,
+    get_mac,
 )
 from process_scanner import scan_for_forbidden_processes
 from network_neighbour_collector import NetworkNeighbourCollector
+from dhcp_listener import DHCPListener
 import threading
 import time
 from datetime import datetime
@@ -21,7 +23,9 @@ load_dotenv()
 SERVER_IP = os.getenv("SERVER_IP", "127.0.0.1")
 SERVER_PORT = int(os.getenv("SERVER_PORT", "5000"))
 ALERT_STATE_FILE = os.path.join(os.path.dirname(__file__), "reported_alerts.json")
-DEFAULT_NETWORK_NEIGHBOUR_SCAN_INTERVAL_SECONDS = 3600
+NEIGHBOUR_SNAPSHOT_STATE_FILE = os.path.join(
+    os.path.dirname(__file__), "neighbour_snapshot_state.json"
+)
 
 socket_lock = threading.Lock()
 scanner_lock = threading.Lock()
@@ -52,16 +56,63 @@ def save_reported_alerts(alert_ids):
 reported_alerts = load_reported_alerts()
 
 
-def send_network_neighbours(client_socket):
-    """Report one client-local neighbour discovery snapshot to the server.
+def _local_date():
+    return datetime.now().astimezone().date().isoformat()
+
+
+def _snapshot_client_mac():
+    """Return the local client identity used to scope persisted snapshot state."""
+    try:
+        return get_mac().upper()
+    except Exception:
+        return None
+
+
+def _load_neighbour_snapshot_state():
+    try:
+        with open(NEIGHBOUR_SNAPSHOT_STATE_FILE, "r", encoding="utf-8") as state_file:
+            state = json.load(state_file)
+        return state if isinstance(state, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _save_neighbour_snapshot_state(snapshot_date, client_mac):
+    try:
+        with open(NEIGHBOUR_SNAPSHOT_STATE_FILE, "w", encoding="utf-8") as state_file:
+            json.dump(
+                {
+                    "last_snapshot_date": snapshot_date,
+                    "client_mac": client_mac,
+                },
+                state_file,
+            )
+    except OSError as error:
+        print(f"Could not save neighbour snapshot state: {error}")
+
+
+def send_daily_network_neighbours(client_socket):
+    """Report one full neighbour snapshot at most once per local calendar day.
 
     This only reads the OS neighbour/ARP table. It does not send ICMP packets
     or cause the server to perform any network discovery.
     """
+    snapshot_date = _local_date()
+    client_mac = _snapshot_client_mac()
+    state = _load_neighbour_snapshot_state()
+    if (
+        client_mac
+        and state.get("last_snapshot_date") == snapshot_date
+        and state.get("client_mac") == client_mac
+    ):
+        print("Today's network neighbour snapshot was already reported.")
+        return False
+
     neighbours = NetworkNeighbourCollector().collect(enrich=True)
     message = {
         "type": "NETWORK_NEIGHBOURS",
         "data": {
+            "observation_source": "DAILY_NEIGHBOUR_SNAPSHOT",
             "observed_at": datetime.now().astimezone().isoformat(),
             "neighbours": neighbours,
         },
@@ -69,33 +120,12 @@ def send_network_neighbours(client_socket):
     try:
         with socket_lock:
             send_message(client_socket, message)
+        _save_neighbour_snapshot_state(snapshot_date, client_mac)
         print(f"Reported {len(neighbours)} network neighbour entries.")
+        return True
     except OSError as error:
         print(f"Could not report network neighbours: {error}")
-
-
-def _network_neighbour_scan_interval_seconds():
-    """Return a safe interval for client-owned neighbour-table scans."""
-    value = os.getenv(
-        "NETWORK_NEIGHBOUR_SCAN_INTERVAL_SECONDS",
-        str(DEFAULT_NETWORK_NEIGHBOUR_SCAN_INTERVAL_SECONDS),
-    )
-    try:
-        return max(1, int(value))
-    except ValueError:
-        print(
-            "Invalid NETWORK_NEIGHBOUR_SCAN_INTERVAL_SECONDS="
-            f"{value!r}; using {DEFAULT_NETWORK_NEIGHBOUR_SCAN_INTERVAL_SECONDS}."
-        )
-        return DEFAULT_NETWORK_NEIGHBOUR_SCAN_INTERVAL_SECONDS
-
-
-def background_network_neighbour_scanner(client_socket):
-    """Periodically perform and report client-owned local neighbour scans."""
-    interval_seconds = _network_neighbour_scan_interval_seconds()
-    while True:
-        time.sleep(interval_seconds)
-        send_network_neighbours(client_socket)
+        return False
 
 
 def scan_activity_log(log_data):
@@ -132,7 +162,7 @@ def send_alerts(client_socket, alerts, source):
 
 def background_scanner(client_socket):
     time.sleep(10)
-    
+
     while True:
         try:
             print("Background scanner running...")
@@ -140,19 +170,21 @@ def background_scanner(client_socket):
             log_data = get_activity_log("1h")
             with open("hourly_log.json", "w") as f:
                 json.dump(log_data, f)
-                
+
             alerts = scan_activity_log(log_data)
             print(f"Background scanner found {len(alerts)} new alerts.")
             send_alerts(client_socket, alerts, "hourly scan")
 
         except Exception as e:
             print(f"Background scanner error: {e}")
-            
+
         time.sleep(3600)
+
 
 # ============================================================
 # CLIENT
 # ============================================================
+
 
 def start_client():
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -188,7 +220,10 @@ def start_client():
             # Silently acknowledge registration confirmation
             if msg_type == "REGISTERED":
                 with socket_lock:
-                    send_message(client, {"type": "REQUEST", "command": "GET_FORBIDDEN_PROCESSES"})
+                    send_message(
+                        client,
+                        {"type": "REQUEST", "command": "GET_FORBIDDEN_PROCESSES"},
+                    )
                 continue
 
             if msg_type == "FORBIDDEN_PROCESSES":
@@ -196,16 +231,10 @@ def start_client():
                 forbidden_processes = message.get("data", [])
                 print(f"Received {len(forbidden_processes)} forbidden processes.")
 
-                # The initial client-owned discovery snapshot is followed by
-                # periodic client-owned reports.
-                send_network_neighbours(client)
+                # A complete neighbour snapshot is deliberately sent once per
+                # local day. DHCP joins are recorded separately as events.
+                send_daily_network_neighbours(client)
 
-                threading.Thread(
-                    target=background_network_neighbour_scanner,
-                    args=(client,),
-                    daemon=True,
-                ).start()
-                
                 # Start background scanner
                 t = threading.Thread(
                     target=background_scanner,
@@ -213,6 +242,74 @@ def start_client():
                     daemon=True,
                 )
                 t.start()
+                # Start passive DHCP listener (idempotent)
+                try:
+                    if (
+                        "_dhcp_listener" not in globals()
+                        or globals().get("_dhcp_listener") is None
+                    ):
+
+                        def _on_dhcp_obs(obs):
+                            # Convert the DHCPREQUEST into the same validated
+                            # neighbour-report envelope used by ARP snapshots.
+                            # The server has no NETWORK_NEIGHBOUR_UPDATE
+                            # message type, so the previous integration
+                            # silently discarded captured DHCP observations.
+                            neighbour = {}
+                            if obs.get("requested_ip"):
+                                neighbour["ip_address"] = obs.get("requested_ip")
+                            if obs.get("mac_address"):
+                                neighbour["mac_address"] = obs.get("mac_address")
+                            neighbour["entry_type"] = "dynamic"
+                            if obs.get("hostname"):
+                                neighbour["hostname"] = obs.get("hostname")
+                            if obs.get("vendor_class"):
+                                neighbour["dhcp_vendor_class"] = obs.get("vendor_class")
+                            if obs.get("client_id"):
+                                neighbour["dhcp_client_id"] = obs.get("client_id")
+                            if obs.get("dhcp_message_type") is not None:
+                                neighbour["dhcp_message_type"] = obs.get(
+                                    "dhcp_message_type"
+                                )
+
+                            # Send the immediate one-device report in the
+                            # protocol the server already accepts.
+                            msg = {
+                                "type": "NETWORK_NEIGHBOURS",
+                                "data": {
+                                    # Preserve the capture source for the
+                                    # server's daily DHCP observation log.
+                                    "observation_source": "DHCP",
+                                    "observed_at": datetime.now()
+                                    .astimezone()
+                                    .isoformat(),
+                                    "neighbours": [neighbour],
+                                    "dhcp": {
+                                        "message_type": obs.get(
+                                            "dhcp_message_type"
+                                        ),
+                                        "vendor_class": obs.get("vendor_class"),
+                                        "client_id": obs.get("client_id"),
+                                    },
+                                },
+                            }
+                            try:
+                                with socket_lock:
+                                    send_message(client, msg)
+                                print(
+                                    f"Sent DHCP neighbour update: {neighbour.get('mac_address')}"
+                                )
+                            except Exception as e:
+                                print(f"[DHCP] Failed to send neighbour update: {e}")
+
+                        _dhcp_listener = DHCPListener(
+                            _on_dhcp_obs,
+                            interface=os.getenv("DHCP_LISTEN_INTERFACE") or None,
+                        )
+                        _dhcp_listener.start()
+                        globals()["_dhcp_listener"] = _dhcp_listener
+                except Exception as e:
+                    print(f"[DHCP] Could not start listener: {e}")
                 continue
 
             if msg_type != "COMMAND":
@@ -241,11 +338,9 @@ def start_client():
                 send_alerts(client, alerts, "server-requested activity log")
 
             with socket_lock:
-                send_message(client, {
-                    "type":    "RESPONSE",
-                    "command": command,
-                    "data":    result
-                })
+                send_message(
+                    client, {"type": "RESPONSE", "command": command, "data": result}
+                )
 
             print("Response sent.")
 

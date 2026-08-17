@@ -194,6 +194,42 @@ def store_client_neighbour_observations(reporter_mac, neighbours, *, observed_at
     return stored
 
 
+def store_daily_network_scan_reference(file_path, *, observed_at=None):
+    """Upsert the one database reference for a server-local daily JSON file."""
+    if not isinstance(file_path, str) or not file_path.strip() or len(file_path) > 512:
+        raise ValueError("daily network scan file path is invalid")
+    observed_at = observed_at or datetime.now(timezone.utc)
+    scan_date = (
+        observed_at.astimezone().date()
+        if observed_at.tzinfo is not None
+        else observed_at.date()
+    )
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_connection()
+        cursor = connection.cursor()
+        cursor.execute(
+            """
+            INSERT INTO daily_network_scan_files (scan_date, file_path)
+            VALUES (%s, %s)
+            ON DUPLICATE KEY UPDATE file_path = VALUES(file_path)
+            """,
+            (scan_date, file_path.strip()),
+        )
+        connection.commit()
+    except Exception:
+        if connection:
+            connection.rollback()
+        raise
+    finally:
+        if cursor:
+            cursor.close()
+        if connection and connection.is_connected():
+            connection.close()
+
+
 def store_server_scan_observations(devices, *, observed_at=None):
     """Persist server ARP discoveries as ``SERVER_SCAN`` observations."""
     normalized = []

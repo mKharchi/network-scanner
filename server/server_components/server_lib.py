@@ -753,6 +753,10 @@ def handle_network_neighbour_report(
     *,
     report_validator=None,
     observation_storer=None,
+    dhcp_observation_storer=None,
+    daily_snapshot_exists=None,
+    daily_snapshot_storer=None,
+    daily_scan_reference_storer=None,
 ):
     """Ingest one report using the MAC bound to the registered TCP session.
 
@@ -769,8 +773,73 @@ def handle_network_neighbour_report(
         report_validator = report_validator or validate_neighbour_report
         observation_storer = observation_storer or store_client_neighbour_observations
 
+    source = payload.get("observation_source") if isinstance(payload, dict) else None
     try:
         neighbours = report_validator(payload)
+        if source == "DHCP":
+            # DHCP is a live event, not a new full neighbour snapshot. Keep
+            # it in the readable daily file and avoid database event churn.
+            if not neighbours:
+                print(f"Ignored empty DHCP observation from {reporter_mac}.")
+                return True
+            try:
+                if dhcp_observation_storer is None:
+                    from server_components.network_scan_storage import (
+                        append_daily_dhcp_observation,
+                    )
+
+                    dhcp_observation_storer = append_daily_dhcp_observation
+                daily_log_path = dhcp_observation_storer(
+                    reporter_mac, neighbours, payload.get("dhcp")
+                )
+                print(f"Added DHCP observation to {daily_log_path}.")
+            except Exception as error:
+                print(f"Could not append DHCP observation log: {error}")
+            return True
+
+        if source == "DAILY_NEIGHBOUR_SNAPSHOT":
+            if daily_snapshot_exists is None or daily_snapshot_storer is None:
+                from server_components.network_scan_storage import (
+                    has_daily_neighbour_snapshot,
+                    record_daily_neighbour_snapshot,
+                )
+
+                daily_snapshot_exists = (
+                    daily_snapshot_exists or has_daily_neighbour_snapshot
+                )
+                daily_snapshot_storer = (
+                    daily_snapshot_storer or record_daily_neighbour_snapshot
+                )
+            if daily_snapshot_exists(reporter_mac):
+                print(f"Daily neighbour snapshot already recorded for {reporter_mac}.")
+                return True
+
+            stored = observation_storer(reporter_mac, neighbours)
+            print(f"Stored {stored} daily neighbour observation(s) from {reporter_mac}.")
+            try:
+                daily_log_path, created = daily_snapshot_storer(
+                    reporter_mac, neighbours
+                )
+                if created:
+                    print(f"Added daily neighbour snapshot to {daily_log_path}.")
+                    if daily_scan_reference_storer is None:
+                        from server_components.network_device_storage import (
+                            store_daily_network_scan_reference,
+                        )
+
+                        daily_scan_reference_storer = (
+                            store_daily_network_scan_reference
+                        )
+                    daily_scan_reference_storer(daily_log_path)
+                    print(f"Stored daily network-scan file reference: {daily_log_path}.")
+            except Exception as error:
+                # Database storage remains valid even if its readable mirror
+                # cannot be updated on this attempt.
+                print(f"Could not append daily neighbour snapshot: {error}")
+            return True
+
+        # Preserve the legacy protocol for older clients until they are
+        # upgraded to label their snapshots explicitly.
         stored = observation_storer(reporter_mac, neighbours)
         print(f"Stored {stored} network neighbour observation(s) from {reporter_mac}.")
         return True

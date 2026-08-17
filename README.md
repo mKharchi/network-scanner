@@ -92,6 +92,12 @@ Completed discovery results are saved as timestamped JSON files under
 `server/storage/network_scans/` by default. Set `NETWORK_SCAN_STORAGE_DIR` to
 use a different storage location.
 
+Each client reports one full neighbour snapshot per local day. DHCP
+interceptions are not stored as database neighbour observations; instead, they
+append to that day's readable audit file, `network_scan_YYYY-MM-DD.json`.
+That file contains both the once-daily snapshot for each client and every DHCP
+event received that day.
+
 During aggregation, each discovered MAC is compared in one database query with
 the registered `clients` table. Results use `MANAGED`, `UNMANAGED`, or
 `UNKNOWN` classification. A database lookup failure is `UNKNOWN`, not an
@@ -116,9 +122,9 @@ Configure the server connection via environment variables:
 | :--- | :--- | :--- |
 | `SERVER_IP` | `127.0.0.1` | IP address of the monitoring server |
 | `SERVER_PORT` | `5000` | Port of the monitoring server |
-| `NETWORK_NEIGHBOUR_SCAN_INTERVAL_SECONDS` | `3600` | Interval between client-owned neighbour-table discovery reports |
 | `NETWORK_NEIGHBOUR_HOSTNAME_LOOKUP_LIMIT` | `64` | Maximum neighbours whose hostname is resolved per client report (`0` disables it) |
 | `NETWORK_OUI_DATABASE` | detected local files | Optional client-specific OUI database for vendor lookups |
+| `DHCP_LISTEN_INTERFACE` | system default | Optional interface for passive DHCP capture on a multi-homed client |
 
 ### 2. Install & Run Client
 
@@ -131,6 +137,13 @@ pip install -r requirements.txt
 # Run the client
 python client.py
 ```
+
+Passive DHCP observation uses Scapy packet capture. The process needs the same
+packet-capture permission as the standalone listener (for example, run it with
+the appropriate administrator/root capability on the monitoring client).
+On Windows, install the Npcap driver before running the client; it supplies
+the capture interface used by Scapy. It is a system driver, not a Python
+package named `winpcap`.
 
 ---
 

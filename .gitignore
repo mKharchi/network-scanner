@@ -44,3 +44,4 @@ server/storage/network_scans/
 # Client-side generated monitoring state
 client/hourly_log.json
 client/reported_alerts.json
+client/neighbour_snapshot_state.json
