@@ -68,7 +68,10 @@ def accept_clients(server):
                 # server command, so dedicate one reader to this connection.
                 threading.Thread(
                     target=receive_client_messages,
-                    args=(registration["data"]["mac"], conn),
+                    # register_client() normalizes MAC addresses for the
+                    # client registry. Use the same canonical key here so
+                    # command responses reach that client's queue.
+                    args=(registration["data"]["mac"].upper().replace("-", ":"), conn),
                     daemon=True,
                 ).start()
 

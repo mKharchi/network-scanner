@@ -22,6 +22,46 @@ from server_components.log_storage import store_log_file
 clients = {}
 clients_lock = threading.Lock()
 pending_disconnect_checks = {}
+DHCP_OBSERVATION_QUEUE_SIZE = 1024
+dhcp_observation_queue = queue.Queue(maxsize=DHCP_OBSERVATION_QUEUE_SIZE)
+dhcp_observation_worker_lock = threading.Lock()
+dhcp_observation_worker_started = False
+
+
+def _run_dhcp_observation_writer():
+    """Persist DHCP audit events away from the TCP connection reader."""
+    while True:
+        reporter_mac, neighbours, dhcp = dhcp_observation_queue.get()
+        try:
+            from server_components.network_scan_storage import (
+                append_daily_dhcp_observation,
+            )
+
+            append_daily_dhcp_observation(reporter_mac, neighbours, dhcp)
+        except Exception as error:
+            print(f"Could not append DHCP observation log: {error}")
+        finally:
+            dhcp_observation_queue.task_done()
+
+
+def queue_dhcp_observation(reporter_mac, neighbours, dhcp):
+    """Queue a DHCP event without delaying the client command-response path."""
+    global dhcp_observation_worker_started
+    with dhcp_observation_worker_lock:
+        if not dhcp_observation_worker_started:
+            threading.Thread(
+                target=_run_dhcp_observation_writer,
+                daemon=True,
+                name="dhcp-observation-writer",
+            ).start()
+            dhcp_observation_worker_started = True
+    try:
+        dhcp_observation_queue.put_nowait((reporter_mac, neighbours, dhcp))
+    except queue.Full:
+        print(
+            "Dropped DHCP observation because the audit queue is full "
+            f"({DHCP_OBSERVATION_QUEUE_SIZE} pending events)."
+        )
 
 
 def _read_positive_float(name, default):
@@ -779,22 +819,17 @@ def handle_network_neighbour_report(
         if source == "DHCP":
             # DHCP is a live event, not a new full neighbour snapshot. Keep
             # it in the readable daily file and avoid database event churn.
+            # The file write is queued so this socket reader can continue to
+            # process command responses immediately.
             if not neighbours:
                 print(f"Ignored empty DHCP observation from {reporter_mac}.")
                 return True
-            try:
-                if dhcp_observation_storer is None:
-                    from server_components.network_scan_storage import (
-                        append_daily_dhcp_observation,
-                    )
-
-                    dhcp_observation_storer = append_daily_dhcp_observation
-                daily_log_path = dhcp_observation_storer(
-                    reporter_mac, neighbours, payload.get("dhcp")
-                )
-                print(f"Added DHCP observation to {daily_log_path}.")
-            except Exception as error:
-                print(f"Could not append DHCP observation log: {error}")
+            if dhcp_observation_storer is not None:
+                # Dependency injection keeps the synchronous path available
+                # for focused unit tests.
+                dhcp_observation_storer(reporter_mac, neighbours, payload.get("dhcp"))
+            else:
+                queue_dhcp_observation(reporter_mac, neighbours, payload.get("dhcp"))
             return True
 
         if source == "DAILY_NEIGHBOUR_SNAPSHOT":
@@ -857,6 +892,9 @@ def receive_client_messages(mac, conn):
     only post-registration reader for the connection; command handlers consume
     responses from the per-client queue below instead of calling recv().
     """
+    # The registry is keyed by canonical uppercase colon-separated MACs.
+    # Normalizing here keeps response routing correct even for older callers.
+    mac = mac.upper().replace("-", ":") if isinstance(mac, str) else mac
     try:
         while True:
             message = receive_message(conn)
@@ -970,7 +1008,7 @@ def send_command(client_id, command, args=None):
 
         while True:
             response = client["responses"].get()
-
+            print("response received")
             if response.get("type") == "DISCONNECTED":
                 print("Client disconnected.")
                 return
