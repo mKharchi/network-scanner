@@ -452,6 +452,58 @@ class NetworkDiscoveryTests(unittest.TestCase):
         self.assertEqual(stored_scan["devices"], devices)
         self.assertEqual(stored_scan["completed_at"], "2026-08-16T12:00:00+00:00")
 
+    def test_daily_dhcp_log_uses_one_file_and_appends_observations(self):
+        observed_at = datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
+        neighbours = [
+            {
+                "ip_address": "192.168.10.25",
+                "mac_address": "AA:BB:CC:DD:EE:FF",
+                "entry_type": "dynamic",
+                "hostname": "workstation",
+                "vendor": None,
+            }
+        ]
+        with TemporaryDirectory() as storage_dir, patch.dict(
+            "os.environ", {"NETWORK_SCAN_STORAGE_DIR": storage_dir}
+        ):
+            file_path = network_scan_storage.append_daily_dhcp_observation(
+                "11:22:33:44:55:66",
+                neighbours,
+                {"message_type": 3, "vendor_class": "MSFT 5.0"},
+                observed_at,
+            )
+            second_path = network_scan_storage.append_daily_dhcp_observation(
+                "11:22:33:44:55:66", neighbours, observed_at=observed_at
+            )
+            snapshot_path, created = network_scan_storage.record_daily_neighbour_snapshot(
+                "11:22:33:44:55:66", neighbours, observed_at
+            )
+            duplicate_path, duplicate_created = (
+                network_scan_storage.record_daily_neighbour_snapshot(
+                    "11:22:33:44:55:66", neighbours, observed_at
+                )
+            )
+            with open(file_path, encoding="utf-8") as file:
+                daily_log = json.load(file)
+
+        self.assertEqual(file_path, second_path)
+        self.assertEqual(file_path, snapshot_path)
+        self.assertEqual(file_path, duplicate_path)
+        self.assertTrue(created)
+        self.assertFalse(duplicate_created)
+        self.assertTrue(file_path.endswith("network_scan_2026-08-16.json"))
+        self.assertEqual(daily_log["date"], "2026-08-16")
+        self.assertEqual(len(daily_log["dhcp_observations"]), 2)
+        self.assertIn("11:22:33:44:55:66", daily_log["neighbour_snapshots"])
+        self.assertEqual(
+            daily_log["dhcp_observations"][0]["reporting_client_mac"],
+            "11:22:33:44:55:66",
+        )
+        self.assertEqual(
+            daily_log["dhcp_observations"][0]["dhcp"],
+            {"message_type": 3, "vendor_class": "MSFT 5.0"},
+        )
+
     def test_vendor_lookup_failure_returns_empty_database(self):
         with patch("builtins.open", side_effect=FileNotFoundError):
             self.assertEqual(

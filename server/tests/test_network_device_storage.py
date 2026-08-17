@@ -156,6 +156,95 @@ class NetworkDeviceStorageTests(unittest.TestCase):
         self.assertEqual(received["reporter_mac"], "AA:BB:CC:DD:EE:FF")
         self.assertEqual(received["neighbours"], [{"mac_address": "12:22:33:44:55:66"}])
 
+    def test_handler_adds_only_dhcp_reports_to_daily_log(self):
+        logged = {}
+        payload = {
+            "observation_source": "DHCP",
+            "dhcp": {"message_type": 3},
+        }
+        neighbours = [{"mac_address": "12:22:33:44:55:66"}]
+
+        accepted = server_lib.handle_network_neighbour_report(
+            "AA:BB:CC:DD:EE:FF",
+            payload,
+            report_validator=lambda _: neighbours,
+            observation_storer=lambda *_: 1,
+            dhcp_observation_storer=lambda reporter_mac, rows, dhcp: (
+                logged.update(
+                    {
+                        "reporter_mac": reporter_mac,
+                        "neighbours": rows,
+                        "dhcp": dhcp,
+                    }
+                )
+                or "/tmp/network_scan_2026-08-17.json"
+            ),
+        )
+
+        self.assertTrue(accepted)
+        self.assertEqual(logged["reporter_mac"], "AA:BB:CC:DD:EE:FF")
+        self.assertEqual(logged["neighbours"], neighbours)
+        self.assertEqual(logged["dhcp"], {"message_type": 3})
+
+    def test_handler_stores_one_daily_snapshot_and_skips_duplicates(self):
+        stored = []
+        logged = []
+        payload = {"observation_source": "DAILY_NEIGHBOUR_SNAPSHOT"}
+        neighbours = [{"mac_address": "12:22:33:44:55:66"}]
+
+        accepted = server_lib.handle_network_neighbour_report(
+            "AA:BB:CC:DD:EE:FF",
+            payload,
+            report_validator=lambda _: neighbours,
+            observation_storer=lambda reporter_mac, rows: (
+                stored.append((reporter_mac, rows)) or 1
+            ),
+            daily_snapshot_exists=lambda _: False,
+            daily_snapshot_storer=lambda reporter_mac, rows: (
+                logged.append((reporter_mac, rows))
+                or ("/tmp/network_scan_2026-08-17.json", True)
+            ),
+            daily_scan_reference_storer=lambda file_path: logged.append(file_path),
+        )
+
+        self.assertTrue(accepted)
+        self.assertEqual(stored, [("AA:BB:CC:DD:EE:FF", neighbours)])
+        self.assertEqual(
+            logged,
+            [
+                ("AA:BB:CC:DD:EE:FF", neighbours),
+                "/tmp/network_scan_2026-08-17.json",
+            ],
+        )
+
+        accepted = server_lib.handle_network_neighbour_report(
+            "AA:BB:CC:DD:EE:FF",
+            payload,
+            report_validator=lambda _: neighbours,
+            observation_storer=lambda *_: self.fail("duplicate was stored"),
+            daily_snapshot_exists=lambda _: True,
+            daily_snapshot_storer=lambda *_: self.fail("duplicate was logged"),
+            daily_scan_reference_storer=lambda *_: self.fail("duplicate was referenced"),
+        )
+        self.assertTrue(accepted)
+
+    def test_daily_scan_reference_is_upserted(self):
+        connection = FakeConnection()
+        original_get_connection = network_device_storage.get_connection
+        network_device_storage.get_connection = lambda: connection
+        try:
+            network_device_storage.store_daily_network_scan_reference(
+                "/tmp/network_scan_2026-08-17.json",
+                observed_at=datetime(2026, 8, 17, 10, 0, 0),
+            )
+        finally:
+            network_device_storage.get_connection = original_get_connection
+
+        self.assertTrue(connection.committed)
+        query, params = connection.cursor_instance.executed[0]
+        self.assertIn("daily_network_scan_files", query)
+        self.assertEqual(params, (datetime(2026, 8, 17).date(), "/tmp/network_scan_2026-08-17.json"))
+
     def test_server_scan_observations_are_persisted_with_their_source(self):
         connection = FakeConnection()
         original_get_connection = network_device_storage.get_connection

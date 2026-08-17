@@ -123,6 +123,14 @@ CREATE TABLE IF NOT EXISTS network_device_observations (
     INDEX idx_network_device_observations_device_time (device_id, observed_at),
     INDEX idx_network_device_observations_source_client (source_client_id)
 );
+
+CREATE TABLE IF NOT EXISTS daily_network_scan_files (
+    scan_date DATE NOT NULL PRIMARY KEY,
+    file_path VARCHAR(512) NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP
+);
 INSERT IGNORE INTO forbidden_processes (process_name, severity, enabled, description) VALUES ('discord', 'HIGH', TRUE, 'Social media/gaming communication platform - not authorized for work use');
 
 -- day_of_week uses Python's datetime.weekday(): Monday=0 through Sunday=6.
