@@ -189,45 +189,121 @@ def get_hostname(ip_address):
     except (socket.herror, socket.gaierror, OSError):
         return get_mdns_hostname(ip_address)
 
+def load_oui_database_linux(path=None):
+    """Load the OUI database on Linux."""
+    paths = []
 
-def load_oui_database(path=None):
-    """Load a client-local OUI database without making it a dependency.
+    if path:
+        paths.append(path)
 
-    The parser accepts common arp-scan, IEEE, and Wireshark-manuf-style
-    prefix lines. ``NETWORK_OUI_DATABASE`` may select a client-specific file.
-    """
-    paths = [path] if path else [
-        os.getenv("NETWORK_OUI_DATABASE"),
-        *DEFAULT_OUI_DATABASE_PATHS,
-    ]
-    vendors = {}
+    env_path = os.getenv("NETWORK_OUI_DATABASE")
+    if env_path:
+        paths.append(env_path)
+
+    paths.extend([
+        "/usr/share/arp-scan/ieee-oui.txt",
+        "/usr/share/ieee-data/oui.txt",
+        "/usr/share/wireshark/manuf",
+        "/usr/share/wireshark/manuf.txt",
+    ])
+
+    return _load_oui_database_from_paths(paths)
+
+
+def load_oui_database_windows(path=None):
+    """Load the OUI database on Windows."""
+    paths = []
+
+    if path:
+        paths.append(path)
+
+    env_path = os.getenv("NETWORK_OUI_DATABASE")
+    if env_path:
+        paths.append(env_path)
+
+    # Common locations where an OUI/manufacturer database
+    # may exist if installed with a networking tool.
+    paths.extend([
+        r"C:\Program Files\Wireshark\manuf",
+        r"C:\Program Files\Wireshark\manuf.txt",
+        r"C:\Program Files (x86)\Wireshark\manuf",
+        r"C:\Program Files (x86)\Wireshark\manuf.txt",
+    ])
+
+    return _load_oui_database_from_paths(paths)
+
+
+def _load_oui_database_from_paths(paths):
+    """Load an OUI database from the first usable database file."""
     for candidate in paths:
         if not candidate:
             continue
+
+        print(f"[OUI] Checking: {candidate}")
+
+        if not os.path.isfile(candidate):
+            print("[OUI] File not found")
+            continue
+
+        print("[OUI] File found!")
+
+        vendors = {}
+
         try:
-            with open(candidate, "r", encoding="utf-8") as file:
+            with open(candidate, "r", encoding="utf-8", errors="ignore") as file:
                 for line in file:
                     line = line.strip()
+
                     if not line or line.startswith(("#", ";")):
                         continue
+
+                    # arp-scan / IEEE style:
+                    #
+                    # 001122    (hex)    Example Corporation
+                    #
+                    # 00:11:22    Example Corporation
+                    #
+                    # Wireshark manuf style:
+                    #
+                    # 001122    Example_Corp    Example Corporation
+                    #
+
                     match = re.match(
-                        r"^([0-9A-Fa-f]{2}(?::|-)?[0-9A-Fa-f]{2}(?::|-)?[0-9A-Fa-f]{2})"
-                        r"(?:\s+\(hex\))?\s+(.+)$",
+                        r"^([0-9A-Fa-f]{2}(?::|-)?"
+                        r"[0-9A-Fa-f]{2}(?::|-)?"
+                        r"[0-9A-Fa-f]{2})"
+                        r"(?:\s+\(hex\))?"
+                        r"\s+(.+)$",
                         line,
                     )
+
                     if not match:
                         continue
-                    prefix = re.sub(r"[^0-9A-Fa-f]", "", match.group(1)).upper()
+
+                    prefix = re.sub(
+                        r"[^0-9A-Fa-f]",
+                        "",
+                        match.group(1)
+                    ).upper()
+
                     vendor = _normalise_metadata(match.group(2))
-                    if len(prefix) == 6 and vendor and prefix not in vendors:
-                        vendors[prefix] = vendor
-        except (FileNotFoundError, PermissionError, OSError, UnicodeDecodeError):
-            continue
-        if vendors:
-            break
-    return vendors
 
+                    if len(prefix) == 6 and vendor:
+                        vendors.setdefault(prefix, vendor)
 
+            print(f"[OUI] Loaded {len(vendors)} entries")
+
+            if vendors:
+                print(f"[OUI] Using database: {candidate}")
+                return vendors
+
+            print("[OUI] File was found but no entries were parsed")
+
+        except (PermissionError, OSError, UnicodeDecodeError) as exc:
+            print(f"[OUI] Could not read file: {exc}")
+
+    print("[OUI] No usable OUI database found")
+    return {}
 def get_vendor(mac_address, vendors):
     """Return the 24-bit-OUI vendor for a normalized MAC address."""
     if not isinstance(mac_address, str):
@@ -292,7 +368,12 @@ class NetworkNeighbourCollector:
         """Resolve metadata locally before the report leaves this client."""
         if not neighbours:
             return []
-        vendors = load_oui_database()
+        if self.system_name == "Windows":
+            vendors = load_oui_database_windows()
+        elif self.system_name == "Linux":
+            vendors = load_oui_database_linux()
+        else:
+            vendors = {}
         vendor_resolver = self.vendor_resolver or (
             lambda mac_address: get_vendor(mac_address, vendors)
         )
