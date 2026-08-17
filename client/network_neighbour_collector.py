@@ -12,7 +12,7 @@ import platform
 import re
 import socket
 import subprocess
-
+import oui
 
 MAC_ADDRESS_PATTERN = re.compile(r"^[0-9A-F]{2}(?::[0-9A-F]{2}){5}$")
 LINUX_DYNAMIC_STATES = {"REACHABLE", "STALE", "DELAY", "PROBE"}
@@ -110,13 +110,11 @@ def parse_arp_output(output):
     # Windows:  192.168.1.10  aa-bb-cc-dd-ee-ff  dynamic
     # macOS:    ? (192.168.1.10) at aa:bb:cc:dd:ee:ff on en0 ifscope [ethernet]
     windows_pattern = re.compile(
-        r"^\s*(\d{1,3}(?:\.\d{1,3}){3})\s+([0-9a-f:-]{17})\s+"
-        r"(dynamic|static)\b",
+        r"^\s*(\d{1,3}(?:\.\d{1,3}){3})\s+([0-9a-f:-]{17})\s+" r"(dynamic|static)\b",
         re.IGNORECASE,
     )
     darwin_pattern = re.compile(
-        r"\((\d{1,3}(?:\.\d{1,3}){3})\)\s+at\s+([0-9a-f:]{17})"
-        r"(?:\s+on\s+(\S+))?",
+        r"\((\d{1,3}(?:\.\d{1,3}){3})\)\s+at\s+([0-9a-f:]{17})" r"(?:\s+on\s+(\S+))?",
         re.IGNORECASE,
     )
     for line in output.splitlines():
@@ -128,7 +126,9 @@ def parse_arp_output(output):
         else:
             match = darwin_pattern.search(line)
             neighbour = (
-                normalise_neighbour(match.group(1), match.group(2), "dynamic", match.group(3))
+                normalise_neighbour(
+                    match.group(1), match.group(2), "dynamic", match.group(3)
+                )
                 if match
                 else None
             )
@@ -158,7 +158,11 @@ def _normalise_metadata(value):
     if not isinstance(value, str):
         return None
     value = value.strip()
-    if not value or len(value) > 255 or any(character in "\r\n\x00" for character in value):
+    if (
+        not value
+        or len(value) > 255
+        or any(character in "\r\n\x00" for character in value)
+    ):
         return None
     return value
 
@@ -189,6 +193,7 @@ def get_hostname(ip_address):
     except (socket.herror, socket.gaierror, OSError):
         return get_mdns_hostname(ip_address)
 
+
 def load_oui_database_linux(path=None):
     """Load the OUI database on Linux."""
     paths = []
@@ -200,12 +205,14 @@ def load_oui_database_linux(path=None):
     if env_path:
         paths.append(env_path)
 
-    paths.extend([
-        "/usr/share/arp-scan/ieee-oui.txt",
-        "/usr/share/ieee-data/oui.txt",
-        "/usr/share/wireshark/manuf",
-        "/usr/share/wireshark/manuf.txt",
-    ])
+    paths.extend(
+        [
+            "/usr/share/arp-scan/ieee-oui.txt",
+            "/usr/share/ieee-data/oui.txt",
+            "/usr/share/wireshark/manuf",
+            "/usr/share/wireshark/manuf.txt",
+        ]
+    )
 
     return _load_oui_database_from_paths(paths)
 
@@ -223,12 +230,14 @@ def load_oui_database_windows(path=None):
 
     # Common locations where an OUI/manufacturer database
     # may exist if installed with a networking tool.
-    paths.extend([
-        r"C:\Program Files\Wireshark\manuf",
-        r"C:\Program Files\Wireshark\manuf.txt",
-        r"C:\Program Files (x86)\Wireshark\manuf",
-        r"C:\Program Files (x86)\Wireshark\manuf.txt",
-    ])
+    paths.extend(
+        [
+            r"C:\Program Files\Wireshark\manuf",
+            r"C:\Program Files\Wireshark\manuf.txt",
+            r"C:\Program Files (x86)\Wireshark\manuf",
+            r"C:\Program Files (x86)\Wireshark\manuf.txt",
+        ]
+    )
 
     return _load_oui_database_from_paths(paths)
 
@@ -280,11 +289,7 @@ def _load_oui_database_from_paths(paths):
                     if not match:
                         continue
 
-                    prefix = re.sub(
-                        r"[^0-9A-Fa-f]",
-                        "",
-                        match.group(1)
-                    ).upper()
+                    prefix = re.sub(r"[^0-9A-Fa-f]", "", match.group(1)).upper()
 
                     vendor = _normalise_metadata(match.group(2))
 
@@ -304,6 +309,8 @@ def _load_oui_database_from_paths(paths):
 
     print("[OUI] No usable OUI database found")
     return {}
+
+
 def get_vendor(mac_address, vendors):
     """Return the 24-bit-OUI vendor for a normalized MAC address."""
     if not isinstance(mac_address, str):
@@ -353,13 +360,21 @@ class NetworkNeighbourCollector:
         try:
             if self.system_name == "Linux":
                 result = self.command_runner(["ip", "-j", "neigh", "show"])
-                neighbours = parse_linux_neighbours(result.stdout) if result.returncode == 0 else []
+                neighbours = (
+                    parse_linux_neighbours(result.stdout)
+                    if result.returncode == 0
+                    else []
+                )
             elif self.system_name == "Windows":
                 result = self.command_runner(["arp", "-a"])
-                neighbours = parse_arp_output(result.stdout) if result.returncode == 0 else []
+                neighbours = (
+                    parse_arp_output(result.stdout) if result.returncode == 0 else []
+                )
             elif self.system_name == "Darwin":
                 result = self.command_runner(["arp", "-an"])
-                neighbours = parse_arp_output(result.stdout) if result.returncode == 0 else []
+                neighbours = (
+                    parse_arp_output(result.stdout) if result.returncode == 0 else []
+                )
         except (OSError, subprocess.TimeoutExpired, AttributeError):
             return []
         return self.enrich(neighbours) if enrich else neighbours
@@ -368,15 +383,16 @@ class NetworkNeighbourCollector:
         """Resolve metadata locally before the report leaves this client."""
         if not neighbours:
             return []
-        if self.system_name == "Windows":
-            vendors = load_oui_database_windows()
-        elif self.system_name == "Linux":
-            vendors = load_oui_database_linux()
-        else:
-            vendors = {}
-        vendor_resolver = self.vendor_resolver or (
-            lambda mac_address: get_vendor(mac_address, vendors)
-        )
+        # Prefer a user-provided resolver; otherwise use the bundled IEEE CSVs.
+        vendor_resolver = self.vendor_resolver
+        if vendor_resolver is None:
+            try:
+                database = oui.load_oui_database()
+                vendor_resolver = lambda mac_address: oui.get_vendor(
+                    mac_address, database
+                )
+            except Exception:
+                vendor_resolver = lambda mac_address: None
         hostname_lookup_limit = _read_hostname_lookup_limit()
         enriched_neighbours = []
         for index, neighbour in enumerate(neighbours):
