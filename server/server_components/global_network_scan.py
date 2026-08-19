@@ -18,6 +18,12 @@ from datetime import datetime, timezone
 LOGGER = logging.getLogger(__name__)
 
 
+def _job_log(message, *args):
+    """Write scan-job progress to both configured logs and the server console."""
+    LOGGER.info(message, *args)
+    print("[GLOBAL NETWORK SCAN] " + (message % args if args else message), flush=True)
+
+
 def _positive_int(name, default):
     try:
         return max(1, int(os.getenv(name, str(default))))
@@ -96,7 +102,7 @@ class GlobalNetworkScanManager:
             }
             self._sessions[scan_id] = session
             self._active_scan_id = scan_id
-            LOGGER.info(
+            _job_log(
                 "Global network scan %s started: eligible_clients=%d concurrency=%d.",
                 scan_id,
                 len(targets),
@@ -150,13 +156,18 @@ class GlobalNetworkScanManager:
                     target["client_id"],
                     target["error"],
                 )
+                print(
+                    f"[GLOBAL NETWORK SCAN] Global scan {scan_id} client "
+                    f"{target['client_id']} reported failure: {target['error']}",
+                    flush=True,
+                )
             else:
                 target["status"] = "COMPLETED"
                 for neighbour in neighbours:
                     mac = neighbour.get("mac_address") if isinstance(neighbour, dict) else None
                     if isinstance(mac, str):
                         session["device_macs"].add(mac.upper().replace("-", ":"))
-                LOGGER.info(
+                _job_log(
                     "Global scan %s client %s completed; devices_found=%d.",
                     scan_id,
                     target["client_id"],
@@ -217,7 +228,7 @@ class GlobalNetworkScanManager:
                         session["updated_at"] = target["dispatched_at"]
                         futures[executor.submit(self._dispatch, scan_id, target.copy(), session["command_timeout"])] = target_mac
                         capacity -= 1
-                        LOGGER.info(
+                        _job_log(
                             "Global scan %s dispatching client %s.", scan_id, target["client_id"]
                         )
 
@@ -262,7 +273,11 @@ class GlobalNetworkScanManager:
         if result.get("status") == "ok" and response_status == "started":
             target["status"] = "RUNNING"
             target["started_at"] = now
-            LOGGER.info("Global scan %s client %s acknowledged start.", session["id"], target["client_id"])
+            _job_log(
+                "Global scan %s client %s acknowledged start.",
+                session["id"],
+                target["client_id"],
+            )
         elif result.get("status") == "ok" and response_status == "already_running":
             if active_scan_id == session["id"]:
                 target["status"] = "RUNNING"
@@ -271,6 +286,11 @@ class GlobalNetworkScanManager:
                 target["status"] = "SKIPPED_ALREADY_RUNNING"
                 target["completed_at"] = now
                 target["error"] = "Client already has an unrelated active scan."
+                _job_log(
+                    "Global scan %s client %s skipped: another active scan is running.",
+                    session["id"],
+                    target["client_id"],
+                )
         else:
             target["status"] = "FAILED"
             target["completed_at"] = now
@@ -278,6 +298,11 @@ class GlobalNetworkScanManager:
             LOGGER.warning(
                 "Global scan %s client %s dispatch failed: %s",
                 session["id"], target["client_id"], target["error"],
+            )
+            print(
+                f"[GLOBAL NETWORK SCAN] Global scan {session['id']} client "
+                f"{target['client_id']} dispatch failed: {target['error']}",
+                flush=True,
             )
         session["updated_at"] = now
 
@@ -293,6 +318,11 @@ class GlobalNetworkScanManager:
             target["error"] = f"Scan report timed out after {session['scan_timeout']}s."
             session["updated_at"] = now
             LOGGER.warning("Global scan %s client %s timed out.", session["id"], target["client_id"])
+            print(
+                f"[GLOBAL NETWORK SCAN] Global scan {session['id']} client "
+                f"{target['client_id']} timed out waiting for its report.",
+                flush=True,
+            )
 
     def _finalize_if_done_locked(self, session):
         if any(target["status"] in {"PENDING", "DISPATCHING", "RUNNING"} for target in session["targets"].values()):
@@ -305,7 +335,7 @@ class GlobalNetworkScanManager:
         session["updated_at"] = session["finished_at"]
         if self._active_scan_id == session["id"]:
             self._active_scan_id = None
-        LOGGER.info(
+        _job_log(
             "Global network scan %s finished: status=%s total=%d completed=%d failed=%d skipped=%d devices=%d.",
             session["id"], session["status"], len(statuses), statuses.count("COMPLETED"),
             statuses.count("FAILED"), statuses.count("SKIPPED_ALREADY_RUNNING"), len(session["device_macs"]),

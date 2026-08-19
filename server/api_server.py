@@ -381,6 +381,13 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     from server_components.network_discovery import run_global_active_scan
                     print("[REST API] Global active neighbourhood scan started…")
                     scan, created = run_global_active_scan()
+                    print(
+                        "[REST API] Global active scan job response: "
+                        f"scan_id={scan['id']} status={'started' if created else 'already_running'} "
+                        f"eligible_clients={scan['total_clients']} "
+                        f"max_concurrent_clients={scan['max_concurrent_clients']}.",
+                        flush=True,
+                    )
                     self.send_data({
                         **scan,
                         "status": "started" if created else "already_running",

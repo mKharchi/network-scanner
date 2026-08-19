@@ -12,6 +12,7 @@ import platform
 import re
 import socket
 import subprocess
+import time
 import oui
 
 MAC_ADDRESS_PATTERN = re.compile(r"^[0-9A-F]{2}(?::[0-9A-F]{2}){5}$")
@@ -22,6 +23,11 @@ DEFAULT_OUI_DATABASE_PATHS = (
     "/usr/share/ieee-data/oui.txt",
 )
 DEFAULT_HOSTNAME_LOOKUP_LIMIT = 64
+
+
+def _scan_log(message):
+    """Print concise client-side scan lifecycle telemetry."""
+    print(f"[NETWORK SCAN] {message}", flush=True)
 
 
 def normalise_mac_address(value):
@@ -497,14 +503,21 @@ def get_local_network(command_runner=None):
         network = detected_network
 
     if not interface or not local_ip or not network:
+        _scan_log("No usable IPv4 network was detected; active ARP scan skipped.")
         return None
 
-    return {
+    context = {
         "interface": interface,
         "local_ip": str(local_ip) if local_ip else None,
         "network": str(network),
         "gateway": gateway,
     }
+    _scan_log(
+        "Network detected: "
+        f"interface={context['interface']} local_ip={context['local_ip']} "
+        f"network={context['network']} gateway={context['gateway'] or 'unknown'}."
+    )
+    return context
 
 
 def _default_arp_runner(network_cidr, iface, timeout_sec):
@@ -529,9 +542,15 @@ def discover_active_arp(context=None, *, command_runner=None, arp_runner=None, t
         return []
 
     runner = arp_runner or _default_arp_runner
+    started_at = time.monotonic()
+    _scan_log(
+        f"Starting active ARP scan: network={context['network']} "
+        f"interface={context['interface']} response_timeout={timeout_seconds}s."
+    )
     try:
         responses = runner(context["network"], context["interface"], timeout_seconds)
-    except Exception:
+    except Exception as error:
+        _scan_log(f"Active ARP scan failed: {error}")
         return []
 
     devices = []
@@ -551,6 +570,10 @@ def discover_active_arp(context=None, *, command_runner=None, arp_runner=None, t
         seen_macs.add(neighbour["mac_address"])
         devices.append(neighbour)
 
+    _scan_log(
+        f"Active ARP scan completed: responses={len(responses or [])} "
+        f"unique_devices={len(devices)} elapsed={time.monotonic() - started_at:.1f}s."
+    )
     return devices
 
 
@@ -615,6 +638,11 @@ class NetworkNeighbourCollector:
 
     def collect(self, *, enrich=False, active_scan=False):
         """Return normalized entries, optionally merging active ARP scan and enriching."""
+        started_at = time.monotonic()
+        _scan_log(
+            f"Collection started: platform={self.system_name} active_scan={active_scan} "
+            f"enrich={enrich}."
+        )
         neighbours = []
         try:
             if self.system_name == "Linux":
@@ -634,8 +662,11 @@ class NetworkNeighbourCollector:
                 neighbours = (
                     parse_arp_output(result.stdout) if result.returncode == 0 else []
                 )
-        except (OSError, subprocess.TimeoutExpired, AttributeError):
+        except (OSError, subprocess.TimeoutExpired, AttributeError) as error:
+            _scan_log(f"Could not read the local neighbour cache: {error}")
             neighbours = []
+
+        _scan_log(f"Passive neighbour cache collected: entries={len(neighbours)}.")
 
         if active_scan:
             try:
@@ -644,15 +675,25 @@ class NetworkNeighbourCollector:
                     arp_runner=self.arp_runner,
                 )
                 neighbours = merge_neighbours_by_mac(neighbours, active_entries)
-            except Exception:
-                pass
+                _scan_log(
+                    f"Merged active ARP results: active_entries={len(active_entries)} "
+                    f"combined_entries={len(neighbours)}."
+                )
+            except Exception as error:
+                _scan_log(f"Active ARP collection step failed: {error}")
 
-        return self.enrich(neighbours) if enrich else neighbours
+        result = self.enrich(neighbours) if enrich else neighbours
+        _scan_log(
+            f"Collection completed: devices={len(result)} "
+            f"elapsed={time.monotonic() - started_at:.1f}s."
+        )
+        return result
 
     def enrich(self, neighbours):
         """Resolve metadata locally before the report leaves this client."""
         if not neighbours:
             return []
+        started_at = time.monotonic()
         # Prefer a user-provided resolver; otherwise use the bundled IEEE CSVs.
         vendor_resolver = self.vendor_resolver
         if vendor_resolver is None:
@@ -664,6 +705,10 @@ class NetworkNeighbourCollector:
             except Exception:
                 vendor_resolver = lambda mac_address: None
         hostname_lookup_limit = _read_hostname_lookup_limit()
+        _scan_log(
+            f"Enrichment started: devices={len(neighbours)} "
+            f"hostname_lookup_limit={hostname_lookup_limit}."
+        )
         enriched_neighbours = []
         for index, neighbour in enumerate(neighbours):
             enriched = dict(neighbour)
@@ -683,4 +728,8 @@ class NetworkNeighbourCollector:
             if vendor:
                 enriched["vendor"] = vendor
             enriched_neighbours.append(enriched)
+        _scan_log(
+            f"Enrichment completed: devices={len(enriched_neighbours)} "
+            f"elapsed={time.monotonic() - started_at:.1f}s."
+        )
         return enriched_neighbours
