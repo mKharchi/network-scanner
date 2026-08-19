@@ -9,13 +9,23 @@ import os
 import tempfile
 import threading
 from datetime import datetime, timezone
+from pathlib import Path
 
 
-DEFAULT_STORAGE_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "storage",
-    "network_scans",
-)
+SERVER_DIRECTORY = Path(__file__).resolve().parents[1]
+PROJECT_DIRECTORY = SERVER_DIRECTORY.parent
+DEFAULT_STORAGE_DIR = str(SERVER_DIRECTORY / "storage" / "network_scans")
+
+
+def get_network_scan_storage_dir():
+    """Return the configured scan directory as an absolute stable path."""
+    configured_dir = Path(os.getenv("NETWORK_SCAN_STORAGE_DIR", DEFAULT_STORAGE_DIR))
+    if configured_dir.is_absolute():
+        return configured_dir
+    return (PROJECT_DIRECTORY / configured_dir).resolve()
+
+
+NETWORK_SCAN_STORAGE_DIR = get_network_scan_storage_dir()
 _DAILY_LOG_LOCK = threading.Lock()
 
 
@@ -93,7 +103,7 @@ def _daily_log_context(observed_at=None):
     if observed_at.tzinfo is None:
         observed_at = observed_at.replace(tzinfo=timezone.utc)
     observed_at = observed_at.astimezone()
-    storage_dir = os.getenv("NETWORK_SCAN_STORAGE_DIR", DEFAULT_STORAGE_DIR)
+    storage_dir = get_network_scan_storage_dir()
     os.makedirs(storage_dir, exist_ok=True)
     return observed_at, _daily_dhcp_log_path(storage_dir, observed_at)
 
@@ -157,7 +167,7 @@ def append_daily_dhcp_observation(
 def store_network_scan(context, devices, completed_at=None):
     """Persist one completed scan and return its absolute JSON path."""
     completed_at = completed_at or datetime.now(timezone.utc)
-    storage_dir = os.getenv("NETWORK_SCAN_STORAGE_DIR", DEFAULT_STORAGE_DIR)
+    storage_dir = get_network_scan_storage_dir()
     os.makedirs(storage_dir, exist_ok=True)
 
     timestamp = completed_at.strftime("%Y-%m-%d_%H-%M-%S_%f")
@@ -173,3 +183,29 @@ def store_network_scan(context, devices, completed_at=None):
         json.dump(payload, file, indent=2, ensure_ascii=False)
 
     return file_path
+
+
+def load_latest_network_scan():
+    """Return the newest completed scan payload, or ``None`` when absent."""
+    storage_dir = get_network_scan_storage_dir()
+    if not storage_dir.is_dir():
+        return None
+
+    scan_files = sorted(
+        (
+            path
+            for path in storage_dir.glob("*.json")
+            if not path.name.startswith("network_scan_")
+        ),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    for scan_file in scan_files:
+        try:
+            with open(scan_file, "r", encoding="utf-8") as file:
+                payload = json.load(file)
+            if isinstance(payload, dict) and isinstance(payload.get("devices"), list):
+                return payload
+        except (OSError, json.JSONDecodeError):
+            continue
+    return None

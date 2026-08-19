@@ -69,6 +69,21 @@ pip install -r requirements.txt
 python server.py
 ```
 
+### Operator GUI shell
+
+The dependency-free graphical application shell is served separately from the
+TCP monitoring-client server. It currently provides navigation, responsive
+layout, and data-unavailable states only; the read-only API that supplies
+monitoring data is the next backend milestone.
+
+```bash
+python server/gui_server.py
+```
+
+Open `http://127.0.0.1:8080` in a browser. Set `GUI_HOST` and `GUI_PORT` to
+change the local bind address or port. Do not expose it beyond a trusted local
+environment until operator authentication and TLS are implemented.
+
 ### Manual LAN Discovery Aggregation
 
 Network discovery is performed entirely on the monitoring clients. Each

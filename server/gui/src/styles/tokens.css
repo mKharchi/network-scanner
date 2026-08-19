@@ -1,0 +1,96 @@
+/* ============================================================
+   Design Tokens — Network Monitoring GUI
+   All component code must reference these variables,
+   never raw hex or arbitrary values.
+   ============================================================ */
+
+:root {
+  /* ── Colour: surface ────────────────────────────────────── */
+  --canvas:        #F8FAFC;
+  --surface:       #FFFFFF;
+  --surface-muted: #F1F5F9;
+  --border:        #CBD5E1;
+  --border-subtle: #E2E8F0;
+
+  /* ── Colour: text ───────────────────────────────────────── */
+  --text:          #0F172A;
+  --text-muted:    #475569;
+  --text-faint:    #94A3B8;
+
+  /* ── Colour: brand / action ─────────────────────────────── */
+  --primary:       #1D4ED8;
+  --primary-hover: #1E40AF;
+  --focus:         #2563EB;
+
+  /* ── Colour: semantic ───────────────────────────────────── */
+  --success:       #15803D;
+  --success-bg:    #DCFCE7;
+  --warning:       #B45309;
+  --warning-bg:    #FEF3C7;
+  --danger:        #B91C1C;
+  --danger-bg:     #FEE2E2;
+  --info:          #0369A1;
+  --info-bg:       #E0F2FE;
+
+  /* ── Typography ─────────────────────────────────────────── */
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", "Fira Code",
+               Consolas, "Courier New", monospace;
+
+  --font-xs:   0.75rem;    /* 12px – timestamps, labels       */
+  --font-sm:   0.875rem;   /* 14px – body, table values, btns */
+  --font-base: 1rem;       /* 16px – long-form content        */
+  --font-lg:   1.125rem;   /* 18px – card titles, headings    */
+  --font-xl:   1.5rem;     /* 24px – page titles              */
+  --font-2xl:  2rem;       /* 32px – dashboard key metric     */
+
+  --lh-xs:   1rem;
+  --lh-sm:   1.25rem;
+  --lh-base: 1.5rem;
+  --lh-lg:   1.5rem;
+  --lh-xl:   2rem;
+  --lh-2xl:  2.5rem;
+
+  /* ── Spacing (4px base unit) ────────────────────────────── */
+  --space-1: 0.25rem;   /*  4px */
+  --space-2: 0.5rem;    /*  8px */
+  --space-3: 0.75rem;   /* 12px */
+  --space-4: 1rem;      /* 16px */
+  --space-5: 1.25rem;   /* 20px */
+  --space-6: 1.5rem;    /* 24px */
+  --space-8: 2rem;      /* 32px */
+  --space-10: 2.5rem;   /* 40px */
+  --space-12: 3rem;     /* 48px */
+
+  /* ── Radius ─────────────────────────────────────────────── */
+  --radius-sm: 4px;
+  --radius:    8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  /* ── Shadows ────────────────────────────────────────────── */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow:    0 1px 3px 0 rgb(0 0 0 / 0.08), 0 1px 2px -1px rgb(0 0 0 / 0.06);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+
+  /* ── Layout ─────────────────────────────────────────────── */
+  --sidebar-w:       220px;
+  --header-h:        65px;
+  --content-max-w:   90rem;
+  --page-px:         1.5rem;   /* 24px desktop */
+  --page-py:         1.5rem;
+
+  /* ── Transitions ────────────────────────────────────────── */
+  --transition-fast: 120ms ease;
+  --transition:      200ms ease;
+}
+
+/* ── Reduced motion overrides ───────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
