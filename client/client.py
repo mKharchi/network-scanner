@@ -35,6 +35,11 @@ active_network_scan_global_id = None
 forbidden_processes = []
 
 
+def _scan_log(message):
+    """Emit scan lifecycle telemetry without printing device tables."""
+    print(f"[CLIENT NETWORK SCAN] {message}", flush=True)
+
+
 def load_reported_alerts():
     """Restore a bounded local deduplication state from the previous run."""
     try:
@@ -102,6 +107,9 @@ def send_daily_network_neighbours(client_socket):
     """
     snapshot_date = _local_date()
     client_mac = _snapshot_client_mac()
+    _scan_log(
+        f"Daily neighbour snapshot check: client_mac={client_mac or 'unknown'} date={snapshot_date}."
+    )
     state = _load_neighbour_snapshot_state()
     if (
         client_mac
@@ -111,7 +119,13 @@ def send_daily_network_neighbours(client_socket):
         print("Today's network neighbour snapshot was already reported.")
         return False
 
+    started_at = time.monotonic()
+    _scan_log("Daily neighbour snapshot collection started (passive cache only).")
     neighbours = NetworkNeighbourCollector().collect(enrich=True, active_scan=False)
+    _scan_log(
+        f"Daily neighbour snapshot collection completed: devices={len(neighbours)} "
+        f"elapsed={time.monotonic() - started_at:.1f}s."
+    )
     message = {
         "type": "NETWORK_NEIGHBOURS",
         "data": {
@@ -124,7 +138,9 @@ def send_daily_network_neighbours(client_socket):
         with socket_lock:
             send_message(client_socket, message)
         _save_neighbour_snapshot_state(snapshot_date, client_mac)
-        print(f"Reported {len(neighbours)} network neighbour entries.")
+        _scan_log(
+            f"Daily snapshot report sent: reporter={client_mac or 'unknown'} devices={len(neighbours)}."
+        )
         return True
     except OSError as error:
         print(f"Could not report network neighbours: {error}")
@@ -135,12 +151,21 @@ def send_active_network_neighbours(client_socket, *, lock_held=False, global_sca
     """Run an active ARP scan without blocking the client command loop."""
     global active_network_scan_global_id
     if not lock_held and not network_scan_lock.acquire(blocking=False):
-        print("Active network scan is already running.")
+        _scan_log("Active scan request rejected: another active scan is already running.")
         return False
 
     try:
-        print("Active network scan started in the background.")
+        started_at = time.monotonic()
+        reporter_mac = _snapshot_client_mac()
+        _scan_log(
+            f"Active scan started: reporter={reporter_mac or 'unknown'} "
+            f"global_scan_id={global_scan_id or 'none'}."
+        )
         neighbours = NetworkNeighbourCollector().collect(enrich=True, active_scan=True)
+        _scan_log(
+            f"Active scan collection completed: reporter={reporter_mac or 'unknown'} "
+            f"devices={len(neighbours)} elapsed={time.monotonic() - started_at:.1f}s."
+        )
         message = {
             "type": "NETWORK_NEIGHBOURS",
             "data": {
@@ -153,13 +178,16 @@ def send_active_network_neighbours(client_socket, *, lock_held=False, global_sca
             message["data"]["global_scan_id"] = global_scan_id
         with socket_lock:
             send_message(client_socket, message)
-        print(f"Reported {len(neighbours)} active network neighbour entries.")
+        _scan_log(
+            f"Active scan report sent: reporter={reporter_mac or 'unknown'} devices={len(neighbours)} "
+            f"global_scan_id={global_scan_id or 'none'}."
+        )
         return True
     except OSError as error:
-        print(f"Could not report active network neighbours: {error}")
+        _scan_log(f"Active scan report delivery failed: {error}")
         return False
     except Exception as error:
-        print(f"Active network scan failed: {error}")
+        _scan_log(f"Active scan failed: reporter={_snapshot_client_mac() or 'unknown'} error={error}")
         if global_scan_id:
             try:
                 with socket_lock:
@@ -184,18 +212,27 @@ def send_active_network_neighbours(client_socket, *, lock_held=False, global_sca
         with network_scan_state_lock:
             active_network_scan_global_id = None
         network_scan_lock.release()
+        _scan_log(f"Active scan slot released: global_scan_id={global_scan_id or 'none'}.")
 
 
 def start_active_network_scan(client_socket, *, global_scan_id=None):
     """Start one background ARP scan, returning its status and correlation ID."""
     global active_network_scan_global_id
     if not network_scan_lock.acquire(blocking=False):
-        print("Active network scan is already running.")
         with network_scan_state_lock:
+            _scan_log(
+                "Active scan request skipped because a scan is already running: "
+                f"active_global_scan_id={active_network_scan_global_id or 'none'}."
+            )
             return False, active_network_scan_global_id
 
     with network_scan_state_lock:
         active_network_scan_global_id = global_scan_id
+
+    _scan_log(
+        f"Active scan accepted and scheduled: reporter={_snapshot_client_mac() or 'unknown'} "
+        f"global_scan_id={global_scan_id or 'none'}."
+    )
 
     threading.Thread(
         target=send_active_network_neighbours,
@@ -432,6 +469,11 @@ def start_client():
                 )
                 started, active_global_scan_id = start_active_network_scan(
                     client, global_scan_id=global_scan_id
+                )
+                _scan_log(
+                    f"SCAN_NETWORK command handled: status={'started' if started else 'already_running'} "
+                    f"requested_global_scan_id={global_scan_id or 'none'} "
+                    f"active_global_scan_id={active_global_scan_id or 'none'}."
                 )
                 result = {
                     "status": "started" if started else "already_running",

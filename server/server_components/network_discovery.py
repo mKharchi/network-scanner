@@ -752,4 +752,10 @@ def run_global_active_scan():
 
     with server_lib.clients_lock:
         online_clients = list(server_lib.clients.values())
+    print(
+        "[GLOBAL NETWORK SCAN] Online-client snapshot captured: "
+        f"eligible_clients={len(online_clients)} "
+        f"client_ids={[client.get('client_id', 'unknown') for client in online_clients]}.",
+        flush=True,
+    )
     return global_network_scan_manager.start(online_clients)

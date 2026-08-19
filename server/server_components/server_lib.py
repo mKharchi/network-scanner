@@ -976,6 +976,18 @@ def handle_network_neighbour_report(
     source = payload.get("observation_source") if isinstance(payload, dict) else None
     global_scan_id = payload.get("global_scan_id") if isinstance(payload, dict) else None
     scan_status = payload.get("scan_status") if isinstance(payload, dict) else None
+    reported_count = (
+        len(payload.get("neighbours", []))
+        if isinstance(payload, dict) and isinstance(payload.get("neighbours"), list)
+        else "invalid"
+    )
+    print(
+        "[NETWORK REPORT] Received: "
+        f"reporter={reporter_mac} source={source or 'unknown'} "
+        f"global_scan_id={global_scan_id or 'none'} entries={reported_count} "
+        f"scan_status={scan_status or 'completed'}.",
+        flush=True,
+    )
     try:
         neighbours = report_validator(payload)
         if source == "DHCP":
@@ -1107,7 +1119,8 @@ def handle_network_neighbour_report(
 
             stored = observation_storer(reporter_mac, neighbours)
             print(
-                f"Stored {stored} active neighbour observation(s) from {reporter_mac}."
+                "[NETWORK REPORT] Persisted active scan observations: "
+                f"reporter={reporter_mac} stored={stored} global_scan_id={global_scan_id or 'none'}."
             )
             if global_scan_manager:
                 global_scan_manager.record_report(
@@ -1123,6 +1136,11 @@ def handle_network_neighbour_report(
                 )
                 scan_id = os.path.splitext(os.path.basename(scan_path))[0]
                 event_broadcaster.broadcast_network_update(scan_id, len(devices))
+                print(
+                    "[NETWORK REPORT] Active scan merge completed: "
+                    f"reporter={reporter_mac} merged_devices={len(devices)} scan_id={scan_id}.",
+                    flush=True,
+                )
             except Exception as error:
                 print(f"Could not merge active neighbour report: {error}")
             return True
@@ -1239,7 +1257,13 @@ def execute_client_command(
     conn = client["connection"]
     message = {"type": "COMMAND", "command": command}
     if command in ("SCAN_NETWORK", "TRIGGER_ARP_SCAN"):
-        print(f"{client['hostname']} was sent a network scan command.")
+        global_scan_id = args.get("global_scan_id") if isinstance(args, dict) else None
+        print(
+            "[NETWORK COMMAND] Dispatching active scan: "
+            f"client_id={client_id} hostname={client['hostname']} mac={client['mac']} "
+            f"global_scan_id={global_scan_id or 'none'} acknowledgement_timeout={timeout}s.",
+            flush=True,
+        )
     if args is not None:
         message["args"] = args
 
@@ -1258,6 +1282,11 @@ def execute_client_command(
             try:
                 response = client["responses"].get(timeout=remaining)
             except queue.Empty:
+                print(
+                    "[NETWORK COMMAND] Acknowledgement timed out: "
+                    f"client_id={client_id} command={command} timeout={timeout}s.",
+                    flush=True,
+                )
                 return {
                     "status": "error",
                     "message": f"Command '{command}' timed out after {timeout}s.",
@@ -1271,6 +1300,17 @@ def execute_client_command(
 
             if response.get("command") != command:
                 continue
+
+            if command in ("SCAN_NETWORK", "TRIGGER_ARP_SCAN"):
+                response_data = response.get("data")
+                print(
+                    "[NETWORK COMMAND] Active-scan acknowledgement received: "
+                    f"client_id={client_id} status="
+                    f"{response_data.get('status') if isinstance(response_data, dict) else 'invalid'} "
+                    f"global_scan_id="
+                    f"{response_data.get('global_scan_id') if isinstance(response_data, dict) else 'none'}.",
+                    flush=True,
+                )
 
             # Store activity log file if activity log was fetched
             if command == "GET_ACTIVITY_LOG" and response.get("type") == "RESPONSE":
