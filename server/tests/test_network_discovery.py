@@ -225,6 +225,47 @@ class NetworkDiscoveryTests(unittest.TestCase):
             "client-reporter-b",
         )
 
+    def test_merge_discovery_sources_retains_prior_scan_devices_and_fills_details(self):
+        merged_devices = network_discovery.merge_discovery_sources(
+            [],
+            [{
+                "ip_address": "172.16.0.102",
+                "mac_address": "AA:BB:CC:DD:EE:FF",
+                "hostname": "workstation-01",
+                "vendor": None,
+                "entry_type": "dynamic",
+                "interface": "eth0",
+                "observed_at": "2026-08-18T10:00:00+00:00",
+            }],
+            previous_devices=[
+                {
+                    "ip_address": "172.16.0.102",
+                    "mac_address": "AA:BB:CC:DD:EE:FF",
+                    "hostname": None,
+                    "vendor": "Example Vendor",
+                    "observation_sources": [{"source_type": "SERVER_SCAN"}],
+                },
+                {
+                    "ip_address": "172.16.0.103",
+                    "mac_address": "12:22:33:44:55:66",
+                    "hostname": "printer",
+                    "vendor": "Printer Vendor",
+                    "observation_sources": [{"source_type": "SERVER_SCAN"}],
+                },
+            ],
+        )
+
+        self.assertEqual(len(merged_devices), 2)
+        workstation = next(
+            device for device in merged_devices if device["mac_address"] == "AA:BB:CC:DD:EE:FF"
+        )
+        self.assertEqual(workstation["hostname"], "workstation-01")
+        self.assertEqual(workstation["vendor"], "Example Vendor")
+        self.assertEqual(
+            [source["source_type"] for source in workstation["observation_sources"]],
+            ["SERVER_SCAN", "CLIENT_ARP"],
+        )
+
     def test_hostname_normalisation_decodes_avahi_octal_escapes(self):
         self.assertEqual(
             network_discovery._normalise_hostname(r"\040none\041.local"),
@@ -406,6 +447,8 @@ class NetworkDiscoveryTests(unittest.TestCase):
             network_discovery, "enrich_devices", side_effect=AssertionError("server enrichment called")
         ), patch.object(
             network_discovery, "store_network_scan", return_value="/tmp/scan.json"
+        ), patch.object(
+            network_discovery, "load_latest_network_scan", return_value=None
         ):
             returned_context, devices, result_path = network_discovery.run_manual_scan()
 

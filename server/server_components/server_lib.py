@@ -38,6 +38,17 @@ def _run_dhcp_observation_writer():
             )
 
             append_daily_dhcp_observation(reporter_mac, neighbours, dhcp)
+
+            # Notify the frontend over SSE so the DHCP page updates live
+            try:
+                from server_components import event_broadcaster
+                event_broadcaster.broadcast_dhcp_update({
+                    "reporting_client_mac": reporter_mac,
+                    "neighbours": neighbours,
+                    "dhcp": dhcp or {},
+                })
+            except Exception as broadcast_error:
+                print(f"[DHCP] broadcast_dhcp_update failed (non-fatal): {broadcast_error}")
         except Exception as error:
             print(f"Could not append DHCP observation log: {error}")
         finally:
@@ -227,7 +238,31 @@ def create_connection_alert(client_info, registered_at=None):
             ),
         )
         conn.commit()
+        alert_id = cursor.lastrowid
         print(f"\n[!] ALERT: {title} — {hostname} ({mac})", flush=True)
+
+        try:
+            from server_components import event_broadcaster
+            event_broadcaster.broadcast_alert({
+                "id": alert_id,
+                "client": {"id": client_info.get("client_id"), "hostname": hostname},
+                "type": alert_type,
+                "severity": severity,
+                "status": "NEW",
+                "title": title,
+                "description": description,
+                "detected_at": registered_at.isoformat(),
+            })
+            event_broadcaster.broadcast_client_status(
+                client_id=client_info.get("client_id", ""),
+                mac=mac,
+                hostname=hostname,
+                state="ONLINE",
+                ip=ip,
+            )
+        except Exception:
+            pass
+
         return True
     except Exception as error:
         print(f"Error saving registration alert: {error}")
@@ -263,7 +298,24 @@ def create_server_alert(mac, alert_type, severity, title, description, detected_
             (client[0], alert_type, severity, detected_at, title, description),
         )
         conn.commit()
+        alert_id = cursor.lastrowid
         print(f"\n[!] ALERT: {title} — {mac}", flush=True)
+
+        try:
+            from server_components import event_broadcaster
+            event_broadcaster.broadcast_alert({
+                "id": alert_id,
+                "client": {"mac": mac},
+                "type": alert_type,
+                "severity": severity,
+                "status": "NEW",
+                "title": title,
+                "description": description,
+                "detected_at": detected_at.isoformat() if hasattr(detected_at, "isoformat") else str(detected_at),
+            })
+        except Exception:
+            pass
+
         return True
     except Exception as error:
         print(f"Error saving {alert_type} alert: {error}")
@@ -335,6 +387,56 @@ def ping_client(ip):
         return False
 
 
+def has_arp_neighbour(ip):
+    """Return whether the local neighbour table confirms a LAN host is alive.
+
+    Endpoint firewalls can block ICMP while the machine is still online. A
+    failed ping is therefore followed by this ARP-level check before an
+    unexpected disconnect is treated as informational.
+    """
+    try:
+        address = str(ipaddress.ip_address(ip))
+    except ValueError:
+        return False
+
+    if platform.system() == "Windows":
+        command = ["arp", "-a", address]
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=3,
+                check=False,
+            )
+            return result.returncode == 0 and address in result.stdout
+        except (OSError, subprocess.TimeoutExpired) as error:
+            print(f"ARP reachability check failed for {address}: {error}")
+            return False
+
+    try:
+        result = subprocess.run(
+            ["ip", "-j", "neigh", "show", "to", address],
+            capture_output=True,
+            text=True,
+            timeout=3,
+            check=False,
+        )
+        if result.returncode != 0:
+            return False
+        neighbours = json.loads(result.stdout)
+        return any(
+            neighbour.get("dst") == address
+            and neighbour.get("lladdr")
+            and neighbour.get("state") not in {"FAILED", "INCOMPLETE", "NOARP"}
+            for neighbour in neighbours
+            if isinstance(neighbour, dict)
+        )
+    except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError) as error:
+        print(f"ARP reachability check failed for {address}: {error}")
+        return False
+
+
 def verify_client_disconnect(mac, client, check_token):
     """After a grace period, classify an unexpected disconnect once."""
     time.sleep(DISCONNECT_PING_DELAY_SECONDS)
@@ -347,6 +449,8 @@ def verify_client_disconnect(mac, client, check_token):
             return
 
     reachable = ping_client(client.get("ip", ""))
+    if not reachable:
+        reachable = has_arp_neighbour(client.get("ip", ""))
 
     with clients_lock:
         # A reconnect may have happened while the ping was running.
@@ -976,59 +1080,68 @@ def print_response(client_id, command, response):
 
 
 # ============================================================
-# SEND COMMAND TO CLIENT
+# SEND / EXECUTE COMMAND TO CLIENT
 # ============================================================
 
-def send_command(client_id, command, args=None):
+def execute_client_command(client_id, command, args=None, timeout=10.0):
+    """Send a command to a connected client and return the structured response payload."""
     client = get_client(client_id)
-
     if not client:
-        print("Client not found.")
-        return
+        return {"status": "error", "message": f"Client '{client_id}' is not connected."}
 
     conn = client["connection"]
-
     message = {"type": "COMMAND", "command": command}
     if args is not None:
         message["args"] = args
 
     try:
-        # receive_client_messages() is the sole reader for this socket.  It
-        # places command responses in this queue and handles ALERT frames
-        # immediately, even while the server is waiting at its menu prompt.
         with client["send_lock"]:
             if command == "DISCONNECT":
-                # The client was asked to leave, so its later TCP close must
-                # not be interpreted as a stopped/crashed agent.
                 with clients_lock:
                     current_client = clients.get(client["mac"])
                     if current_client is client and client["connection"] is conn:
                         client["disconnect_expected"] = True
             send_message(conn, message)
 
-        while True:
-            response = client["responses"].get()
-            print("response received")
-            if response.get("type") == "DISCONNECTED":
-                print("Client disconnected.")
-                return
+        start_t = time.time()
+        while (time.time() - start_t) < timeout:
+            remaining = max(0.1, timeout - (time.time() - start_t))
+            try:
+                response = client["responses"].get(timeout=remaining)
+            except queue.Empty:
+                return {"status": "error", "message": f"Command '{command}' timed out after {timeout}s."}
 
-            # The server menu sends one command at a time, but keeping this
-            # check prevents a stale response from being presented as another
-            # command's result.
+            if response.get("type") == "DISCONNECTED":
+                return {"status": "error", "message": "Client disconnected while waiting for command response."}
+
             if response.get("command") != command:
-                print(
-                    f"Ignoring unexpected response for "
-                    f"{response.get('command')!r}."
-                )
                 continue
 
-            print_response(client_id, command, response)
-            break
+            # Store activity log file if activity log was fetched
+            if command == "GET_ACTIVITY_LOG" and response.get("type") == "RESPONSE":
+                log_data = response.get("data", {})
+                store_activity_log_file(client["mac"], log_data)
 
-    except (ConnectionResetError, BrokenPipeError, OSError):
-        print("Connection with client lost.")
+            return {
+                "status": "ok",
+                "command": command,
+                "data": response.get("data"),
+                "raw": response,
+                "client_id": client_id,
+            }
+
+        return {"status": "error", "message": f"Command '{command}' timed out."}
+    except (ConnectionResetError, BrokenPipeError, OSError) as e:
         remove_client(client["mac"], conn)
+        return {"status": "error", "message": f"Connection lost: {e}"}
+
+
+def send_command(client_id, command, args=None):
+    res = execute_client_command(client_id, command, args, timeout=15.0)
+    if res.get("status") == "ok":
+        print_response(client_id, command, res.get("raw", {}))
+    else:
+        print(f"Command failed: {res.get('message')}")
 
 
 # ============================================================

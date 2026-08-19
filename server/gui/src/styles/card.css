@@ -1,0 +1,89 @@
+/* ============================================================
+   Card component
+   ============================================================ */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ── Metric card ──────────────────────────────────────────── */
+.metric-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-5) var(--space-6);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  transition: box-shadow var(--transition);
+}
+
+.metric-card:hover {
+  box-shadow: var(--shadow);
+}
+
+.metric-card__label {
+  font-size: var(--font-xs);
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.metric-card__value {
+  font-size: var(--font-2xl);
+  font-weight: 600;
+  line-height: var(--lh-2xl);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-card__value--success { color: var(--success); }
+.metric-card__value--warning { color: var(--warning); }
+.metric-card__value--danger  { color: var(--danger); }
+.metric-card__value--info    { color: var(--info); }
+
+.metric-card__context {
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* ── Section card ─────────────────────────────────────────── */
+.section-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.section-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.section-card__title {
+  font-size: var(--font-base);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.section-card__body {
+  padding: var(--space-5);
+}
+
+.section-card__body--flush {
+  padding: 0;
+}

@@ -109,6 +109,15 @@ def start_server():
         daemon=True
     ).start()
 
+    # Start REST API server for GUI in background
+    try:
+        from api_server import run_api_server, API_HOST, API_PORT
+        api_httpd = run_api_server(API_HOST, API_PORT)
+        threading.Thread(target=api_httpd.serve_forever, daemon=True).start()
+        print(f"REST API server running on http://{API_HOST}:{API_PORT}/api/v1")
+    except Exception as e:
+        print(f"Note: REST API server could not bind to port: {e}")
+
     # Keep terminal interaction in main thread
     server_menu()
 

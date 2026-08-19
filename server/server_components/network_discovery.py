@@ -15,7 +15,7 @@ import subprocess
 import xml.etree.ElementTree as element_tree
 from datetime import datetime, timezone
 
-from server_components.network_scan_storage import store_network_scan
+from server_components.network_scan_storage import load_latest_network_scan, store_network_scan
 from server_components.network_device_classification import classify_devices
 from server_components.network_device_storage import (
     get_recent_client_neighbour_observations,
@@ -513,7 +513,31 @@ def discover_devices(
     )
 
 
-def merge_discovery_sources(server_devices, client_observations, *, observed_at=None):
+def _merge_missing_device_details(target, candidate):
+    """Fill absent device details without replacing a direct observation."""
+    for field in (
+        "hostname",
+        "vendor",
+        "os_name",
+        "os_family",
+        "os_confidence",
+        "classification",
+        "is_managed",
+        "managed_client",
+    ):
+        if target.get(field) is None and candidate.get(field) is not None:
+            target[field] = candidate[field]
+
+
+def _append_observation_sources(target, sources):
+    for source in sources:
+        if isinstance(source, dict) and source not in target["observation_sources"]:
+            target["observation_sources"].append(source)
+
+
+def merge_discovery_sources(
+    server_devices, client_observations, *, previous_devices=None, observed_at=None
+):
     """Aggregate server ARP and fresh client ARP observations by MAC address.
 
     The server's direct ARP response is the preferred current IP when both
@@ -523,20 +547,47 @@ def merge_discovery_sources(server_devices, client_observations, *, observed_at=
     observed_at = observed_at or datetime.now(timezone.utc).isoformat()
     devices_by_mac = {}
 
-    for device in server_devices:
+    # Retain the prior aggregate so a report-only merge cannot hide devices
+    # discovered by the immediately preceding ARP scan.
+    for device in previous_devices or []:
         mac_address = _normalise_mac_address(device.get("mac_address"))
         if not mac_address:
             continue
         merged_device = dict(device)
         merged_device["mac_address"] = mac_address
-        merged_device["observation_sources"] = [
-            {
-                "source_type": "SERVER_SCAN",
-                "ip_address": merged_device.get("ip_address"),
-                "observed_at": observed_at,
-            }
-        ]
-        devices_by_mac[mac_address] = merged_device
+        merged_device["observation_sources"] = []
+        _append_observation_sources(
+            merged_device,
+            device.get("observation_sources")
+            or [{"source_type": "PREVIOUS_SCAN", "observed_at": observed_at}],
+        )
+        existing = devices_by_mac.get(mac_address)
+        if existing is None:
+            devices_by_mac[mac_address] = merged_device
+        else:
+            _merge_missing_device_details(existing, merged_device)
+            _append_observation_sources(existing, merged_device["observation_sources"])
+
+    for device in server_devices:
+        mac_address = _normalise_mac_address(device.get("mac_address"))
+        if not mac_address:
+            continue
+        source = {
+            "source_type": "SERVER_SCAN",
+            "ip_address": device.get("ip_address"),
+            "observed_at": observed_at,
+        }
+        merged_device = devices_by_mac.get(mac_address)
+        if merged_device is None:
+            merged_device = dict(device)
+            merged_device["mac_address"] = mac_address
+            merged_device["observation_sources"] = []
+            devices_by_mac[mac_address] = merged_device
+        else:
+            # A direct ARP response is the newest authoritative IP address.
+            merged_device["ip_address"] = device.get("ip_address")
+            _merge_missing_device_details(merged_device, device)
+        _append_observation_sources(merged_device, [source])
 
     for observation in client_observations:
         mac_address = _normalise_mac_address(observation.get("mac_address"))
@@ -568,13 +619,16 @@ def merge_discovery_sources(server_devices, client_observations, *, observed_at=
             }
             devices_by_mac[mac_address] = merged_device
         else:
+            if not merged_device.get("ip_address") and observation.get("ip_address"):
+                merged_device["ip_address"] = observation["ip_address"]
             if not merged_device.get("hostname") and observation.get("hostname"):
                 merged_device["hostname"] = observation["hostname"]
             if not merged_device.get("vendor") and observation.get("vendor"):
                 merged_device["vendor"] = observation["vendor"]
-        merged_device["observation_sources"].append(source)
+        _append_observation_sources(merged_device, [source])
 
     return list(devices_by_mac.values())
+
 
 
 def run_manual_scan():
@@ -601,13 +655,17 @@ def run_manual_scan():
         LOGGER.warning("Could not load recent client ARP observations: %s", error)
         client_observations = []
 
+    previous_scan = load_latest_network_scan()
+    previous_devices = previous_scan.get("devices", []) if previous_scan else []
     discovered_devices = merge_discovery_sources(
         [],
         client_observations,
+        previous_devices=previous_devices,
         observed_at=scan_started_at.isoformat(),
     )
     LOGGER.info(
-        "Client discovery reports merged: %d observation(s), %d unique device(s).",
+        "Client discovery reports merged with %d previous device(s): %d observation(s), %d unique device(s).",
+        len(previous_devices),
         len(client_observations),
         len(discovered_devices),
     )
@@ -617,3 +675,64 @@ def run_manual_scan():
     result_path = store_network_scan(context, devices)
     LOGGER.info("Network scan result saved to %s", result_path)
     return context, devices, result_path
+
+
+def run_active_scan():
+    """Run a real server-side ARP scan, merge with client reports, classify, and persist.
+
+    Unlike run_manual_scan(), this function actively discovers devices on the
+    local network using ARP (requires root/sudo) and enriches them with
+    hostnames and vendor information.  Client-observed devices are then merged
+    on top so that client-only devices are not lost.
+    """
+    LOGGER.info("Active server ARP scan started.")
+    scan_started_at = datetime.now(timezone.utc)
+
+    # 1. Active ARP discovery from the server
+    try:
+        server_devices = discover_devices()
+    except Exception as error:
+        LOGGER.warning("Server ARP discovery failed, proceeding with empty server list: %s", error)
+        server_devices = []
+
+    # 2. Merge with recent client neighbour observations
+    try:
+        client_observations = get_recent_client_neighbour_observations(
+            now=scan_started_at.replace(tzinfo=None)
+        )
+    except Exception as error:
+        LOGGER.warning("Could not load recent client ARP observations: %s", error)
+        client_observations = []
+
+    previous_scan = load_latest_network_scan()
+    previous_devices = previous_scan.get("devices", []) if previous_scan else []
+    merged = merge_discovery_sources(
+        server_devices,
+        client_observations,
+        previous_devices=previous_devices,
+        observed_at=scan_started_at.isoformat(),
+    )
+    LOGGER.info(
+        "Active scan merged: %d previous device(s) + %d server device(s) + %d client observation(s) = %d unique device(s).",
+        len(previous_devices),
+        len(server_devices),
+        len(client_observations),
+        len(merged),
+    )
+
+    # 3. Classify (managed vs unmanaged) and persist
+    classified_devices = classify_devices(merged)
+    context = {
+        "interface": "server-arp",
+        "scan_type": "ACTIVE",
+        "local_ip": None,
+        "network": "auto-detected",
+        "gateway": None,
+    }
+    result_path = store_network_scan(context, classified_devices)
+    LOGGER.info(
+        "Active scan completed: %d devices found. Saved to %s",
+        len(classified_devices),
+        result_path,
+    )
+    return context, classified_devices, result_path
