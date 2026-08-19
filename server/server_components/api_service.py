@@ -398,32 +398,43 @@ def get_client_detail(client_id: str) -> Optional[Dict[str, Any]]:
 # ============================================================
 
 def get_latest_scan() -> Optional[Dict[str, Any]]:
-    """Read the latest standalone network scan JSON file from disk."""
+    """Read the latest completed network scan JSON file from disk."""
     scan_dir = NETWORK_SCAN_STORAGE_DIR
     if not scan_dir.is_dir():
-        return None
+        try:
+            scan_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            return None
 
     json_files = sorted(
-        [p for p in scan_dir.glob("*.json") if not p.name.startswith("network_scan_")],
+        list(scan_dir.glob("*.json")),
         key=lambda p: p.stat().st_mtime,
         reverse=True,
     )
 
     if not json_files:
-        return None
+        try:
+            from server_components.network_discovery import run_manual_scan
+            _, _, scan_path = run_manual_scan()
+            return _parse_scan_file(Path(scan_path))
+        except Exception:
+            return None
 
-    latest_file = json_files[0]
-    return _parse_scan_file(latest_file)
+    for scan_file in json_files:
+        parsed = _parse_scan_file(scan_file)
+        if parsed is not None:
+            return parsed
+    return None
 
 
 def list_scans(from_date: Optional[str] = None, to_date: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
-    """List historical standalone network scans."""
+    """List historical completed scans, with at most one new file per day."""
     scan_dir = NETWORK_SCAN_STORAGE_DIR
     if not scan_dir.is_dir():
         return []
 
     json_files = sorted(
-        [p for p in scan_dir.glob("*.json") if not p.name.startswith("network_scan_")],
+        list(scan_dir.glob("*.json")),
         key=lambda p: p.stat().st_mtime,
         reverse=True,
     )
@@ -434,6 +445,8 @@ def list_scans(from_date: Optional[str] = None, to_date: Optional[str] = None, l
             with open(p, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 completed_at = data.get("completed_at", "")
+                if not isinstance(data.get("devices"), list) or not completed_at:
+                    continue
                 if from_date and completed_at < from_date:
                     continue
                 if to_date and completed_at > (to_date + "T23:59:59"):
@@ -538,6 +551,34 @@ def get_network_device_detail(mac_address: str) -> Optional[Dict[str, Any]]:
         client_row = cursor.fetchone()
         is_managed = client_row is not None
 
+        # Observations
+        cursor.execute(
+            """
+            SELECT o.source_type, o.ip_address, o.interface_name, o.entry_type, o.observed_at,
+                   c.client_id as source_client_id
+            FROM network_device_observations o
+            LEFT JOIN clients c ON o.source_client_id = c.id
+            WHERE o.device_id = %s
+            ORDER BY o.observed_at DESC
+            LIMIT 50
+            """,
+            (dev_row["id"],),
+        )
+        raw_rows = cursor.fetchall()
+        observations = [
+            {
+                "source_type": row["source_type"],
+                "source_client_id": row["source_client_id"],
+                "ip_address": row["ip_address"],
+                "interface": row["interface_name"],
+                "entry_type": row["entry_type"],
+                "observed_at": _iso_utc(row["observed_at"]),
+            }
+            for row in raw_rows
+        ]
+
+        distinct_sources = list(dict.fromkeys(row["source_type"] for row in raw_rows)) or ["CLIENT_ARP"]
+
         device_obj = {
             "mac_address": norm_mac,
             "ip_address": dev_row["ip_address"],
@@ -552,38 +593,17 @@ def get_network_device_detail(mac_address: str) -> Optional[Dict[str, Any]]:
             "is_managed": is_managed,
             "managed_client_id": client_row["client_id"] if is_managed else None,
             "last_observed_at": _iso_utc(dev_row["last_seen"]),
-            "sources": ["CLIENT_ARP"],
+            "sources": distinct_sources,
         }
 
-        # Observations
-        cursor.execute(
-            """
-            SELECT o.source_type, o.ip_address, o.interface_name, o.entry_type, o.observed_at,
-                   c.client_id as source_client_id
-            FROM network_device_observations o
-            LEFT JOIN clients c ON o.source_client_id = c.id
-            WHERE o.device_id = %s
-            ORDER BY o.observed_at DESC
-            LIMIT 50
-            """,
-            (dev_row["id"],),
-        )
-        observations = [
-            {
-                "source_type": row["source_type"],
-                "source_client_id": row["source_client_id"],
-                "ip_address": row["ip_address"],
-                "interface": row["interface_name"],
-                "entry_type": row["entry_type"],
-                "observed_at": _iso_utc(row["observed_at"]),
-            }
-            for row in cursor.fetchall()
+        dhcp_observations = [
+            obs for obs in observations if obs["source_type"] == "CLIENT_DHCP"
         ]
 
         return {
             "device": device_obj,
             "observations": observations,
-            "dhcp_observations": [],
+            "dhcp_observations": dhcp_observations,
         }
     finally:
         conn.close()

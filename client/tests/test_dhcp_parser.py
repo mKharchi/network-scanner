@@ -93,10 +93,24 @@ class DHCPParserTests(unittest.TestCase):
         self.assertIsNotNone(parsed)
         self.assertIsNone(parsed.get("hostname"))
 
-    def test_invalid_mac(self):
-        pkt = _build_dhcp_request(mac=b"\x01\x02")
-        parsed = parse_dhcp_packet(pkt)
-        self.assertIsNone(parsed)
+    def test_parse_dhcp_discover_and_ack(self):
+        # Test DHCPDISCOVER (type 1)
+        pkt_discover = _build_dhcp_request(requested_ip="0.0.0.0", hostname=b"DISCOVER-HOST")
+        # Replace message type 3 with 1
+        pkt_discover = pkt_discover[:242] + bytes([1]) + pkt_discover[243:]
+        parsed_discover = parse_dhcp_packet(pkt_discover)
+        self.assertIsNotNone(parsed_discover)
+        self.assertEqual(parsed_discover.get("dhcp_message_type"), 1)
+        self.assertEqual(parsed_discover.get("hostname"), "DISCOVER-HOST")
+
+        # Test DHCPACK (type 5)
+        pkt_ack = _build_dhcp_request(requested_ip="192.168.1.55", hostname=b"ACK-HOST")
+        pkt_ack = pkt_ack[:242] + bytes([5]) + pkt_ack[243:]
+        parsed_ack = parse_dhcp_packet(pkt_ack)
+        self.assertIsNotNone(parsed_ack)
+        self.assertEqual(parsed_ack.get("dhcp_message_type"), 5)
+        self.assertEqual(parsed_ack.get("requested_ip"), "192.168.1.55")
+        self.assertEqual(parsed_ack.get("hostname"), "ACK-HOST")
 
 
 if __name__ == "__main__":

@@ -142,9 +142,15 @@ class DHCPListener:
 
     def _handle_payload(self, payload: bytes):
         parsed = parse_dhcp_packet(payload)
-        if not parsed or parsed.get("dhcp_message_type") != DHCP_REQUEST:
+        if not parsed or not parsed.get("mac_address"):
             return
-        LOG.info("[DHCP] Request observed: %s", parsed["mac_address"])
+        # Accept valid DHCP message types that convey device presence:
+        # 1=DISCOVER, 2=OFFER, 3=REQUEST, 5=ACK, 8=INFORM (or any non-empty DHCP packet with valid MAC)
+        msg_type = parsed.get("dhcp_message_type")
+        if msg_type is not None and msg_type not in (1, 2, 3, 5, 8):
+            return
+        LOG.info("[DHCP] Packet observed: %s (Type %s, IP: %s, Hostname: %s)",
+                 parsed["mac_address"], msg_type, parsed.get("requested_ip"), parsed.get("hostname"))
         try:
             self.on_observation(parsed)
         except Exception:
@@ -175,16 +181,16 @@ class DHCPListener:
         try:
             from scapy.all import sniff  # type: ignore
         except ImportError:
-            LOG.warning("[DHCP] Scapy is not installed; packet capture is unavailable")
+            print("[DHCP] Scapy is not installed; packet capture is unavailable", flush=True)
             return False
 
         sniff_kwargs = {"prn": self._handle_scapy_packet, "store": False, "timeout": 1}
         if self.interface:
             sniff_kwargs["iface"] = self.interface
         try:
-            LOG.info(
-                "[DHCP] Capturing DHCP traffic on %s",
-                self.interface or "the default interface",
+            print(
+                f"[DHCP] Capturing DHCP traffic on {self.interface or 'default interface'}...",
+                flush=True,
             )
             while not self._stop.is_set():
                 sniff(filter=DHCP_BPF_FILTER, **sniff_kwargs)
@@ -192,19 +198,15 @@ class DHCPListener:
         except Exception as error:
             # Some Scapy installations do not have libpcap for BPF filters.
             # Retrying without BPF keeps real packet capture available.
-            LOG.warning("[DHCP] BPF capture unavailable: %s", error)
             try:
                 while not self._stop.is_set():
                     sniff(lfilter=self._is_dhcp_packet, **sniff_kwargs)
                 return True
             except Exception as fallback_error:
-                # Npcap/libpcap availability is a normal deployment concern,
-                # particularly on Windows. Do not flood the client console
-                # with a traceback while the limited UDP fallback is tried.
-                LOG.warning(
-                    "[DHCP] Packet capture unavailable: %s. "
-                    "Install Npcap (Windows) or grant packet-capture permission.",
-                    fallback_error,
+                print(
+                    f"[DHCP] Packet capture unavailable ({fallback_error}). "
+                    "Running with root/sudo or installing Npcap is recommended for live packet capture.",
+                    flush=True,
                 )
                 return False
 
@@ -217,10 +219,10 @@ class DHCPListener:
             sock.settimeout(0.5)
             sock.bind(("", 68))
         except OSError as error:
-            LOG.warning("[DHCP] UDP fallback unavailable: %s", error)
+            print(f"[DHCP] UDP fallback unavailable on port 68: {error}", flush=True)
             return
 
-        LOG.warning("[DHCP] Using limited UDP fallback; peer DHCP broadcasts will not be observed")
+        print("[DHCP] Using UDP socket fallback on port 68...", flush=True)
         try:
             while not self._stop.is_set():
                 try:
@@ -236,4 +238,4 @@ class DHCPListener:
             if not self._capture_with_scapy() and not self._stop.is_set():
                 self._capture_with_udp_socket()
         finally:
-            LOG.info("[DHCP] Listener stopped")
+            print("[DHCP] Listener stopped", flush=True)

@@ -173,6 +173,5 @@ package named `winpcap`.
 - `KILL_PROCESS`: Terminate processes by name.
 - `START_PROCESS`: Launch an executable or command.
 - `PING`: Verify connectivity with the client.
-- `GET_NETWORK_LOG`: Retrieve recent network events (DHCP, Wi-Fi, interfaces).
 - `GET_ACTIVITY_LOG`: Collect browser history, opened files, and recent terminal commands.
 - `DISCONNECT`: Gracefully disconnect the client.

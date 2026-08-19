@@ -3,7 +3,6 @@ import { NavLink } from "react-router-dom";
 import "../styles/shell.css";
 import { useApiState } from "../hooks/useApiState";
 import { TbCloudNetwork } from "react-icons/tb";
-import { IoScan } from "react-icons/io5";
 import { RiScanLine } from "react-icons/ri";
 import { FiPackage } from "react-icons/fi";
 import { MdHistory } from "react-icons/md";

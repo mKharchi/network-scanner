@@ -128,6 +128,12 @@ export function ClientDetailPage() {
         });
         setShowStartModal(false);
         setStartProcessPath('');
+      } else if (command === 'SCAN_NETWORK') {
+        addToast({
+          title: 'Network Scan Started',
+          message: `The ARP scan is running in the background on ${clientId}.`,
+          severity: 'INFO',
+        });
       } else if (command === 'DISCONNECT') {
         addToast({
           title: 'Client Disconnected',
@@ -339,10 +345,14 @@ export function ClientDetailPage() {
             variant="secondary"
             size="sm"
             disabled={!isOnline || commandLoading}
-            onClick={() => executeCommand('GET_NETWORK_LOG')}
+            onClick={() => executeCommand('SCAN_NETWORK')}
+            title="Run an active ARP scan from this client’s local network."
           >
-            📜 Network Log
+            🔎 {commandLoading && activeCommand === 'SCAN_NETWORK'
+              ? 'Scanning…'
+              : 'Scan Local Network'}
           </Button>
+
 
           <Button
             variant="secondary"
@@ -479,14 +489,23 @@ export function ClientDetailPage() {
                   fontSize: 'var(--font-sm)',
                 }}
               />
-              <Button
-                variant="quiet"
-                size="sm"
-                onClick={() => executeCommand('GET_PROCESSES')}
-                disabled={commandLoading}
-              >
-                🔄 Refresh Processes
-              </Button>
+              <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                <Button
+                  variant="quiet"
+                  size="sm"
+                  onClick={() => executeCommand('GET_PROCESSES')}
+                  disabled={commandLoading}
+                >
+                  🔄 Refresh Processes
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setProcessList(null)}
+                >
+                  ✕ Close Processes
+                </Button>
+              </div>
             </div>
 
             <div style={{ overflowX: 'auto', maxHeight: '420px', overflowY: 'auto' }}>

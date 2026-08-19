@@ -200,6 +200,37 @@
 * **Description:** Returns full device list and metadata for a specific scan ID.
 * **Success Response (200 OK):** Same structure as `/scans/latest`.
 
+#### `POST /api/v1/network/scans/global-active`
+* **Description:** Starts a server-managed active ARP scan across the clients that are online at request time. The response does not wait for ARP results.
+* **Success Response (202 Accepted):**
+  ```json
+  {
+    "data": {
+      "id": "global-20260819143000-a1b2c3d4",
+      "status": "started",
+      "total_clients": 25,
+      "max_concurrent_clients": 5,
+      "started": 0,
+      "completed": 0,
+      "failed": 0,
+      "running": 0,
+      "pending": 25,
+      "devices_found": 0,
+      "started_at": "2026-08-19T14:30:00Z"
+    },
+    "meta": {}
+  }
+  ```
+* **Already running (200 OK):** Returns the active job with `status` set to `already_running`; no second global scan is created.
+* **Configuration:** `GLOBAL_NETWORK_SCAN_MAX_CONCURRENT_CLIENTS` (default `5`), `GLOBAL_NETWORK_SCAN_COMMAND_TIMEOUT` (default `10` seconds), and `GLOBAL_NETWORK_SCAN_TIMEOUT` (default `120` seconds).
+
+#### `GET /api/v1/network/scans/global-active/{scan_id}`
+* **Description:** Returns progress for a global client scan, including `pending`, `running`, `completed`, `failed`, `skipped`, and MAC-deduplicated `devices_found` counters.
+* **Success Response (200 OK):** Same job structure returned by `POST /network/scans/global-active`, with `updated_at` and `finished_at` fields.
+
+#### `GET /api/v1/network/scans/global-active`
+* **Description:** Returns the currently active global client scan. Returns `404 NOT_FOUND` when no job is running.
+
 #### `GET /api/v1/network/devices/{mac_address}`
 * **Description:** Retrieves detailed observation history and DHCP traces for a specific MAC.
 * **Success Response (200 OK):**

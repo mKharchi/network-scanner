@@ -594,7 +594,7 @@ def merge_discovery_sources(
         if not mac_address:
             continue
         source = {
-            "source_type": "CLIENT_ARP",
+            "source_type": observation.get("source_type", "CLIENT_ARP"),
             "source_client_database_id": observation.get("source_client_database_id"),
             "source_client_id": observation.get("source_client_id"),
             "source_client_hostname": observation.get("source_client_hostname"),
@@ -631,7 +631,7 @@ def merge_discovery_sources(
 
 
 
-def run_manual_scan():
+def run_manual_scan(*, context_overrides=None):
     """Aggregate fresh client neighbour reports without scanning from the server.
 
     Server-local ARP discovery, hostname lookup, and OS detection are
@@ -644,6 +644,8 @@ def run_manual_scan():
         "network": "client-reported",
         "gateway": None,
     }
+    if context_overrides:
+        context.update(context_overrides)
     LOGGER.info("Network aggregation started from client neighbour reports.")
     scan_started_at = datetime.now(timezone.utc)
 
@@ -736,3 +738,18 @@ def run_active_scan():
         result_path,
     )
     return context, classified_devices, result_path
+
+
+def run_global_active_scan():
+    """Start a non-blocking, bounded client-based active scan job.
+
+    The job reserves no more than the configured number of client scan slots
+    at a time.  Slots are released only by a correlated report or scan timeout,
+    rather than by the quick command acknowledgement.
+    """
+    from server_components import server_lib
+    from server_components.global_network_scan import global_network_scan_manager
+
+    with server_lib.clients_lock:
+        online_clients = list(server_lib.clients.values())
+    return global_network_scan_manager.start(online_clients)

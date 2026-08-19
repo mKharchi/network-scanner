@@ -6,6 +6,8 @@ Run from the repository root:
 
 import json
 import sys
+import threading
+import time
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
@@ -266,6 +268,44 @@ class NetworkDiscoveryTests(unittest.TestCase):
             ["SERVER_SCAN", "CLIENT_ARP"],
         )
 
+    def test_merge_discovery_sources_enriches_arp_device_with_dhcp_hostname(self):
+        server_devices = [
+            {
+                "ip_address": "172.16.0.102",
+                "mac_address": "E4:FD:45:BA:8B:96",
+                "hostname": None,
+                "vendor": "Dell Inc.",
+                "os_name": None,
+                "os_family": None,
+                "os_confidence": None,
+            }
+        ]
+        client_observations = [
+            {
+                "source_type": "CLIENT_DHCP",
+                "source_client_database_id": 1,
+                "source_client_id": "client-1",
+                "source_client_hostname": "agent-host",
+                "ip_address": "172.16.0.102",
+                "mac_address": "E4:FD:45:BA:8B:96",
+                "entry_type": "dynamic",
+                "interface": None,
+                "hostname": "DESKTOP-DJP05CM",
+                "vendor": "Dell Inc.",
+                "observed_at": "2026-08-19T10:00:00+00:00",
+            }
+        ]
+        merged = network_discovery.merge_discovery_sources(
+            server_devices, client_observations
+        )
+        self.assertEqual(len(merged), 1)
+        self.assertEqual(merged[0]["mac_address"], "E4:FD:45:BA:8B:96")
+        self.assertEqual(merged[0]["hostname"], "DESKTOP-DJP05CM")
+        self.assertEqual(
+            [s["source_type"] for s in merged[0]["observation_sources"]],
+            ["SERVER_SCAN", "CLIENT_DHCP"],
+        )
+
     def test_hostname_normalisation_decodes_avahi_octal_escapes(self):
         self.assertEqual(
             network_discovery._normalise_hostname(r"\040none\041.local"),
@@ -475,7 +515,7 @@ class NetworkDiscoveryTests(unittest.TestCase):
                 },
             )
 
-    def test_store_network_scan_writes_a_timestamped_json_file(self):
+    def test_store_network_scan_updates_one_daily_json_file(self):
         completed_at = datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
         devices = [{"ip_address": "192.168.10.25", "mac_address": "AA:BB:CC:DD:EE:FF"}]
         with TemporaryDirectory() as storage_dir, patch.dict(
@@ -487,13 +527,19 @@ class NetworkDiscoveryTests(unittest.TestCase):
                 devices,
                 completed_at,
             )
+            second_path = network_scan_storage.store_network_scan(
+                {"interface": "wlan0", "network": "192.168.20.0/24"},
+                [],
+                completed_at.replace(hour=13),
+            )
             with open(file_path, encoding="utf-8") as file:
                 stored_scan = json.load(file)
 
-        self.assertTrue(file_path.endswith("2026-08-16_12-00-00_000000.json"))
-        self.assertEqual(stored_scan["devices_found"], 1)
-        self.assertEqual(stored_scan["devices"], devices)
-        self.assertEqual(stored_scan["completed_at"], "2026-08-16T12:00:00+00:00")
+        self.assertEqual(file_path, second_path)
+        self.assertTrue(file_path.endswith("network_scan_2026-08-16.json"))
+        self.assertEqual(stored_scan["devices_found"], 0)
+        self.assertEqual(stored_scan["devices"], [])
+        self.assertEqual(stored_scan["completed_at"], "2026-08-16T13:00:00+00:00")
 
     def test_daily_dhcp_log_uses_one_file_and_appends_observations(self):
         observed_at = datetime(2026, 8, 16, 12, 0, tzinfo=timezone.utc)
@@ -526,12 +572,18 @@ class NetworkDiscoveryTests(unittest.TestCase):
                     "11:22:33:44:55:66", neighbours, observed_at
                 )
             )
+            scan_path = network_scan_storage.store_network_scan(
+                {"interface": "eth0", "network": "192.168.10.0/24"},
+                neighbours,
+                observed_at,
+            )
             with open(file_path, encoding="utf-8") as file:
                 daily_log = json.load(file)
 
         self.assertEqual(file_path, second_path)
         self.assertEqual(file_path, snapshot_path)
         self.assertEqual(file_path, duplicate_path)
+        self.assertEqual(file_path, scan_path)
         self.assertTrue(created)
         self.assertFalse(duplicate_created)
         self.assertTrue(file_path.endswith("network_scan_2026-08-16.json"))
@@ -546,6 +598,7 @@ class NetworkDiscoveryTests(unittest.TestCase):
             daily_log["dhcp_observations"][0]["dhcp"],
             {"message_type": 3, "vendor_class": "MSFT 5.0"},
         )
+        self.assertEqual(daily_log["devices"], neighbours)
 
     def test_vendor_lookup_failure_returns_empty_database(self):
         with patch("builtins.open", side_effect=FileNotFoundError):
@@ -553,6 +606,54 @@ class NetworkDiscoveryTests(unittest.TestCase):
                 network_discovery.load_oui_database("/missing/oui.txt"),
                 {},
             )
+
+    def test_global_active_scan_uses_bounded_async_dispatch(self):
+        from server_components import server_lib
+        from server_components.global_network_scan import GlobalNetworkScanManager
+
+        clients = {
+            "AA:AA:AA:AA:AA:AA": {
+                "client_id": "client-a",
+                "mac": "AA:AA:AA:AA:AA:AA",
+            },
+            "BB:BB:BB:BB:BB:BB": {
+                "client_id": "client-b",
+                "mac": "BB:BB:BB:BB:BB:BB",
+            },
+        }
+        responses = {
+            "client-a": {
+                "status": "ok",
+                "data": {"status": "started"},
+            },
+            "client-b": {"status": "ok", "data": {"status": "started"}},
+        }
+
+        with patch.object(server_lib, "clients", clients), patch.object(
+            server_lib, "clients_lock", threading.Lock()
+        ), patch.object(
+            server_lib,
+            "execute_client_command",
+            side_effect=lambda client_id, command, **kwargs: responses[client_id],
+        ) as execute:
+            manager = GlobalNetworkScanManager()
+            result, created = manager.start(list(clients.values()))
+            deadline = time.monotonic() + 1
+            while time.monotonic() < deadline:
+                if execute.call_count == 2:
+                    break
+                time.sleep(0.01)
+            manager.record_report(result["id"], "AA:AA:AA:AA:AA:AA", [])
+            manager.record_report(result["id"], "BB:BB:BB:BB:BB:BB", [])
+
+        self.assertTrue(created)
+        self.assertEqual(result["total_clients"], 2)
+        self.assertEqual(execute.call_count, 2)
+        for call in execute.call_args_list:
+            self.assertEqual(call.args[1], "SCAN_NETWORK")
+            self.assertEqual(call.kwargs["timeout"], 10.0)
+            self.assertFalse(call.kwargs["process_network_scan"])
+            self.assertEqual(call.kwargs["args"]["global_scan_id"], result["id"])
 
 
 if __name__ == "__main__":
