@@ -174,7 +174,7 @@ def get_mdns_hostname(ip_address):
             ["avahi-resolve-address", ip_address],
             capture_output=True,
             text=True,
-            timeout=2,
+            timeout=0.5,
             check=False,
         )
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
@@ -185,13 +185,17 @@ def get_mdns_hostname(ip_address):
     return _normalise_metadata(parts[1]) if len(parts) >= 2 else None
 
 
-def get_hostname(ip_address):
+def get_hostname(ip_address, timeout=0.5):
     """Resolve a neighbour from the reporting client's DNS, then local mDNS."""
+    orig_timeout = socket.getdefaulttimeout()
     try:
+        socket.setdefaulttimeout(timeout)
         hostname, _, _ = socket.gethostbyaddr(ip_address)
         return _normalise_metadata(hostname)
-    except (socket.herror, socket.gaierror, OSError):
+    except (socket.herror, socket.gaierror, socket.timeout, OSError):
         return get_mdns_hostname(ip_address)
+    finally:
+        socket.setdefaulttimeout(orig_timeout)
 
 
 def load_oui_database_linux(path=None):
@@ -329,8 +333,261 @@ def _read_hostname_lookup_limit():
         return DEFAULT_HOSTNAME_LOOKUP_LIMIT
 
 
+def _is_usable_scan_address(value):
+    """Return whether an IPv4 address can identify a LAN worth scanning."""
+    try:
+        address = ipaddress.ip_address(str(value).strip())
+    except (ValueError, AttributeError):
+        return False
+
+    return (
+        address.version == 4
+        and not address.is_loopback
+        and not address.is_link_local
+        and not address.is_multicast
+        and not address.is_unspecified
+        and not address.is_reserved
+    )
+
+
+def _default_route_source_ip():
+    """Return the IPv4 source selected by the operating system's default route."""
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # UDP connect does not transmit traffic; it only asks the OS to select
+        # the local source address for the default route.
+        probe.connect(("8.8.8.8", 80))
+        source_ip = probe.getsockname()[0]
+        return source_ip if _is_usable_scan_address(source_ip) else None
+    except OSError:
+        return None
+    finally:
+        probe.close()
+
+
+def _select_interface_address(
+    addrs_by_iface, *, preferred_ip=None, interface_name=None, interface_stats=None
+):
+    """Choose a usable IPv4 interface, favouring the active default route."""
+    candidates = []
+    for iface_name, addresses in addrs_by_iface.items():
+        if interface_name and iface_name != interface_name:
+            continue
+        for address in addresses:
+            if getattr(address, "family", None) != socket.AF_INET:
+                continue
+            local_ip = getattr(address, "address", None)
+            netmask = getattr(address, "netmask", None)
+            if not _is_usable_scan_address(local_ip) or not netmask:
+                continue
+            try:
+                network = ipaddress.IPv4Network(f"{local_ip}/{netmask}", strict=False)
+            except ValueError:
+                continue
+            stats = (interface_stats or {}).get(iface_name)
+            is_up = bool(getattr(stats, "isup", True))
+            ip_address = ipaddress.ip_address(local_ip)
+            score = (
+                int(local_ip == preferred_ip),
+                int(is_up),
+                int(ip_address.is_private),
+            )
+            candidates.append((score, iface_name, local_ip, network))
+
+    if not candidates:
+        return None
+    _, iface_name, local_ip, network = max(candidates, key=lambda candidate: candidate[0])
+    return iface_name, local_ip, network
+
+
+def get_local_network(command_runner=None):
+    """Determine the active local IPv4 interface, address, and subnet CIDR dynamically."""
+    interface_override = os.getenv("NETWORK_SCAN_INTERFACE")
+    subnet_override = os.getenv("NETWORK_SCAN_SUBNET")
+    command_runner = command_runner or subprocess.run
+
+    interface = interface_override
+    local_ip = None
+    prefix_length = None
+    detected_network = None
+    gateway = None
+
+    if platform.system() == "Linux":
+        try:
+            res = command_runner(
+                ["ip", "-j", "route", "show", "default"],
+                capture_output=True,
+                text=True,
+                timeout=3,
+                check=False,
+            )
+            if res.returncode == 0 and res.stdout:
+                routes = json.loads(res.stdout)
+                default_route = next(
+                    (r for r in routes if isinstance(r, dict) and r.get("dst") == "default" and r.get("dev")),
+                    None,
+                )
+                if default_route:
+                    if not interface:
+                        interface = default_route["dev"]
+                    gateway = default_route.get("gateway")
+        except Exception:
+            pass
+
+        if interface:
+            try:
+                res = command_runner(
+                    ["ip", "-j", "-4", "addr", "show", "dev", interface],
+                    capture_output=True,
+                    text=True,
+                    timeout=3,
+                    check=False,
+                )
+                if res.returncode == 0 and res.stdout:
+                    addrs = json.loads(res.stdout)
+                    interface_data = next((e for e in addrs if isinstance(e, dict)), None)
+                    address_info = interface_data.get("addr_info", []) if interface_data else []
+                    ipv4_address = next(
+                        (
+                            a for a in address_info
+                            if isinstance(a, dict)
+                            and a.get("family") == "inet"
+                            and _is_usable_scan_address(a.get("local"))
+                        ),
+                        None,
+                    )
+                    if ipv4_address:
+                        local_ip = ipv4_address.get("local")
+                        prefix_length = ipv4_address.get("prefixlen")
+                        if local_ip and prefix_length:
+                            detected_network = ipaddress.ip_interface(f"{local_ip}/{prefix_length}").network
+            except Exception:
+                pass
+
+        # A default route can point to a disconnected adapter with only an
+        # APIPA address. Let the cross-platform fallback choose a real LAN
+        # interface instead of scanning 169.254.0.0/16.
+        if not detected_network and not interface_override:
+            interface = None
+
+    # Fallback using psutil / socket if Linux ip command was not used or on other platforms
+    if not detected_network:
+        try:
+            import psutil
+            addrs_by_iface = psutil.net_if_addrs()
+            selected = _select_interface_address(
+                addrs_by_iface,
+                preferred_ip=_default_route_source_ip(),
+                interface_name=interface,
+                interface_stats=psutil.net_if_stats(),
+            )
+            if selected:
+                interface, local_ip, detected_network = selected
+        except Exception:
+            pass
+
+    if subnet_override:
+        try:
+            network = ipaddress.ip_network(subnet_override, strict=False)
+            if network.version != 4:
+                network = detected_network
+        except Exception:
+            network = detected_network
+    else:
+        network = detected_network
+
+    if not interface or not local_ip or not network:
+        return None
+
+    return {
+        "interface": interface,
+        "local_ip": str(local_ip) if local_ip else None,
+        "network": str(network),
+        "gateway": gateway,
+    }
+
+
+def _default_arp_runner(network_cidr, iface, timeout_sec):
+    """Execute Scapy ARP broadcast scan if raw packet capture/send is permitted."""
+    try:
+        from scapy.all import ARP, Ether, srp
+        answered, _ = srp(
+            Ether(dst="ff:ff:ff:ff:ff:ff") / ARP(pdst=network_cidr),
+            iface=iface,
+            timeout=timeout_sec,
+            verbose=False,
+        )
+        return [received for _, received in answered]
+    except (ImportError, PermissionError, OSError):
+        return []
+
+
+def discover_active_arp(context=None, *, command_runner=None, arp_runner=None, timeout_seconds=2.5):
+    """Perform an active ARP scan of the dynamically discovered local subnet."""
+    context = context or get_local_network(command_runner=command_runner)
+    if not context or not context.get("network") or not context.get("interface"):
+        return []
+
+    runner = arp_runner or _default_arp_runner
+    try:
+        responses = runner(context["network"], context["interface"], timeout_seconds)
+    except Exception:
+        return []
+
+    devices = []
+    seen_macs = set()
+    for response in responses or []:
+        try:
+            ip_val = getattr(response, "psrc", None) or (response.get("psrc") if isinstance(response, dict) else None)
+            mac_val = getattr(response, "hwsrc", None) or (response.get("hwsrc") if isinstance(response, dict) else None)
+        except Exception:
+            continue
+
+        neighbour = normalise_neighbour(ip_val, mac_val, "dynamic", context["interface"])
+        if not neighbour:
+            continue
+        if neighbour["mac_address"] in seen_macs:
+            continue
+        seen_macs.add(neighbour["mac_address"])
+        devices.append(neighbour)
+
+    return devices
+
+
+def merge_neighbours_by_mac(passive_neighbours, active_neighbours):
+    """Merge passive kernel neighbour entries and active ARP scan results by MAC address."""
+    by_mac = {}
+
+    for entry in passive_neighbours or []:
+        mac = normalise_mac_address(entry.get("mac_address"))
+        if not mac:
+            continue
+        by_mac[mac] = dict(entry)
+        by_mac[mac]["mac_address"] = mac
+
+    for entry in active_neighbours or []:
+        mac = normalise_mac_address(entry.get("mac_address"))
+        if not mac:
+            continue
+        existing = by_mac.get(mac)
+        if existing is None:
+            by_mac[mac] = dict(entry)
+            by_mac[mac]["mac_address"] = mac
+        else:
+            if entry.get("ip_address"):
+                existing["ip_address"] = entry["ip_address"]
+            if entry.get("interface") and not existing.get("interface"):
+                existing["interface"] = entry["interface"]
+            if entry.get("hostname") and not existing.get("hostname"):
+                existing["hostname"] = entry["hostname"]
+            if entry.get("vendor") and not existing.get("vendor"):
+                existing["vendor"] = entry["vendor"]
+
+    return list(by_mac.values())
+
+
 class NetworkNeighbourCollector:
-    """Collect the local ARP/neighbour cache for the current client platform."""
+    """Collect the local ARP/neighbour cache and active ARP scan for the client platform."""
 
     def __init__(
         self,
@@ -338,11 +595,13 @@ class NetworkNeighbourCollector:
         command_runner=None,
         hostname_resolver=None,
         vendor_resolver=None,
+        arp_runner=None,
     ):
         self.system_name = system_name or platform.system()
         self.command_runner = command_runner or self._run_command
         self.hostname_resolver = hostname_resolver or get_hostname
         self.vendor_resolver = vendor_resolver
+        self.arp_runner = arp_runner
 
     @staticmethod
     def _run_command(command):
@@ -354,8 +613,8 @@ class NetworkNeighbourCollector:
             check=False,
         )
 
-    def collect(self, *, enrich=False):
-        """Return normalized entries, optionally enriched on this client."""
+    def collect(self, *, enrich=False, active_scan=False):
+        """Return normalized entries, optionally merging active ARP scan and enriching."""
         neighbours = []
         try:
             if self.system_name == "Linux":
@@ -376,7 +635,18 @@ class NetworkNeighbourCollector:
                     parse_arp_output(result.stdout) if result.returncode == 0 else []
                 )
         except (OSError, subprocess.TimeoutExpired, AttributeError):
-            return []
+            neighbours = []
+
+        if active_scan:
+            try:
+                active_entries = discover_active_arp(
+                    command_runner=self.command_runner,
+                    arp_runner=self.arp_runner,
+                )
+                neighbours = merge_neighbours_by_mac(neighbours, active_entries)
+            except Exception:
+                pass
+
         return self.enrich(neighbours) if enrich else neighbours
 
     def enrich(self, neighbours):

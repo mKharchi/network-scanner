@@ -247,15 +247,38 @@ class ApiEndpointsTestCase(unittest.TestCase):
             self.assertTrue(first_line.startswith(":") or first_line.startswith("event:"))
 
     # 11. Client commands POST
-    @patch("server_components.server_lib.send_command")
-    def test_post_client_command(self, mock_send):
+    @patch("server_components.server_lib.execute_client_command")
+    def test_post_client_command(self, mock_exec):
+        mock_exec.return_value = {"status": "ok", "command": "GET_PROCESSES", "data": []}
         url = f"{self.base_url}/api/v1/clients/client-123/commands"
         payload = json.dumps({"command": "GET_PROCESSES"}).encode("utf-8")
         req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
         with urllib.request.urlopen(req) as resp:
+            self.assertEqual(resp.status, 200)
+            body = json.loads(resp.read().decode("utf-8"))
+            self.assertEqual(body["data"]["status"], "ok")
+
+    @patch("server_components.network_discovery.run_global_active_scan")
+    def test_post_global_active_scan(self, mock_global_scan):
+        mock_global_scan.return_value = (
+            {
+                "id": "global-test",
+                "status": "pending",
+                "total_clients": 2,
+                "max_concurrent_clients": 5,
+            },
+            True,
+        )
+        url = f"{self.base_url}/api/v1/network/scans/global-active"
+        req = urllib.request.Request(url, data=b"{}", method="POST")
+
+        with urllib.request.urlopen(req) as resp:
             self.assertEqual(resp.status, 202)
             body = json.loads(resp.read().decode("utf-8"))
-            self.assertEqual(body["data"]["status"], "accepted")
+
+        self.assertEqual(body["data"]["status"], "started")
+        self.assertEqual(body["data"]["id"], "global-test")
+        self.assertEqual(body["data"]["total_clients"], 2)
 
 
 if __name__ == "__main__":

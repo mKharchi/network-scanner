@@ -15,7 +15,7 @@ except ImportError:
 LOGGER = logging.getLogger(__name__)
 MAC_ADDRESS_PATTERN = re.compile(r"^[0-9A-F]{2}(?::[0-9A-F]{2}){5}$")
 MAX_NEIGHBOURS_PER_REPORT = 1024
-DEFAULT_CLIENT_OBSERVATION_MAX_AGE_SECONDS = 3600
+DEFAULT_CLIENT_OBSERVATION_MAX_AGE_SECONDS = 604800
 
 
 def _normalise_mac_address(value):
@@ -79,21 +79,24 @@ def validate_neighbour_report(payload):
             or entry_type not in {"dynamic", "static"}
         ):
             continue
-        validated.append(
-            {
-                "ip_address": str(ip_address),
-                "mac_address": mac_address,
-                "entry_type": entry_type,
-                "interface": (
-                    neighbour["interface"].strip()
-                    if isinstance(neighbour.get("interface"), str)
-                    and neighbour["interface"].strip()
-                    else None
-                ),
-                "hostname": _normalise_metadata(neighbour.get("hostname")),
-                "vendor": _normalise_metadata(neighbour.get("vendor")),
-            }
-        )
+        record = {
+            "ip_address": str(ip_address),
+            "mac_address": mac_address,
+            "entry_type": entry_type,
+            "interface": (
+                neighbour["interface"].strip()
+                if isinstance(neighbour.get("interface"), str)
+                and neighbour["interface"].strip()
+                else None
+            ),
+        }
+        hostname = _normalise_metadata(neighbour.get("hostname"))
+        if hostname:
+            record["hostname"] = hostname
+        vendor = _normalise_metadata(neighbour.get("vendor"))
+        if vendor:
+            record["vendor"] = vendor
+        validated.append(record)
     return validated
 
 
@@ -188,6 +191,22 @@ def store_client_neighbour_observations(reporter_mac, neighbours, *, observed_at
     )
     LOGGER.info(
         "Stored %d client ARP observation(s) from reporting client %s.",
+        stored,
+        reporter_mac,
+    )
+    return stored
+
+
+def store_client_dhcp_observations(reporter_mac, neighbours, *, observed_at=None):
+    """Upsert devices and append immutable observations from one client DHCP report."""
+    reporter_mac = _normalise_mac_address(reporter_mac)
+    if not reporter_mac:
+        raise ValueError("reporting client MAC is invalid")
+    stored = _store_observations(
+        reporter_mac, neighbours, "CLIENT_DHCP", observed_at=observed_at
+    )
+    LOGGER.info(
+        "Stored %d client DHCP observation(s) from reporting client %s.",
         stored,
         reporter_mac,
     )
@@ -293,6 +312,7 @@ def get_recent_client_neighbour_observations(*, now=None, max_age_seconds=None):
                 device.mac_address,
                 device.hostname,
                 device.vendor,
+                observation.source_type,
                 observation.ip_address,
                 observation.interface_name,
                 observation.entry_type,
@@ -302,8 +322,8 @@ def get_recent_client_neighbour_observations(*, now=None, max_age_seconds=None):
                 client.hostname AS source_client_hostname
             FROM network_device_observations AS observation
             INNER JOIN network_devices AS device ON device.id = observation.device_id
-            INNER JOIN clients AS client ON client.id = observation.source_client_id
-            WHERE observation.source_type = 'CLIENT_ARP'
+            LEFT JOIN clients AS client ON client.id = observation.source_client_id
+            WHERE observation.source_type IN ('CLIENT_ARP', 'CLIENT_DHCP')
               AND observation.observed_at >= %s
             ORDER BY observation.observed_at DESC
             """,
@@ -314,16 +334,17 @@ def get_recent_client_neighbour_observations(*, now=None, max_age_seconds=None):
         seen_sources = set()
         for row in cursor.fetchall():
             mac_address = _normalise_mac_address(row.get("mac_address"))
-            source_client_id = row.get("source_client_id")
-            if not mac_address or not source_client_id:
+            if not mac_address:
                 continue
-            key = (mac_address, source_client_id)
+            source_client_id = row.get("source_client_id")
+            key = (mac_address, source_client_id or "DIRECT", row.get("source_type", "CLIENT"))
             if key in seen_sources:
                 continue
             seen_sources.add(key)
             observed_at = row.get("observed_at")
             observations.append(
                 {
+                    "source_type": row.get("source_type", "CLIENT_ARP"),
                     "ip_address": row.get("ip_address"),
                     "mac_address": mac_address,
                     "hostname": _normalise_metadata(row.get("hostname")),
@@ -340,7 +361,7 @@ def get_recent_client_neighbour_observations(*, now=None, max_age_seconds=None):
                     "source_client_hostname": row.get("source_client_hostname"),
                 }
             )
-        LOGGER.info("Loaded %d recent client ARP observation(s).", len(observations))
+        LOGGER.info("Loaded %d recent client ARP/DHCP observation(s).", len(observations))
         return observations
     finally:
         if cursor:

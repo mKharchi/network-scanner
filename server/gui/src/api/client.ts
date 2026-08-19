@@ -126,6 +126,24 @@ export interface NetworkDevice {
   sources: string[];
 }
 
+export interface GlobalNetworkScan {
+  id: string;
+  status: "started" | "already_running" | "pending" | "running" | "completed" | "partial";
+  total_clients: number;
+  clients_dispatched: number;
+  started: number;
+  completed: number;
+  failed: number;
+  skipped: number;
+  running: number;
+  pending: number;
+  devices_found: number;
+  started_at: string;
+  updated_at: string;
+  finished_at: string | null;
+  max_concurrent_clients: number;
+}
+
 export interface Alert {
   id: number;
   client: { id: string; hostname: string } | null;
@@ -428,4 +446,31 @@ export const api = {
       }
       return (await resp.json()).data;
     })(),
+
+  triggerGlobalActiveScan: () =>
+    (async () => {
+      const baseWithApi = API_ORIGIN.replace(/\/+$/, "") + BASE;
+      const url = baseWithApi + "/network/scans/global-active";
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+      });
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => null);
+        const code = body?.error?.code ?? "UNKNOWN_ERROR";
+        const message = body?.error?.message ?? `HTTP ${resp.status}`;
+        throw new ApiError(code, message, resp.status);
+      }
+      return (await resp.json()).data as GlobalNetworkScan;
+    })(),
+
+  getGlobalActiveScan: (scanId?: string) =>
+    get<GlobalNetworkScan>(
+      scanId
+        ? `/network/scans/global-active/${encodeURIComponent(scanId)}`
+        : "/network/scans/global-active",
+    ),
 };

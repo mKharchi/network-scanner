@@ -9,6 +9,7 @@ import types
 import unittest
 from datetime import datetime
 from pathlib import Path
+from unittest.mock import patch
 
 
 SERVER_DIRECTORY = Path(__file__).resolve().parents[1]
@@ -228,6 +229,34 @@ class NetworkDeviceStorageTests(unittest.TestCase):
         )
         self.assertTrue(accepted)
 
+    def test_handler_merges_active_scan_report(self):
+        from server_components import event_broadcaster, network_discovery
+
+        neighbours = [{"mac_address": "12:22:33:44:55:66"}]
+        stored = []
+        with patch.object(
+            network_discovery,
+            "run_manual_scan",
+            return_value=({}, neighbours, "/tmp/network_scan_active.json"),
+        ) as merge, patch.object(
+            event_broadcaster, "broadcast_network_update"
+        ) as broadcast:
+            accepted = server_lib.handle_network_neighbour_report(
+                "AA:BB:CC:DD:EE:FF",
+                {"observation_source": "ACTIVE_NEIGHBOUR_SCAN"},
+                report_validator=lambda _: neighbours,
+                observation_storer=lambda reporter_mac, rows: (
+                    stored.append((reporter_mac, rows)) or len(rows)
+                ),
+            )
+
+        self.assertTrue(accepted)
+        self.assertEqual(stored, [("AA:BB:CC:DD:EE:FF", neighbours)])
+        merge.assert_called_once_with(
+            context_overrides={"scan_type": "CLIENT_ACTIVE"}
+        )
+        broadcast.assert_called_once_with("network_scan_active", 1)
+
     def test_daily_scan_reference_is_upserted(self):
         connection = FakeConnection()
         original_get_connection = network_device_storage.get_connection
@@ -303,6 +332,38 @@ class NetworkDeviceStorageTests(unittest.TestCase):
         self.assertEqual(len(observations), 1)
         self.assertEqual(observations[0]["ip_address"], "172.16.0.102")
         self.assertEqual(observations[0]["source_client_id"], "client-reporter-a")
+
+    def test_store_client_dhcp_observations_persists_client_dhcp_source(self):
+        connection = FakeConnection()
+        original_get_connection = network_device_storage.get_connection
+        network_device_storage.get_connection = lambda: connection
+        try:
+            stored = network_device_storage.store_client_dhcp_observations(
+                "AA:BB:CC:DD:EE:FF",
+                [
+                    {
+                        "ip_address": "172.16.0.102",
+                        "mac_address": "E4:FD:45:BA:8B:96",
+                        "entry_type": "dynamic",
+                        "hostname": "DESKTOP-DJP05CM",
+                        "vendor": "Dell Inc.",
+                    }
+                ],
+                observed_at=datetime(2026, 8, 17, 10, 0, 0),
+            )
+        finally:
+            network_device_storage.get_connection = original_get_connection
+
+        self.assertEqual(stored, 1)
+        self.assertTrue(connection.committed)
+        observation = next(
+            params
+            for query, params in connection.cursor_instance.executed
+            if "INSERT INTO network_device_observations" in query
+        )
+        self.assertEqual(observation[:3], (13, "CLIENT_DHCP", 7))
+        self.assertEqual(observation[3], "172.16.0.102")
+        self.assertEqual(observation[5:7], ("dynamic", datetime(2026, 8, 17, 10, 0, 0)))
 
 
 if __name__ == "__main__":

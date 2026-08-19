@@ -42,13 +42,18 @@ def _run_dhcp_observation_writer():
             # Notify the frontend over SSE so the DHCP page updates live
             try:
                 from server_components import event_broadcaster
-                event_broadcaster.broadcast_dhcp_update({
-                    "reporting_client_mac": reporter_mac,
-                    "neighbours": neighbours,
-                    "dhcp": dhcp or {},
-                })
+
+                event_broadcaster.broadcast_dhcp_update(
+                    {
+                        "reporting_client_mac": reporter_mac,
+                        "neighbours": neighbours,
+                        "dhcp": dhcp or {},
+                    }
+                )
             except Exception as broadcast_error:
-                print(f"[DHCP] broadcast_dhcp_update failed (non-fatal): {broadcast_error}")
+                print(
+                    f"[DHCP] broadcast_dhcp_update failed (non-fatal): {broadcast_error}"
+                )
         except Exception as error:
             print(f"Could not append DHCP observation log: {error}")
         finally:
@@ -96,20 +101,26 @@ DISCONNECT_PING_TIMEOUT_SECONDS = _read_positive_int(
     "DISCONNECT_PING_TIMEOUT_SECONDS", "3"
 )
 
+
 def get_forbidden_processes():
     conn = None
     cursor = None
     try:
         conn = get_connection()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT process_name, severity, description FROM forbidden_processes WHERE enabled = TRUE")
+        cursor.execute(
+            "SELECT process_name, severity, description FROM forbidden_processes WHERE enabled = TRUE"
+        )
         return cursor.fetchall()
     except Exception as e:
         print(f"Error fetching forbidden processes: {e}")
         return []
     finally:
-        if cursor: cursor.close()
-        if conn and conn.is_connected(): conn.close()
+        if cursor:
+            cursor.close()
+        if conn and conn.is_connected():
+            conn.close()
+
 
 ALERT_SEVERITIES = {"LOW", "MEDIUM", "HIGH", "CRITICAL"}
 WORKING_HOURS_DISABLED = "DISABLED"
@@ -147,23 +158,21 @@ def get_working_hours_status(checked_at=None):
             )
             monitoring_enabled = bool(cursor.fetchone()[0])
             return (
-                WORKING_HOURS_OUTSIDE
-                if monitoring_enabled
-                else WORKING_HOURS_DISABLED
+                WORKING_HOURS_OUTSIDE if monitoring_enabled else WORKING_HOURS_DISABLED
             )
 
         start_seconds, end_seconds = schedule
         current_seconds = (
-            checked_at.hour * 3600
-            + checked_at.minute * 60
-            + checked_at.second
+            checked_at.hour * 3600 + checked_at.minute * 60 + checked_at.second
         )
 
         if start_seconds <= end_seconds:
             is_within = start_seconds <= current_seconds < end_seconds
         else:
             # Supports an overnight schedule such as 22:00–06:00 as well.
-            is_within = current_seconds >= start_seconds or current_seconds < end_seconds
+            is_within = (
+                current_seconds >= start_seconds or current_seconds < end_seconds
+            )
 
         return WORKING_HOURS_WITHIN if is_within else WORKING_HOURS_OUTSIDE
     except Exception as error:
@@ -238,21 +247,27 @@ def create_connection_alert(client_info, registered_at=None):
             ),
         )
         conn.commit()
-        alert_id = cursor.lastrowid
+        alert_id = getattr(cursor, "lastrowid", None)
         print(f"\n[!] ALERT: {title} — {hostname} ({mac})", flush=True)
 
         try:
             from server_components import event_broadcaster
-            event_broadcaster.broadcast_alert({
-                "id": alert_id,
-                "client": {"id": client_info.get("client_id"), "hostname": hostname},
-                "type": alert_type,
-                "severity": severity,
-                "status": "NEW",
-                "title": title,
-                "description": description,
-                "detected_at": registered_at.isoformat(),
-            })
+
+            event_broadcaster.broadcast_alert(
+                {
+                    "id": alert_id,
+                    "client": {
+                        "id": client_info.get("client_id"),
+                        "hostname": hostname,
+                    },
+                    "type": alert_type,
+                    "severity": severity,
+                    "status": "NEW",
+                    "title": title,
+                    "description": description,
+                    "detected_at": registered_at.isoformat(),
+                }
+            )
             event_broadcaster.broadcast_client_status(
                 client_id=client_info.get("client_id", ""),
                 mac=mac,
@@ -274,7 +289,9 @@ def create_connection_alert(client_info, registered_at=None):
             conn.close()
 
 
-def create_server_alert(mac, alert_type, severity, title, description, detected_at=None):
+def create_server_alert(
+    mac, alert_type, severity, title, description, detected_at=None
+):
     """Store and immediately display a server-originated alert."""
     detected_at = detected_at or datetime.datetime.now()
     conn = None
@@ -303,16 +320,23 @@ def create_server_alert(mac, alert_type, severity, title, description, detected_
 
         try:
             from server_components import event_broadcaster
-            event_broadcaster.broadcast_alert({
-                "id": alert_id,
-                "client": {"mac": mac},
-                "type": alert_type,
-                "severity": severity,
-                "status": "NEW",
-                "title": title,
-                "description": description,
-                "detected_at": detected_at.isoformat() if hasattr(detected_at, "isoformat") else str(detected_at),
-            })
+
+            event_broadcaster.broadcast_alert(
+                {
+                    "id": alert_id,
+                    "client": {"mac": mac},
+                    "type": alert_type,
+                    "severity": severity,
+                    "status": "NEW",
+                    "title": title,
+                    "description": description,
+                    "detected_at": (
+                        detected_at.isoformat()
+                        if hasattr(detected_at, "isoformat")
+                        else str(detected_at)
+                    ),
+                }
+            )
         except Exception:
             pass
 
@@ -365,23 +389,34 @@ def ping_client(ip):
 
     if platform.system() == "Windows":
         command = [
-            "ping", "-n", "2", "-w",
-            str(DISCONNECT_PING_TIMEOUT_SECONDS * 1000), address,
+            "ping",
+            "-n",
+            "2",
+            "-w",
+            str(DISCONNECT_PING_TIMEOUT_SECONDS * 1000),
+            address,
         ]
     else:
         command = [
-            "ping", "-c", "2", "-W",
-            str(DISCONNECT_PING_TIMEOUT_SECONDS), address,
+            "ping",
+            "-c",
+            "2",
+            "-W",
+            str(DISCONNECT_PING_TIMEOUT_SECONDS),
+            address,
         ]
 
     try:
-        return subprocess.run(
-            command,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=(DISCONNECT_PING_TIMEOUT_SECONDS * 2) + 1,
-            check=False,
-        ).returncode == 0
+        return (
+            subprocess.run(
+                command,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=(DISCONNECT_PING_TIMEOUT_SECONDS * 2) + 1,
+                check=False,
+            ).returncode
+            == 0
+        )
     except (OSError, subprocess.TimeoutExpired) as error:
         print(f"Ping check failed for {address}: {error}")
         return False
@@ -477,9 +512,7 @@ def _parse_alert_time(value, field_name, *, required=False):
     try:
         return datetime.datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
     except ValueError as error:
-        raise ValueError(
-            f"{field_name} must use YYYY-MM-DD HH:MM:SS"
-        ) from error
+        raise ValueError(f"{field_name} must use YYYY-MM-DD HH:MM:SS") from error
 
 
 def handle_client_alert(mac, alert_data):
@@ -489,7 +522,9 @@ def handle_client_alert(mac, alert_data):
         return False
 
     if alert_data.get("alert_type") != "FORBIDDEN_PROCESS":
-        print(f"Rejected unsupported alert from {mac}: {alert_data.get('alert_type')!r}")
+        print(
+            f"Rejected unsupported alert from {mac}: {alert_data.get('alert_type')!r}"
+        )
         return False
 
     process_name = alert_data.get("process_name")
@@ -518,7 +553,7 @@ def handle_client_alert(mac, alert_data):
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        
+
         cursor.execute("SELECT id FROM clients WHERE mac = %s", (mac,))
         row = cursor.fetchone()
         if not row:
@@ -546,28 +581,33 @@ def handle_client_alert(mac, alert_data):
 
         configured_name, severity, configured_description = forbidden_process
         if severity not in ALERT_SEVERITIES:
-            print(f"Rejected alert from {mac}: invalid configured severity {severity!r}.")
+            print(
+                f"Rejected alert from {mac}: invalid configured severity {severity!r}."
+            )
             return False
 
         title = f"Forbidden process detected: {configured_name}"
         description = configured_description or (
             f"Forbidden process '{configured_name}' was detected on the client."
         )
-        
-        cursor.execute("""
+
+        cursor.execute(
+            """
             INSERT INTO alerts (
                 client_id, log_id, alert_type, severity, 
                 detected_at, activity_time, title, description, status
             ) VALUES (%s, NULL, %s, %s, %s, %s, %s, %s, 'NEW')
-        """, (
-            client_db_id, 
-            "FORBIDDEN_PROCESS",
-            severity,
-            detected_at,
-            activity_time,
-            title,
-            description,
-        ))
+        """,
+            (
+                client_db_id,
+                "FORBIDDEN_PROCESS",
+                severity,
+                detected_at,
+                activity_time,
+                title,
+                description,
+            ),
+        )
         conn.commit()
         print(f"\n[!] ALERT RECEIVED from {mac}: {title}", flush=True)
         return True
@@ -575,13 +615,16 @@ def handle_client_alert(mac, alert_data):
         print(f"Error saving alert: {e}")
         return False
     finally:
-        if cursor: cursor.close()
-        if conn and conn.is_connected(): conn.close()
+        if cursor:
+            cursor.close()
+        if conn and conn.is_connected():
+            conn.close()
 
 
 # ============================================================
 # SEND / RECEIVE
 # ============================================================
+
 
 def send_message(conn, message):
     data = json.dumps(message).encode()
@@ -615,6 +658,7 @@ def receive_message(conn):
 # CONNECTION LOGGING
 # ============================================================
 
+
 def log_connection(mac, status):
     """Log connection or disconnection to the MySQL database."""
     conn = None
@@ -631,18 +675,24 @@ def log_connection(mac, status):
         client_db_id = row[0]
 
         if status in ("connected", "reconnected"):
-            cursor.execute('''
+            cursor.execute(
+                """
                 INSERT INTO connections (client_id, connected_at)
                 VALUES (%s, CURRENT_TIMESTAMP)
-            ''', (client_db_id,))
+            """,
+                (client_db_id,),
+            )
         elif status == "disconnected":
             # Update the latest open connection for this client
-            cursor.execute('''
+            cursor.execute(
+                """
                 UPDATE connections 
                 SET disconnected_at = CURRENT_TIMESTAMP 
                 WHERE client_id = %s AND disconnected_at IS NULL 
                 ORDER BY id DESC LIMIT 1
-            ''', (client_db_id,))
+            """,
+                (client_db_id,),
+            )
 
         conn.commit()
     except Exception as e:
@@ -667,12 +717,17 @@ def update_client_db(mac, client_id, hostname, ip, os_info):
         conn = get_connection()
         cursor = conn.cursor()
 
-        system = os_info.get("system", str(os_info)) if isinstance(os_info, dict) else str(os_info)
+        system = (
+            os_info.get("system", str(os_info))
+            if isinstance(os_info, dict)
+            else str(os_info)
+        )
         release = os_info.get("release", "") if isinstance(os_info, dict) else ""
         version = os_info.get("version", "") if isinstance(os_info, dict) else ""
         machine = os_info.get("machine", "") if isinstance(os_info, dict) else ""
 
-        cursor.execute('''
+        cursor.execute(
+            """
             INSERT INTO clients (client_id, hostname, ip, mac, os_system, os_release, os_version, os_machine)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE
@@ -684,7 +739,9 @@ def update_client_db(mac, client_id, hostname, ip, os_info):
                 os_version=VALUES(os_version),
                 os_machine=VALUES(os_machine),
                 updated_at=CURRENT_TIMESTAMP
-        ''', (client_id, hostname, ip, mac, system, release, version, machine))
+        """,
+            (client_id, hostname, ip, mac, system, release, version, machine),
+        )
 
         conn.commit()
         return True
@@ -716,10 +773,7 @@ def store_activity_log_file(mac, log_data):
         # ----------------------------------------------------
         # Find client
         # ----------------------------------------------------
-        cursor.execute(
-            "SELECT id, client_id FROM clients WHERE mac = %s",
-            (mac,)
-        )
+        cursor.execute("SELECT id, client_id FROM clients WHERE mac = %s", (mac,))
         row = cursor.fetchone()
 
         if not row:
@@ -754,20 +808,13 @@ def store_activity_log_file(mac, log_data):
             )
             VALUES (%s, %s, %s, %s)
             """,
-            (
-                client_db_id,
-                file_path,
-                period,
-                generated_at
-            )
+            (client_db_id, file_path, period, generated_at),
         )
 
         conn.commit()
 
         print(
-            f"\nActivity log stored:"
-            f"\n  File: {file_path}"
-            f"\n  Period: {period}"
+            f"\nActivity log stored:" f"\n  File: {file_path}" f"\n  Period: {period}"
         )
 
     except Exception as error:
@@ -786,6 +833,7 @@ def store_activity_log_file(mac, log_data):
 # CLIENT REGISTRY
 # ============================================================
 
+
 def register_client(client_info, conn):
     mac = client_info["mac"].upper().replace("-", ":")
     client_info = dict(client_info)
@@ -802,18 +850,24 @@ def register_client(client_info, conn):
             client = clients[mac]
 
             if not update_client_db(
-                mac, client_id, client_info["hostname"], client_info["ip"], client_info["os"]
+                mac,
+                client_id,
+                client_info["hostname"],
+                client_info["ip"],
+                client_info["os"],
             ):
-                print(f"Client registration rejected because {mac} could not be saved to MySQL.")
+                print(
+                    f"Client registration rejected because {mac} could not be saved to MySQL."
+                )
                 return None
 
-            client["hostname"]   = client_info["hostname"]
-            client["ip"]         = client_info["ip"]
-            client["os"]         = client_info["os"]
-            client["client_id"]  = client_id
+            client["hostname"] = client_info["hostname"]
+            client["ip"] = client_info["ip"]
+            client["os"] = client_info["os"]
+            client["client_id"] = client_id
             client["connection"] = conn
-            client["responses"]  = queue.Queue()
-            client["send_lock"]  = threading.Lock()
+            client["responses"] = queue.Queue()
+            client["send_lock"] = threading.Lock()
 
             print(f"Client reconnected: {client['client_id']}")
             log_connection(mac, "reconnected")
@@ -822,17 +876,23 @@ def register_client(client_info, conn):
 
         # ---- New client ----
         if not update_client_db(
-            mac, client_id, client_info["hostname"], client_info["ip"], client_info["os"]
+            mac,
+            client_id,
+            client_info["hostname"],
+            client_info["ip"],
+            client_info["os"],
         ):
-            print(f"Client registration rejected because {mac} could not be saved to MySQL.")
+            print(
+                f"Client registration rejected because {mac} could not be saved to MySQL."
+            )
             return None
 
         clients[mac] = {
-            "client_id":  client_id,
-            "hostname":   client_info["hostname"],
-            "ip":         client_info["ip"],
-            "mac":        mac,
-            "os":         client_info["os"],
+            "client_id": client_id,
+            "hostname": client_info["hostname"],
+            "ip": client_info["ip"],
+            "mac": mac,
+            "os": client_info["os"],
             "connection": conn,
             "responses": queue.Queue(),
             "send_lock": threading.Lock(),
@@ -908,33 +968,60 @@ def handle_network_neighbour_report(
     the client message. Optional dependencies keep validation and persistence
     independently testable without a database.
     """
-    if report_validator is None or observation_storer is None:
-        from server_components.network_device_storage import (
-            store_client_neighbour_observations,
-            validate_neighbour_report,
-        )
+    if report_validator is None:
+        from server_components.network_device_storage import validate_neighbour_report
 
-        report_validator = report_validator or validate_neighbour_report
-        observation_storer = observation_storer or store_client_neighbour_observations
+        report_validator = validate_neighbour_report
 
     source = payload.get("observation_source") if isinstance(payload, dict) else None
+    global_scan_id = payload.get("global_scan_id") if isinstance(payload, dict) else None
+    scan_status = payload.get("scan_status") if isinstance(payload, dict) else None
     try:
         neighbours = report_validator(payload)
         if source == "DHCP":
-            # DHCP is a live event, not a new full neighbour snapshot. Keep
-            # it in the readable daily file and avoid database event churn.
-            # The file write is queued so this socket reader can continue to
-            # process command responses immediately.
             if not neighbours:
                 print(f"Ignored empty DHCP observation from {reporter_mac}.")
                 return True
+            try:
+                storer = observation_storer
+                if storer is None:
+                    from server_components.network_device_storage import (
+                        store_client_dhcp_observations,
+                    )
+
+                    storer = store_client_dhcp_observations
+                stored = storer(reporter_mac, neighbours)
+                print(f"Stored {stored} DHCP observation(s) from {reporter_mac}.")
+            except Exception as error:
+                print(f"Could not store DHCP observation in database: {error}")
+
             if dhcp_observation_storer is not None:
                 # Dependency injection keeps the synchronous path available
                 # for focused unit tests.
                 dhcp_observation_storer(reporter_mac, neighbours, payload.get("dhcp"))
             else:
                 queue_dhcp_observation(reporter_mac, neighbours, payload.get("dhcp"))
+
+            # Automatically trigger a fresh scan merge & SSE broadcast so the UI updates
+            try:
+                from server_components.network_discovery import run_manual_scan
+                from server_components import event_broadcaster
+                import os
+
+                _, dev_list, scan_path = run_manual_scan()
+                scan_id = os.path.splitext(os.path.basename(scan_path))[0]
+                event_broadcaster.broadcast_network_update(scan_id, len(dev_list))
+            except Exception as auto_err:
+                pass
+
             return True
+
+        if observation_storer is None:
+            from server_components.network_device_storage import (
+                store_client_neighbour_observations,
+            )
+
+            observation_storer = store_client_neighbour_observations
 
         if source == "DAILY_NEIGHBOUR_SNAPSHOT":
             if daily_snapshot_exists is None or daily_snapshot_storer is None:
@@ -954,7 +1041,9 @@ def handle_network_neighbour_report(
                 return True
 
             stored = observation_storer(reporter_mac, neighbours)
-            print(f"Stored {stored} daily neighbour observation(s) from {reporter_mac}.")
+            print(
+                f"Stored {stored} daily neighbour observation(s) from {reporter_mac}."
+            )
             try:
                 daily_log_path, created = daily_snapshot_storer(
                     reporter_mac, neighbours
@@ -966,15 +1055,76 @@ def handle_network_neighbour_report(
                             store_daily_network_scan_reference,
                         )
 
-                        daily_scan_reference_storer = (
-                            store_daily_network_scan_reference
-                        )
+                        daily_scan_reference_storer = store_daily_network_scan_reference
                     daily_scan_reference_storer(daily_log_path)
-                    print(f"Stored daily network-scan file reference: {daily_log_path}.")
+                    print(
+                        f"Stored daily network-scan file reference: {daily_log_path}."
+                    )
+
+                # Automatically trigger a fresh scan merge & SSE broadcast so the UI updates
+                try:
+                    from server_components.network_discovery import run_manual_scan
+                    from server_components import event_broadcaster
+                    import os
+
+                    _, dev_list, scan_path = run_manual_scan()
+                    scan_id = os.path.splitext(os.path.basename(scan_path))[0]
+                    event_broadcaster.broadcast_network_update(scan_id, len(dev_list))
+                except Exception as auto_err:
+                    pass
             except Exception as error:
                 # Database storage remains valid even if its readable mirror
                 # cannot be updated on this attempt.
                 print(f"Could not append daily neighbour snapshot: {error}")
+            return True
+
+        if source == "ACTIVE_NEIGHBOUR_SCAN":
+            global_scan_manager = None
+            if global_scan_id:
+                from server_components.global_network_scan import global_network_scan_manager
+
+                global_scan_manager = global_network_scan_manager
+                if global_scan_manager.is_duplicate_report(
+                    global_scan_id, reporter_mac
+                ):
+                    print(
+                        f"Ignored duplicate active scan report from {reporter_mac} "
+                        f"for global scan {global_scan_id}."
+                    )
+                    return True
+
+            if scan_status == "failed":
+                if global_scan_manager:
+                    global_scan_manager.record_report(
+                        global_scan_id,
+                        reporter_mac,
+                        neighbours,
+                        failed=True,
+                        error=payload.get("scan_error"),
+                    )
+                print(f"Client {reporter_mac} reported an active scan failure.")
+                return True
+
+            stored = observation_storer(reporter_mac, neighbours)
+            print(
+                f"Stored {stored} active neighbour observation(s) from {reporter_mac}."
+            )
+            if global_scan_manager:
+                global_scan_manager.record_report(
+                    global_scan_id, reporter_mac, neighbours
+                )
+            try:
+                from server_components.network_discovery import run_manual_scan
+                from server_components import event_broadcaster
+                import os
+
+                _, devices, scan_path = run_manual_scan(
+                    context_overrides={"scan_type": "CLIENT_ACTIVE"}
+                )
+                scan_id = os.path.splitext(os.path.basename(scan_path))[0]
+                event_broadcaster.broadcast_network_update(scan_id, len(devices))
+            except Exception as error:
+                print(f"Could not merge active neighbour report: {error}")
             return True
 
         # Preserve the legacy protocol for older clients until they are
@@ -1017,7 +1167,12 @@ def receive_client_messages(mac, conn):
                     client["responses"].put(message)
             else:
                 print(f"Unexpected message from {mac}: {message_type!r}")
-    except (ConnectionResetError, BrokenPipeError, OSError, json.JSONDecodeError) as error:
+    except (
+        ConnectionResetError,
+        BrokenPipeError,
+        OSError,
+        json.JSONDecodeError,
+    ) as error:
         print(f"Connection with client {mac} lost: {error}")
     finally:
         remove_client(mac, conn)
@@ -1026,6 +1181,7 @@ def receive_client_messages(mac, conn):
 # ============================================================
 # DISPLAY HELPERS
 # ============================================================
+
 
 def show_clients():
     print("\n==============================================")
@@ -1056,24 +1212,12 @@ def print_response(client_id, command, response):
     """Pretty-print a client response depending on the command type."""
     print("\nResponse:")
 
-    if command == "GET_NETWORK_LOG" and response.get("type") == "RESPONSE":
-        logs_list = response.get("data", {}).get("logs", [])
-        print(f"\n{'='*64}")
-        print("  CLIENT NETWORK CONNECTION LOG")
-        print(f"{'='*64}")
-        for entry in logs_list:
-            print(f"  {entry}")
-        print(f"{'='*64}")
-
-    elif command == "GET_ACTIVITY_LOG" and response.get("type") == "RESPONSE":
+    if command == "GET_ACTIVITY_LOG" and response.get("type") == "RESPONSE":
         log_data = response.get("data", {})
 
         client = get_client(client_id)
         if client:
-            store_activity_log_file(
-                client["mac"],
-                log_data
-            )
+            store_activity_log_file(client["mac"], log_data)
 
     else:
         print(json.dumps(response, indent=4))
@@ -1083,7 +1227,10 @@ def print_response(client_id, command, response):
 # SEND / EXECUTE COMMAND TO CLIENT
 # ============================================================
 
-def execute_client_command(client_id, command, args=None, timeout=10.0):
+
+def execute_client_command(
+    client_id, command, args=None, timeout=10.0, *, process_network_scan=True
+):
     """Send a command to a connected client and return the structured response payload."""
     client = get_client(client_id)
     if not client:
@@ -1091,6 +1238,8 @@ def execute_client_command(client_id, command, args=None, timeout=10.0):
 
     conn = client["connection"]
     message = {"type": "COMMAND", "command": command}
+    if command in ("SCAN_NETWORK", "TRIGGER_ARP_SCAN"):
+        print(f"{client['hostname']} was sent a network scan command.")
     if args is not None:
         message["args"] = args
 
@@ -1109,10 +1258,16 @@ def execute_client_command(client_id, command, args=None, timeout=10.0):
             try:
                 response = client["responses"].get(timeout=remaining)
             except queue.Empty:
-                return {"status": "error", "message": f"Command '{command}' timed out after {timeout}s."}
+                return {
+                    "status": "error",
+                    "message": f"Command '{command}' timed out after {timeout}s.",
+                }
 
             if response.get("type") == "DISCONNECTED":
-                return {"status": "error", "message": "Client disconnected while waiting for command response."}
+                return {
+                    "status": "error",
+                    "message": "Client disconnected while waiting for command response.",
+                }
 
             if response.get("command") != command:
                 continue
@@ -1121,6 +1276,39 @@ def execute_client_command(client_id, command, args=None, timeout=10.0):
             if command == "GET_ACTIVITY_LOG" and response.get("type") == "RESPONSE":
                 log_data = response.get("data", {})
                 store_activity_log_file(client["mac"], log_data)
+
+            # Legacy synchronous scan responses may include observations. New
+            # clients acknowledge the command immediately and report their
+            # results separately as ACTIVE_NEIGHBOUR_SCAN messages.
+            if (
+                process_network_scan
+                and command in ("SCAN_NETWORK", "TRIGGER_ARP_SCAN")
+                and response.get("type") == "RESPONSE"
+            ):
+                data = response.get("data", {})
+                if isinstance(data, dict) and data.get("status") == "ok":
+                    devs = data.get("devices", [])
+                    if devs:
+                        try:
+                            print(f"Storing ARP_SCAN_NETWORK observations from {client['mac']} done in {int(datetime.now().timestamp())} .")
+                            from server_components.network_device_storage import (
+                                store_client_neighbour_observations,
+                            )
+
+                            store_client_neighbour_observations(client["mac"], devs)
+                            from server_components.network_discovery import (
+                                run_manual_scan,
+                            )
+                            from server_components import event_broadcaster
+                            import os
+
+                            _, all_devs, scan_path = run_manual_scan()
+                            scan_id = os.path.splitext(os.path.basename(scan_path))[0]
+                            event_broadcaster.broadcast_network_update(
+                                scan_id, len(all_devs)
+                            )
+                        except Exception as e:
+                            print(f"Failed to store SCAN_NETWORK observations: {e}")
 
             return {
                 "status": "ok",
@@ -1137,7 +1325,7 @@ def execute_client_command(client_id, command, args=None, timeout=10.0):
 
 
 def send_command(client_id, command, args=None):
-    res = execute_client_command(client_id, command, args, timeout=15.0)
+    res = execute_client_command(client_id, command, args, timeout=25.0)
     if res.get("status") == "ok":
         print_response(client_id, command, res.get("raw", {}))
     else:
@@ -1147,6 +1335,7 @@ def send_command(client_id, command, args=None):
 # ============================================================
 # MENUS
 # ============================================================
+
 
 def client_menu(client_id):
     while True:
@@ -1168,7 +1357,7 @@ def client_menu(client_id):
         print("7.  Ping")
         print("8.  Kill process")
         print("9.  Start process")
-        print("10. Network connection log")
+        print("10. Scan local network (ARP)")
         print("11. Activity log")
         print("12. Disconnect client")
         print("13. Back")
@@ -1176,18 +1365,18 @@ def client_menu(client_id):
         choice = input("\nSelect command: ").strip()
 
         commands = {
-            "1":  "GET_SYSTEM_INFO",
-            "2":  "GET_NETWORK_INFO",
-            "3":  "GET_CPU_INFO",
-            "4":  "GET_MEMORY_INFO",
-            "5":  "GET_DISK_INFO",
-            "6":  "GET_PROCESSES",
-            "7":  "PING",
-            "8":  "KILL_PROCESS",
-            "9":  "START_PROCESS",
-            "10": "GET_NETWORK_LOG",
+            "1": "GET_SYSTEM_INFO",
+            "2": "GET_NETWORK_INFO",
+            "3": "GET_CPU_INFO",
+            "4": "GET_MEMORY_INFO",
+            "5": "GET_DISK_INFO",
+            "6": "GET_PROCESSES",
+            "7": "PING",
+            "8": "KILL_PROCESS",
+            "9": "START_PROCESS",
+            "10": "SCAN_NETWORK",
             "11": "GET_ACTIVITY_LOG",
-            "12": "DISCONNECT"
+            "12": "DISCONNECT",
         }
 
         if choice == "13":

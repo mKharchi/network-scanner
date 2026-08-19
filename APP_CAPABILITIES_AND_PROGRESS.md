@@ -83,7 +83,6 @@ Available directly from the interactive **Client Detail** page without touching 
 | **🧠 Memory Info** | Telemetry Inspector | Inspects total, available, used, and swap memory allocation. |
 | **💾 Disk Info** | Telemetry Inspector | Analyzes partition mounts, file systems, disk space, and usage percentages. |
 | **🌐 Network Info** | Telemetry Inspector | Inspects interface configurations, IP addresses, netmasks, gateways, and hardware MACs. |
-| **📜 Network Log** | Connection Explorer | Retrieves recent network socket connections and listening ports on the agent. |
 | **📋 Activity Log** | Historical Log Ingest | Pulls historical client activity logs (Last 24h, 7d, 30d) and persists them in the server database. |
 | **📡 Ping Test** | Latency Inspector | Tests round-trip latency and echo responsiveness to the client. |
 | **🔌 Disconnect Agent** | Server Control Action | Gracefully disconnects the client agent with confirmation dialog. |

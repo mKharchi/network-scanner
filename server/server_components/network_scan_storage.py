@@ -165,28 +165,31 @@ def append_daily_dhcp_observation(
 
 
 def store_network_scan(context, devices, completed_at=None):
-    """Persist one completed scan and return its absolute JSON path."""
-    completed_at = completed_at or datetime.now(timezone.utc)
-    storage_dir = get_network_scan_storage_dir()
-    os.makedirs(storage_dir, exist_ok=True)
+    """Store the latest completed scan in the shared file for its local day.
 
-    timestamp = completed_at.strftime("%Y-%m-%d_%H-%M-%S_%f")
-    file_path = os.path.abspath(os.path.join(storage_dir, f"{timestamp}.json"))
-    payload = {
-        "completed_at": completed_at.isoformat(),
+    The daily file also contains DHCP observations and neighbour snapshots.
+    Updating the scan section therefore preserves those audit entries while
+    avoiding a separate timestamped scan file for every scan invocation.
+    """
+    scan_completed_at = completed_at or datetime.now(timezone.utc)
+    daily_observed_at, file_path = _daily_log_context(scan_completed_at)
+    scan_payload = {
+        "completed_at": scan_completed_at.isoformat(),
         "network": context,
         "devices_found": len(devices),
         "devices": devices,
     }
 
-    with open(file_path, "x", encoding="utf-8") as file:
-        json.dump(payload, file, indent=2, ensure_ascii=False)
+    with _DAILY_LOG_LOCK:
+        payload = _load_daily_log(file_path, daily_observed_at)
+        payload.update(scan_payload)
+        _write_json_atomically(file_path, payload)
 
     return file_path
 
 
 def load_latest_network_scan():
-    """Return the newest completed scan payload, or ``None`` when absent."""
+    """Return the newest completed scan payload, including daily scan files."""
     storage_dir = get_network_scan_storage_dir()
     if not storage_dir.is_dir():
         return None
@@ -195,7 +198,6 @@ def load_latest_network_scan():
         (
             path
             for path in storage_dir.glob("*.json")
-            if not path.name.startswith("network_scan_")
         ),
         key=lambda path: path.stat().st_mtime,
         reverse=True,

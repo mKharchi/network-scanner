@@ -29,6 +29,9 @@ NEIGHBOUR_SNAPSHOT_STATE_FILE = os.path.join(
 
 socket_lock = threading.Lock()
 scanner_lock = threading.Lock()
+network_scan_lock = threading.Lock()
+network_scan_state_lock = threading.Lock()
+active_network_scan_global_id = None
 forbidden_processes = []
 
 
@@ -108,7 +111,7 @@ def send_daily_network_neighbours(client_socket):
         print("Today's network neighbour snapshot was already reported.")
         return False
 
-    neighbours = NetworkNeighbourCollector().collect(enrich=True)
+    neighbours = NetworkNeighbourCollector().collect(enrich=True, active_scan=False)
     message = {
         "type": "NETWORK_NEIGHBOURS",
         "data": {
@@ -126,6 +129,81 @@ def send_daily_network_neighbours(client_socket):
     except OSError as error:
         print(f"Could not report network neighbours: {error}")
         return False
+
+
+def send_active_network_neighbours(client_socket, *, lock_held=False, global_scan_id=None):
+    """Run an active ARP scan without blocking the client command loop."""
+    global active_network_scan_global_id
+    if not lock_held and not network_scan_lock.acquire(blocking=False):
+        print("Active network scan is already running.")
+        return False
+
+    try:
+        print("Active network scan started in the background.")
+        neighbours = NetworkNeighbourCollector().collect(enrich=True, active_scan=True)
+        message = {
+            "type": "NETWORK_NEIGHBOURS",
+            "data": {
+                "observation_source": "ACTIVE_NEIGHBOUR_SCAN",
+                "observed_at": datetime.now().astimezone().isoformat(),
+                "neighbours": neighbours,
+            },
+        }
+        if global_scan_id:
+            message["data"]["global_scan_id"] = global_scan_id
+        with socket_lock:
+            send_message(client_socket, message)
+        print(f"Reported {len(neighbours)} active network neighbour entries.")
+        return True
+    except OSError as error:
+        print(f"Could not report active network neighbours: {error}")
+        return False
+    except Exception as error:
+        print(f"Active network scan failed: {error}")
+        if global_scan_id:
+            try:
+                with socket_lock:
+                    send_message(
+                        client_socket,
+                        {
+                            "type": "NETWORK_NEIGHBOURS",
+                            "data": {
+                                "observation_source": "ACTIVE_NEIGHBOUR_SCAN",
+                                "observed_at": datetime.now().astimezone().isoformat(),
+                                "global_scan_id": global_scan_id,
+                                "scan_status": "failed",
+                                "scan_error": str(error)[:255],
+                                "neighbours": [],
+                            },
+                        },
+                    )
+            except OSError:
+                pass
+        return False
+    finally:
+        with network_scan_state_lock:
+            active_network_scan_global_id = None
+        network_scan_lock.release()
+
+
+def start_active_network_scan(client_socket, *, global_scan_id=None):
+    """Start one background ARP scan, returning its status and correlation ID."""
+    global active_network_scan_global_id
+    if not network_scan_lock.acquire(blocking=False):
+        print("Active network scan is already running.")
+        with network_scan_state_lock:
+            return False, active_network_scan_global_id
+
+    with network_scan_state_lock:
+        active_network_scan_global_id = global_scan_id
+
+    threading.Thread(
+        target=send_active_network_neighbours,
+        args=(client_socket,),
+        kwargs={"lock_held": True, "global_scan_id": global_scan_id},
+        daemon=True,
+    ).start()
+    return True, global_scan_id
 
 
 def scan_activity_log(log_data):
@@ -231,9 +309,12 @@ def start_client():
                 forbidden_processes = message.get("data", [])
                 print(f"Received {len(forbidden_processes)} forbidden processes.")
 
-                # A complete neighbour snapshot is deliberately sent once per
-                # local day. DHCP joins are recorded separately as events.
-                send_daily_network_neighbours(client)
+                # Start background daily neighbour snapshot collection so it never blocks command execution
+                threading.Thread(
+                    target=send_daily_network_neighbours,
+                    args=(client,),
+                    daemon=True,
+                ).start()
 
                 # Start background scanner
                 t = threading.Thread(
@@ -242,6 +323,7 @@ def start_client():
                     daemon=True,
                 )
                 t.start()
+
                 # Start passive DHCP listener (idempotent)
                 try:
                     if (
@@ -250,16 +332,19 @@ def start_client():
                     ):
 
                         def _on_dhcp_obs(obs):
-                            # Convert the DHCPREQUEST into the same validated
-                            # neighbour-report envelope used by ARP snapshots.
-                            # The server has no NETWORK_NEIGHBOUR_UPDATE
-                            # message type, so the previous integration
-                            # silently discarded captured DHCP observations.
                             neighbour = {}
                             if obs.get("requested_ip"):
                                 neighbour["ip_address"] = obs.get("requested_ip")
                             if obs.get("mac_address"):
                                 neighbour["mac_address"] = obs.get("mac_address")
+                                try:
+                                    import oui
+                                    oui_db = oui.load_oui_database()
+                                    vendor_name = oui.get_vendor(obs.get("mac_address"), oui_db)
+                                    if vendor_name:
+                                        neighbour["vendor"] = vendor_name
+                                except Exception:
+                                    pass
                             neighbour["entry_type"] = "dynamic"
                             if obs.get("hostname"):
                                 neighbour["hostname"] = obs.get("hostname")
@@ -271,6 +356,9 @@ def start_client():
                                 neighbour["dhcp_message_type"] = obs.get(
                                     "dhcp_message_type"
                                 )
+
+                            if not neighbour.get("mac_address") or not neighbour.get("ip_address"):
+                                return
 
                             # Send the immediate one-device report in the
                             # protocol the server already accepts.
@@ -297,14 +385,25 @@ def start_client():
                                 with socket_lock:
                                     send_message(client, msg)
                                 print(
-                                    f"Sent DHCP neighbour update: {neighbour.get('mac_address')}"
+                                    f"Sent DHCP neighbour update: {neighbour.get('mac_address')} ({neighbour.get('ip_address')})"
                                 )
                             except Exception as e:
                                 print(f"[DHCP] Failed to send neighbour update: {e}")
 
+                        # Auto-detect active network interface for sniffing
+                        detected_iface = None
+                        try:
+                            from network_neighbour_collector import get_local_network
+                            local_net = get_local_network()
+                            if local_net:
+                                detected_iface = local_net.get("interface")
+                        except Exception:
+                            pass
+
+                        listen_iface = os.getenv("DHCP_LISTEN_INTERFACE") or detected_iface
                         _dhcp_listener = DHCPListener(
                             _on_dhcp_obs,
-                            interface=os.getenv("DHCP_LISTEN_INTERFACE") or None,
+                            interface=listen_iface,
                         )
                         _dhcp_listener.start()
                         globals()["_dhcp_listener"] = _dhcp_listener
@@ -324,7 +423,27 @@ def start_client():
 
             print(f"Command received: {command}")
 
-            result = handle_command(message)
+            if command in ("SCAN_NETWORK", "TRIGGER_ARP_SCAN"):
+                args = message.get("args")
+                global_scan_id = (
+                    args.get("global_scan_id")
+                    if isinstance(args, dict) and isinstance(args.get("global_scan_id"), str)
+                    else None
+                )
+                started, active_global_scan_id = start_active_network_scan(
+                    client, global_scan_id=global_scan_id
+                )
+                result = {
+                    "status": "started" if started else "already_running",
+                    "message": (
+                        "Active network scan started in the background."
+                        if started
+                        else "An active network scan is already running."
+                    ),
+                    "global_scan_id": active_global_scan_id,
+                }
+            else:
+                result = handle_command(message)
 
             # A server-requested activity log (including the standard 24-hour
             # request) is another detection opportunity.  Send any resulting

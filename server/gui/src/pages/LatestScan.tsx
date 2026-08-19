@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, type NetworkDevice } from "../api/client";
+import { api, type GlobalNetworkScan, type NetworkDevice } from "../api/client";
 import { useFetch } from "../hooks/useFetch";
 import { useToast } from "../hooks/useToast";
 import { ClassificationBadge } from "../components/Badge";
@@ -26,6 +26,27 @@ export function LatestScanPage() {
     [],
     ["app:network_update", "network_update"]
   );
+  const { state: activeGlobalScanState } = useFetch(
+    () => api.getGlobalActiveScan(),
+    [],
+  );
+  const [globalScan, setGlobalScan] = useState<GlobalNetworkScan | null>(null);
+
+  useEffect(() => {
+    if (activeGlobalScanState.status === "success") {
+      setGlobalScan(activeGlobalScanState.data);
+    }
+  }, [activeGlobalScanState]);
+
+  useEffect(() => {
+    if (!globalScan || !["started", "already_running", "pending", "running"].includes(globalScan.status)) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      api.getGlobalActiveScan(globalScan.id).then(setGlobalScan).catch(() => undefined);
+    }, 1500);
+    return () => window.clearInterval(timer);
+  }, [globalScan?.id, globalScan?.status]);
 
   const handleSort = (key: string) => {
     if (sortKey === key) {
@@ -138,6 +159,7 @@ export function LatestScanPage() {
   const { addToast } = useToast();
   const [isScanning, setIsScanning] = useState(false);
   const [isActiveScanning, setIsActiveScanning] = useState(false);
+  const [isGlobalActiveScanning, setIsGlobalActiveScanning] = useState(false);
 
   const handleRunScan = async () => {
     setIsScanning(true);
@@ -188,6 +210,40 @@ export function LatestScanPage() {
     }
   };
 
+  const handleGlobalActiveScan = async () => {
+    setIsGlobalActiveScanning(true);
+    addToast({
+      title: "Global Active Scan Started",
+      message: "Requesting an active ARP scan from every connected client…",
+      severity: "INFO",
+    });
+    try {
+      const res = await api.triggerGlobalActiveScan();
+      setGlobalScan(res);
+      addToast({
+        title: "Global Active Scan Started",
+        message: `${res.total_clients} client(s) queued; up to ${res.max_concurrent_clients} scan at once. Results will appear as clients finish.`,
+        severity: "SUCCESS",
+      });
+      refetch();
+    } catch (err: any) {
+      addToast({
+        title: "Global Active Scan Failed",
+        message: err?.message || "Could not scan the connected clients.",
+        severity: "CRITICAL",
+      });
+    } finally {
+      setIsGlobalActiveScanning(false);
+    }
+  };
+
+  const globalScanActive = Boolean(
+    globalScan && ["started", "already_running", "pending", "running"].includes(globalScan.status),
+  );
+  const globalProgress = globalScan?.total_clients
+    ? Math.round(((globalScan.completed + globalScan.failed + globalScan.skipped) / globalScan.total_clients) * 100)
+    : 0;
+
   return (
     <div>
       <div className="page-header">
@@ -203,7 +259,7 @@ export function LatestScanPage() {
           <Button
             variant="primary"
             size="md"
-            disabled={isScanning || isActiveScanning}
+            disabled={isScanning || isActiveScanning || isGlobalActiveScanning || globalScanActive}
             onClick={handleRunScan}
           >
             {isScanning ? "Scanning & Merging…" : " Run Scan (Merge Reports)"}
@@ -211,11 +267,24 @@ export function LatestScanPage() {
           <Button
             variant="secondary"
             size="md"
-            disabled={isScanning || isActiveScanning}
+            disabled={isScanning || isActiveScanning || isGlobalActiveScanning}
             onClick={handleActiveScan}
             title="Runs a real ARP scan from the server — requires root. Takes 10–30s."
           >
             {isActiveScanning ? "Running ARP Scan…" : " Active Server Scan (ARP)"}
+          </Button>
+          <Button
+            variant="secondary"
+            size="md"
+            disabled={isScanning || isActiveScanning || isGlobalActiveScanning}
+            onClick={handleGlobalActiveScan}
+            title="Requests an active ARP scan from every connected client."
+          >
+            {isGlobalActiveScanning
+              ? "Scanning Connected Clients…"
+              : globalScanActive
+                ? " Global Scan Running…"
+                : " Global Active Scan (Clients)"}
           </Button>
           <Button variant="quiet" size="sm" onClick={refetch}>
             Refresh
@@ -235,6 +304,29 @@ export function LatestScanPage() {
           >
             Retry
           </Button>
+        </Notice>
+      )}
+
+      {globalScan && (
+        <Notice
+          variant={globalScan.status === "partial" ? "warning" : "info"}
+          title={`Global Network Scan · ${globalScan.status.replace("_", " ")}`}
+        >
+          <div style={{ display: "grid", gap: "var(--space-2)" }}>
+            <span>
+              {globalScan.completed} / {globalScan.total_clients} clients completed · {globalScan.devices_found} unique device(s) discovered
+            </span>
+            <div
+              aria-label="Global scan progress"
+              style={{ height: 8, borderRadius: 999, overflow: "hidden", background: "var(--surface-raised)" }}
+            >
+              <div style={{ width: `${globalProgress}%`, height: "100%", background: "var(--accent)", transition: "width 180ms ease" }} />
+            </div>
+            <span style={{ color: "var(--text-muted)", fontSize: "var(--font-sm)" }}>
+              Running: {globalScan.running} · Pending: {globalScan.pending} · Failed: {globalScan.failed}
+              {globalScan.skipped ? ` · Skipped: ${globalScan.skipped}` : ""}
+            </span>
+          </div>
         </Notice>
       )}
 

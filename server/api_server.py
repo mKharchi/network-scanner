@@ -143,8 +143,8 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     {"command": "GET_SYSTEM_INFO", "label": "System information"},
                     {"command": "GET_NETWORK_INFO", "label": "Network information"},
                     {"command": "GET_PROCESSES", "label": "Processes"},
-                    {"command": "GET_NETWORK_LOG", "label": "Network connection log"},
                     {"command": "GET_ACTIVITY_LOG", "label": "Activity log"},
+                    {"command": "SCAN_NETWORK", "label": "Scan local network (ARP)"},
                     {"command": "PING", "label": "Ping"},
                     {"command": "KILL_PROCESS", "label": "Kill process"},
                     {"command": "START_PROCESS", "label": "Start process"},
@@ -186,6 +186,28 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 limit = get_int_param("limit", 50)
                 items = api_service.list_scans(from_date=from_date, to_date=to_date, limit=limit)
                 self.send_data({"items": items, "next_cursor": None})
+                return
+
+            if path == "/api/v1/network/scans/global-active":
+                from server_components.global_network_scan import global_network_scan_manager
+
+                active_scan = global_network_scan_manager.active()
+                if not active_scan:
+                    self.send_error_response(404, "NOT_FOUND", "No global active scan is running.")
+                    return
+                self.send_data(active_scan)
+                return
+
+            m = re.match(r"^/api/v1/network/scans/global-active/([^/]+)$", path)
+            if m:
+                from server_components.global_network_scan import global_network_scan_manager
+
+                scan_id = urllib.parse.unquote(m.group(1))
+                scan = global_network_scan_manager.get(scan_id)
+                if not scan:
+                    self.send_error_response(404, "NOT_FOUND", f"Global scan '{scan_id}' not found.")
+                    return
+                self.send_data(scan)
                 return
 
             m = re.match(r"^/api/v1/network/scans/([^/]+)$", path)
@@ -301,7 +323,12 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     self.send_error_response(400, "MISSING_COMMAND", 'Field "command" is required.')
                     return
 
-                res = server_lib.execute_client_command(client_id, command, args, timeout=12.0)
+                res = server_lib.execute_client_command(
+                    client_id,
+                    command,
+                    args,
+                    timeout=25.0 if command == "SCAN_NETWORK" else 12.0,
+                )
                 if res.get("status") == "ok":
                     self.send_data(res, status_code=200)
                 else:
@@ -347,6 +374,23 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     traceback.print_exc()
                     print(f"Active network scan failed: {err}")
                     self.send_error_response(500, "SCAN_FAILED", f"Active ARP scan failed: {err}")
+                    return
+            # Global Active Neighbourhood Scan via All Clients.
+            if path == "/api/v1/network/scans/global-active":
+                try:
+                    from server_components.network_discovery import run_global_active_scan
+                    print("[REST API] Global active neighbourhood scan started…")
+                    scan, created = run_global_active_scan()
+                    self.send_data({
+                        **scan,
+                        "status": "started" if created else "already_running",
+                    }, status_code=202 if created else 200)
+                    return
+                except Exception as err:
+                    import traceback
+                    traceback.print_exc()
+                    print(f"Global active scan failed: {err}")
+                    self.send_error_response(500, "SCAN_FAILED", f"Global active scan failed: {err}")
                     return
 
             # Fallback 404
