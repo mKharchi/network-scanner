@@ -69,6 +69,7 @@ export function ClientDetailPage() {
   const [activeCommand, setActiveCommand] = useState<string | null>(null);
   const [commandLoading, setCommandLoading] = useState(false);
   const [commandResult, setCommandResult] = useState<any>(null);
+  const [neighbourhoodLoading, setNeighbourhoodLoading] = useState(false);
 
   // Process management states
   const [processList, setProcessList] = useState<ProcessItem[] | null>(null);
@@ -128,12 +129,6 @@ export function ClientDetailPage() {
         });
         setShowStartModal(false);
         setStartProcessPath('');
-      } else if (command === 'SCAN_NETWORK') {
-        addToast({
-          title: 'Network Scan Started',
-          message: `The ARP scan is running in the background on ${clientId}.`,
-          severity: 'INFO',
-        });
       } else if (command === 'DISCONNECT') {
         addToast({
           title: 'Client Disconnected',
@@ -157,6 +152,28 @@ export function ClientDetailPage() {
       });
     } finally {
       setCommandLoading(false);
+    }
+  };
+
+  const requestNeighbourhood = async () => {
+    if (!clientId) return;
+    setNeighbourhoodLoading(true);
+    try {
+      const result = await api.requestClientNeighbourhood(clientId);
+      addToast({
+        title: 'Neighbourhood collected',
+        message: `Received ${result.observations_sent} stored observation(s) from ${c.hostname}.`,
+        severity: 'SUCCESS',
+      });
+      refetch();
+    } catch (err: any) {
+      addToast({
+        title: 'Neighbourhood request failed',
+        message: err?.message || 'The client did not provide its stored neighbourhood.',
+        severity: 'CRITICAL',
+      });
+    } finally {
+      setNeighbourhoodLoading(false);
     }
   };
 
@@ -345,22 +362,18 @@ export function ClientDetailPage() {
             variant="secondary"
             size="sm"
             disabled={!isOnline || commandLoading}
-            onClick={() => executeCommand('SCAN_NETWORK')}
-            title="Run an active ARP scan from this client’s local network."
-          >
-            🔎 {commandLoading && activeCommand === 'SCAN_NETWORK'
-              ? 'Scanning…'
-              : 'Scan Local Network'}
-          </Button>
-
-
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={!isOnline || commandLoading}
             onClick={() => executeCommand('PING')}
           >
             📡 Ping
+          </Button>
+
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={!isOnline || commandLoading || neighbourhoodLoading}
+            onClick={requestNeighbourhood}
+          >
+            {neighbourhoodLoading ? 'Collecting Neighbourhood…' : 'Collect Neighbourhood'}
           </Button>
 
           {/* Activity Log dropdown & button */}

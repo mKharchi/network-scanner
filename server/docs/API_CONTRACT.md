@@ -135,6 +135,30 @@
   ```
 * **Error Response:** `404 NOT_FOUND` if `client_id` is unknown.
 
+#### `POST /api/v1/clients/{client_id}/network-neighbourhood`
+* **Description:** Requests the connected client to send its accumulated local neighborhood file. The client does not start a scan; accepted observations are persisted and merged before the command completes.
+* **Success Response (200 OK):**
+  ```json
+  {
+    "data": {
+      "status": "completed",
+      "client_id": "client-e4fd45ba8b96",
+      "observations_sent": 12,
+      "timeout_seconds": 12.0
+    },
+    "meta": {}
+  }
+  ```
+* **Timeout Response (504):** `CLIENT_TIMEOUT`. This is isolated to the requested client.
+* **Configuration:** `NETWORK_NEIGHBOURHOOD_REQUEST_TIMEOUT` (default `12` seconds).
+
+#### `POST /api/v1/network/neighbourhood/collections`
+* **Description:** Starts passive global neighbourhood collection from the current online-client snapshot. Clients are requested in configured concurrent buckets; no client performs an active ARP scan.
+* **Success Response:** `202 Accepted` with the collection ID and `status: "started"`. If a collection is already running, returns `200 OK` with `status: "already_running"` and that collection's state.
+
+#### `GET /api/v1/network/neighbourhood/collections/{collection_id}`
+* **Description:** Returns collection progress and final partial-success counts, including requested, succeeded, failed, timed-out clients, completed buckets, and MAC-deduplicated `devices_discovered`.
+
 ---
 
 ### 2.3 Network Scans & Devices
@@ -201,35 +225,14 @@
 * **Success Response (200 OK):** Same structure as `/scans/latest`.
 
 #### `POST /api/v1/network/scans/global-active`
-* **Description:** Starts a server-managed active ARP scan across the clients that are online at request time. The response does not wait for ARP results.
-* **Success Response (202 Accepted):**
-  ```json
-  {
-    "data": {
-      "id": "global-20260819143000-a1b2c3d4",
-      "status": "started",
-      "total_clients": 25,
-      "max_concurrent_clients": 5,
-      "started": 0,
-      "completed": 0,
-      "failed": 0,
-      "running": 0,
-      "pending": 25,
-      "devices_found": 0,
-      "started_at": "2026-08-19T14:30:00Z"
-    },
-    "meta": {}
-  }
-  ```
-* **Already running (200 OK):** Returns the active job with `status` set to `already_running`; no second global scan is created.
-* **Configuration:** `GLOBAL_NETWORK_SCAN_MAX_CONCURRENT_CLIENTS` (default `5`), `GLOBAL_NETWORK_SCAN_COMMAND_TIMEOUT` (default `10` seconds), and `GLOBAL_NETWORK_SCAN_TIMEOUT` (default `120` seconds).
+* **Status:** Temporarily disabled during the passive-neighborhood collection rollout.
+* **Response:** `409 ACTIVE_NETWORK_SCAN_DISABLED`. The endpoint remains reserved for the future passive global-collection operation.
 
 #### `GET /api/v1/network/scans/global-active/{scan_id}`
-* **Description:** Returns progress for a global client scan, including `pending`, `running`, `completed`, `failed`, `skipped`, and MAC-deduplicated `devices_found` counters.
-* **Success Response (200 OK):** Same job structure returned by `POST /network/scans/global-active`, with `updated_at` and `finished_at` fields.
+* **Description:** Legacy status endpoint for previously created active-scan jobs. No new active jobs can be created while the feature is disabled.
 
 #### `GET /api/v1/network/scans/global-active`
-* **Description:** Returns the currently active global client scan. Returns `404 NOT_FOUND` when no job is running.
+* **Description:** Legacy active-scan status endpoint. Returns `404 NOT_FOUND` when no prior job is running.
 
 #### `GET /api/v1/network/devices/{mac_address}`
 * **Description:** Retrieves detailed observation history and DHCP traces for a specific MAC.

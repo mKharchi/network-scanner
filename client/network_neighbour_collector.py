@@ -13,7 +13,9 @@ import re
 import socket
 import subprocess
 import time
+from datetime import datetime, timezone
 import oui
+from neighbourhood import merge_neighbourhood_observations, normalise_neighbourhood_observation
 
 MAC_ADDRESS_PATTERN = re.compile(r"^[0-9A-F]{2}(?::[0-9A-F]{2}){5}$")
 LINUX_DYNAMIC_STATES = {"REACHABLE", "STALE", "DELAY", "PROBE"}
@@ -683,6 +685,13 @@ class NetworkNeighbourCollector:
                 _scan_log(f"Active ARP collection step failed: {error}")
 
         result = self.enrich(neighbours) if enrich else neighbours
+        observed_at = datetime.now(timezone.utc).isoformat()
+        result = merge_neighbourhood_observations(
+            normalise_neighbourhood_observation(
+                neighbour, source="arp", observed_at=observed_at
+            )
+            for neighbour in result
+        )
         _scan_log(
             f"Collection completed: devices={len(result)} "
             f"elapsed={time.monotonic() - started_at:.1f}s."

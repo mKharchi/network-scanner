@@ -535,6 +535,15 @@ def _append_observation_sources(target, sources):
             target["observation_sources"].append(source)
 
 
+def _append_observed_ip(target, ip_address):
+    """Preserve every valid address observed for one MAC-deduplicated device."""
+    if not isinstance(ip_address, str) or not ip_address:
+        return
+    observed_ips = target.setdefault("ip_addresses", [])
+    if ip_address not in observed_ips:
+        observed_ips.append(ip_address)
+
+
 def merge_discovery_sources(
     server_devices, client_observations, *, previous_devices=None, observed_at=None
 ):
@@ -556,6 +565,8 @@ def merge_discovery_sources(
         merged_device = dict(device)
         merged_device["mac_address"] = mac_address
         merged_device["observation_sources"] = []
+        merged_device["ip_addresses"] = list(device.get("ip_addresses") or [])
+        _append_observed_ip(merged_device, merged_device.get("ip_address"))
         _append_observation_sources(
             merged_device,
             device.get("observation_sources")
@@ -582,11 +593,13 @@ def merge_discovery_sources(
             merged_device = dict(device)
             merged_device["mac_address"] = mac_address
             merged_device["observation_sources"] = []
+            merged_device["ip_addresses"] = []
             devices_by_mac[mac_address] = merged_device
         else:
             # A direct ARP response is the newest authoritative IP address.
             merged_device["ip_address"] = device.get("ip_address")
             _merge_missing_device_details(merged_device, device)
+        _append_observed_ip(merged_device, device.get("ip_address"))
         _append_observation_sources(merged_device, [source])
 
     for observation in client_observations:
@@ -616,6 +629,7 @@ def merge_discovery_sources(
                 "os_family": None,
                 "os_confidence": None,
                 "observation_sources": [],
+                "ip_addresses": [],
             }
             devices_by_mac[mac_address] = merged_device
         else:
@@ -625,14 +639,15 @@ def merge_discovery_sources(
                 merged_device["hostname"] = observation["hostname"]
             if not merged_device.get("vendor") and observation.get("vendor"):
                 merged_device["vendor"] = observation["vendor"]
+        _append_observed_ip(merged_device, observation.get("ip_address"))
         _append_observation_sources(merged_device, [source])
 
     return list(devices_by_mac.values())
 
 
 
-def run_manual_scan(*, context_overrides=None):
-    """Aggregate fresh client neighbour reports without scanning from the server.
+def merge_and_persist_client_neighbourhood(*, context_overrides=None):
+    """Merge fresh client neighbourhood reports by MAC and persist one snapshot.
 
     Server-local ARP discovery, hostname lookup, and OS detection are
     intentionally not called here.  Those helper functions are retained for
@@ -677,6 +692,13 @@ def run_manual_scan(*, context_overrides=None):
     result_path = store_network_scan(context, devices)
     LOGGER.info("Network scan result saved to %s", result_path)
     return context, devices, result_path
+
+
+def run_manual_scan(*, context_overrides=None):
+    """Compatibility alias for client-neighbourhood merge and persistence."""
+    return merge_and_persist_client_neighbourhood(
+        context_overrides=context_overrides
+    )
 
 
 def run_active_scan():
@@ -759,3 +781,19 @@ def run_global_active_scan():
         flush=True,
     )
     return global_network_scan_manager.start(online_clients)
+
+
+def run_global_neighbourhood_collection():
+    """Start a bucketed passive collection from the current online clients.
+
+    The collection requests only each client's already-stored daily
+    neighbourhood; it does not trigger active ARP discovery.
+    """
+    from server_components import server_lib
+    from server_components.global_network_scan import (
+        global_neighbourhood_collection_manager,
+    )
+
+    with server_lib.clients_lock:
+        online_clients = list(server_lib.clients.values())
+    return global_neighbourhood_collection_manager.start(online_clients)

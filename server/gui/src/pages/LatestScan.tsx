@@ -1,6 +1,10 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, type GlobalNetworkScan, type NetworkDevice } from "../api/client";
+import {
+  api,
+  type GlobalNeighbourhoodCollection,
+  type NetworkDevice,
+} from "../api/client";
 import { useFetch } from "../hooks/useFetch";
 import { useToast } from "../hooks/useToast";
 import { ClassificationBadge } from "../components/Badge";
@@ -26,28 +30,6 @@ export function LatestScanPage() {
     [],
     ["app:network_update", "network_update"]
   );
-  const { state: activeGlobalScanState } = useFetch(
-    () => api.getGlobalActiveScan(),
-    [],
-  );
-  const [globalScan, setGlobalScan] = useState<GlobalNetworkScan | null>(null);
-
-  useEffect(() => {
-    if (activeGlobalScanState.status === "success") {
-      setGlobalScan(activeGlobalScanState.data);
-    }
-  }, [activeGlobalScanState]);
-
-  useEffect(() => {
-    if (!globalScan || !["started", "already_running", "pending", "running"].includes(globalScan.status)) {
-      return;
-    }
-    const timer = window.setInterval(() => {
-      api.getGlobalActiveScan(globalScan.id).then(setGlobalScan).catch(() => undefined);
-    }, 1500);
-    return () => window.clearInterval(timer);
-  }, [globalScan?.id, globalScan?.status]);
-
   const handleSort = (key: string) => {
     if (sortKey === key) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -158,8 +140,9 @@ export function LatestScanPage() {
 
   const { addToast } = useToast();
   const [isScanning, setIsScanning] = useState(false);
-  const [isActiveScanning, setIsActiveScanning] = useState(false);
-  const [isGlobalActiveScanning, setIsGlobalActiveScanning] = useState(false);
+  const [isCollectingNeighbourhoods, setIsCollectingNeighbourhoods] = useState(false);
+  const [neighbourhoodCollection, setNeighbourhoodCollection] =
+    useState<GlobalNeighbourhoodCollection | null>(null);
 
   const handleRunScan = async () => {
     setIsScanning(true);
@@ -182,67 +165,39 @@ export function LatestScanPage() {
     }
   };
 
-  const handleActiveScan = async () => {
-    const staringtime = Date.now();
-    setIsActiveScanning(true);
-    addToast({
-      title: "Active ARP Scan Started",
-      message: "Server is running ARP discovery — this may take 10–30 seconds…",
-      severity: "INFO",
-    });
+  const handleCollectAllNeighbourhoods = async () => {
+    setIsCollectingNeighbourhoods(true);
     try {
-      const res = await api.triggerActiveScan();
-      const elapsed = ((Date.now() - staringtime) / 1000).toFixed(1);
+      let collection = await api.startGlobalNeighbourhoodCollection();
+      setNeighbourhoodCollection(collection);
+
+      while (
+        collection.status === "started" ||
+        collection.status === "already_running" ||
+        collection.status === "pending" ||
+        collection.status === "running"
+      ) {
+        await new Promise((resolve) => window.setTimeout(resolve, 750));
+        collection = await api.getGlobalNeighbourhoodCollection(collection.id);
+        setNeighbourhoodCollection(collection);
+      }
+
       addToast({
-        title: "Active Scan Completed",
-        message: `ARP scan found ${res?.devices_found ?? 0} device(s) on the network. Elapsed time: ${elapsed}s.`,
-        severity: "SUCCESS",
+        title: collection.status === "completed" ? "Neighbourhood collection complete" : "Neighbourhood collection partially complete",
+        message: `${collection.clients_succeeded}/${collection.clients_requested} clients responded; ${collection.devices_discovered} device(s) discovered.`,
+        severity: collection.status === "completed" ? "SUCCESS" : "INFO",
       });
       refetch();
     } catch (err: any) {
       addToast({
-        title: "Active Scan Failed",
-        message: err?.message || "Server ARP scan failed. Is the server running as root?",
+        title: "Neighbourhood collection failed",
+        message: err?.message || "Could not start or monitor global neighbourhood collection.",
         severity: "CRITICAL",
       });
     } finally {
-      setIsActiveScanning(false);
+      setIsCollectingNeighbourhoods(false);
     }
   };
-
-  const handleGlobalActiveScan = async () => {
-    setIsGlobalActiveScanning(true);
-    addToast({
-      title: "Global Active Scan Started",
-      message: "Requesting an active ARP scan from every connected client…",
-      severity: "INFO",
-    });
-    try {
-      const res = await api.triggerGlobalActiveScan();
-      setGlobalScan(res);
-      addToast({
-        title: "Global Active Scan Started",
-        message: `${res.total_clients} client(s) queued; up to ${res.max_concurrent_clients} scan at once. Results will appear as clients finish.`,
-        severity: "SUCCESS",
-      });
-      refetch();
-    } catch (err: any) {
-      addToast({
-        title: "Global Active Scan Failed",
-        message: err?.message || "Could not scan the connected clients.",
-        severity: "CRITICAL",
-      });
-    } finally {
-      setIsGlobalActiveScanning(false);
-    }
-  };
-
-  const globalScanActive = Boolean(
-    globalScan && ["started", "already_running", "pending", "running"].includes(globalScan.status),
-  );
-  const globalProgress = globalScan?.total_clients
-    ? Math.round(((globalScan.completed + globalScan.failed + globalScan.skipped) / globalScan.total_clients) * 100)
-    : 0;
 
   return (
     <div>
@@ -259,38 +214,41 @@ export function LatestScanPage() {
           <Button
             variant="primary"
             size="md"
-            disabled={isScanning || isActiveScanning || isGlobalActiveScanning || globalScanActive}
+            disabled={isScanning}
             onClick={handleRunScan}
           >
-            {isScanning ? "Scanning & Merging…" : " Run Scan (Merge Reports)"}
+            {isScanning ? "Merging Reports…" : "Merge Stored Reports"}
           </Button>
           <Button
             variant="secondary"
             size="md"
-            disabled={isScanning || isActiveScanning || isGlobalActiveScanning}
-            onClick={handleActiveScan}
-            title="Runs a real ARP scan from the server — requires root. Takes 10–30s."
+            disabled={isCollectingNeighbourhoods}
+            onClick={handleCollectAllNeighbourhoods}
           >
-            {isActiveScanning ? "Running ARP Scan…" : " Active Server Scan (ARP)"}
-          </Button>
-          <Button
-            variant="secondary"
-            size="md"
-            disabled={isScanning || isActiveScanning || isGlobalActiveScanning}
-            onClick={handleGlobalActiveScan}
-            title="Requests an active ARP scan from every connected client."
-          >
-            {isGlobalActiveScanning
-              ? "Scanning Connected Clients…"
-              : globalScanActive
-                ? " Global Scan Running…"
-                : " Global Active Scan (Clients)"}
+            {isCollectingNeighbourhoods
+              ? "Collecting Client Neighbourhoods…"
+              : "Collect All Client Neighbourhoods"}
           </Button>
           <Button variant="quiet" size="sm" onClick={refetch}>
             Refresh
           </Button>
         </div>
       </div>
+
+      {neighbourhoodCollection && (
+        <div style={{ marginBottom: "var(--space-4)" }}>
+          <Notice
+            variant={neighbourhoodCollection.status === "completed" ? "success" : "info"}
+            title="Global neighbourhood collection"
+          >
+            {neighbourhoodCollection.status === "started" ||
+            neighbourhoodCollection.status === "pending" ||
+            neighbourhoodCollection.status === "running"
+              ? `Collecting from ${neighbourhoodCollection.clients_requested} client(s): ${neighbourhoodCollection.buckets_completed}/${neighbourhoodCollection.buckets_total} buckets completed.`
+              : `${neighbourhoodCollection.clients_succeeded}/${neighbourhoodCollection.clients_requested} clients succeeded; ${neighbourhoodCollection.clients_timed_out} timed out; ${neighbourhoodCollection.clients_failed} failed; ${neighbourhoodCollection.devices_discovered} device(s) discovered.`}
+          </Notice>
+        </div>
+      )}
 
       {state.status === "error" && (
         <Notice variant="warning" title="Scan data is stale or unavailable">
@@ -304,29 +262,6 @@ export function LatestScanPage() {
           >
             Retry
           </Button>
-        </Notice>
-      )}
-
-      {globalScan && (
-        <Notice
-          variant={globalScan.status === "partial" ? "warning" : "info"}
-          title={`Global Network Scan · ${globalScan.status.replace("_", " ")}`}
-        >
-          <div style={{ display: "grid", gap: "var(--space-2)" }}>
-            <span>
-              {globalScan.completed} / {globalScan.total_clients} clients completed · {globalScan.devices_found} unique device(s) discovered
-            </span>
-            <div
-              aria-label="Global scan progress"
-              style={{ height: 8, borderRadius: 999, overflow: "hidden", background: "var(--surface-raised)" }}
-            >
-              <div style={{ width: `${globalProgress}%`, height: "100%", background: "var(--accent)", transition: "width 180ms ease" }} />
-            </div>
-            <span style={{ color: "var(--text-muted)", fontSize: "var(--font-sm)" }}>
-              Running: {globalScan.running} · Pending: {globalScan.pending} · Failed: {globalScan.failed}
-              {globalScan.skipped ? ` · Skipped: ${globalScan.skipped}` : ""}
-            </span>
-          </div>
         </Notice>
       )}
 

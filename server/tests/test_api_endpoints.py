@@ -258,27 +258,114 @@ class ApiEndpointsTestCase(unittest.TestCase):
             body = json.loads(resp.read().decode("utf-8"))
             self.assertEqual(body["data"]["status"], "ok")
 
-    @patch("server_components.network_discovery.run_global_active_scan")
-    def test_post_global_active_scan(self, mock_global_scan):
-        mock_global_scan.return_value = (
-            {
-                "id": "global-test",
-                "status": "pending",
-                "total_clients": 2,
-                "max_concurrent_clients": 5,
-            },
-            True,
+    @patch("server_components.server_lib.request_client_network_neighbourhood")
+    def test_post_client_neighbourhood_request(self, request_neighbourhood):
+        request_neighbourhood.return_value = {
+            "status": "completed",
+            "client_id": "client-123",
+            "observations_sent": 2,
+            "timeout_seconds": 12.0,
+        }
+        req = urllib.request.Request(
+            f"{self.base_url}/api/v1/clients/client-123/network-neighbourhood",
+            data=b"{}",
+            method="POST",
         )
+        with urllib.request.urlopen(req) as resp:
+            self.assertEqual(resp.status, 200)
+            body = json.loads(resp.read().decode("utf-8"))
+
+        self.assertEqual(body["data"]["observations_sent"], 2)
+        request_neighbourhood.assert_called_once_with("client-123")
+
+    @patch("server_components.server_lib.request_client_network_neighbourhood")
+    def test_post_client_neighbourhood_request_returns_controlled_timeout(self, request_neighbourhood):
+        request_neighbourhood.return_value = {
+            "status": "client_timeout",
+            "client_id": "client-123",
+            "message": "Command timed out after 12.0s.",
+        }
+        req = urllib.request.Request(
+            f"{self.base_url}/api/v1/clients/client-123/network-neighbourhood",
+            data=b"{}",
+            method="POST",
+        )
+        with self.assertRaises(urllib.error.HTTPError) as error:
+            urllib.request.urlopen(req)
+
+        self.assertEqual(error.exception.code, 504)
+        body = json.loads(error.exception.read().decode("utf-8"))
+        self.assertEqual(body["error"]["code"], "CLIENT_TIMEOUT")
+
+    @patch("server_components.network_discovery.run_global_neighbourhood_collection")
+    def test_global_neighbourhood_collection_endpoints(self, start_collection):
+        collection = {
+            "id": "neighbourhood-test",
+            "status": "pending",
+            "clients_requested": 2,
+            "clients_succeeded": 0,
+            "clients_failed": 0,
+            "clients_timed_out": 0,
+            "devices_discovered": 0,
+            "buckets_completed": 0,
+        }
+        start_collection.return_value = (collection, True)
+        req = urllib.request.Request(
+            f"{self.base_url}/api/v1/network/neighbourhood/collections",
+            data=b"{}",
+            method="POST",
+        )
+        with urllib.request.urlopen(req) as response:
+            self.assertEqual(response.status, 202)
+            body = json.loads(response.read().decode("utf-8"))
+
+        self.assertEqual(body["data"]["id"], "neighbourhood-test")
+        self.assertEqual(body["data"]["status"], "started")
+
+        with patch(
+            "server_components.global_network_scan.global_neighbourhood_collection_manager.get",
+            return_value={**collection, "status": "completed", "devices_discovered": 3},
+        ):
+            status, body = self._fetch(
+                "/api/v1/network/neighbourhood/collections/neighbourhood-test"
+            )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(body["data"]["status"], "completed")
+        self.assertEqual(body["data"]["devices_discovered"], 3)
+
+    def test_post_global_active_scan_is_disabled(self):
         url = f"{self.base_url}/api/v1/network/scans/global-active"
         req = urllib.request.Request(url, data=b"{}", method="POST")
 
-        with urllib.request.urlopen(req) as resp:
-            self.assertEqual(resp.status, 202)
-            body = json.loads(resp.read().decode("utf-8"))
+        with self.assertRaises(urllib.error.HTTPError) as error:
+            urllib.request.urlopen(req)
 
-        self.assertEqual(body["data"]["status"], "started")
-        self.assertEqual(body["data"]["id"], "global-test")
-        self.assertEqual(body["data"]["total_clients"], 2)
+        self.assertEqual(error.exception.code, 409)
+        body = json.loads(error.exception.read().decode("utf-8"))
+        self.assertEqual(body["error"]["code"], "ACTIVE_NETWORK_SCAN_DISABLED")
+
+    def test_active_scan_routes_are_disabled(self):
+        requests = [
+            urllib.request.Request(
+                f"{self.base_url}/api/v1/clients/client-123/commands",
+                data=json.dumps({"command": "SCAN_NETWORK"}).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            ),
+            urllib.request.Request(
+                f"{self.base_url}/api/v1/network/scans/active",
+                data=b"{}",
+                method="POST",
+            ),
+        ]
+
+        for request in requests:
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(request)
+            self.assertEqual(error.exception.code, 409)
+            body = json.loads(error.exception.read().decode("utf-8"))
+            self.assertEqual(body["error"]["code"], "ACTIVE_NETWORK_SCAN_DISABLED")
 
 
 if __name__ == "__main__":

@@ -144,7 +144,6 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     {"command": "GET_NETWORK_INFO", "label": "Network information"},
                     {"command": "GET_PROCESSES", "label": "Processes"},
                     {"command": "GET_ACTIVITY_LOG", "label": "Activity log"},
-                    {"command": "SCAN_NETWORK", "label": "Scan local network (ARP)"},
                     {"command": "PING", "label": "Ping"},
                     {"command": "KILL_PROCESS", "label": "Kill process"},
                     {"command": "START_PROCESS", "label": "Start process"},
@@ -196,6 +195,40 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     self.send_error_response(404, "NOT_FOUND", "No global active scan is running.")
                     return
                 self.send_data(active_scan)
+                return
+
+            if path == "/api/v1/network/neighbourhood/collections/active":
+                from server_components.global_network_scan import (
+                    global_neighbourhood_collection_manager,
+                )
+
+                collection = global_neighbourhood_collection_manager.active()
+                if not collection:
+                    self.send_error_response(
+                        404,
+                        "NOT_FOUND",
+                        "No global neighbourhood collection is running.",
+                    )
+                    return
+                self.send_data(collection)
+                return
+
+            m = re.match(r"^/api/v1/network/neighbourhood/collections/([^/]+)$", path)
+            if m:
+                from server_components.global_network_scan import (
+                    global_neighbourhood_collection_manager,
+                )
+
+                collection_id = urllib.parse.unquote(m.group(1))
+                collection = global_neighbourhood_collection_manager.get(collection_id)
+                if not collection:
+                    self.send_error_response(
+                        404,
+                        "NOT_FOUND",
+                        f"Global neighbourhood collection '{collection_id}' not found.",
+                    )
+                    return
+                self.send_data(collection)
                 return
 
             m = re.match(r"^/api/v1/network/scans/global-active/([^/]+)$", path)
@@ -305,6 +338,21 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
         path = parsed_url.path.rstrip("/")
 
         try:
+            # Direct passive neighbourhood collection from one connected client.
+            m = re.match(r"^/api/v1/clients/([^/]+)/network-neighbourhood$", path)
+            if m:
+                client_id = urllib.parse.unquote(m.group(1))
+                result = server_lib.request_client_network_neighbourhood(client_id)
+                if result["status"] == "completed":
+                    self.send_data(result, status_code=200)
+                elif result["status"] == "client_timeout":
+                    self.send_error_response(504, "CLIENT_TIMEOUT", result["message"])
+                elif result["status"] == "client_unavailable":
+                    self.send_error_response(409, "CLIENT_UNAVAILABLE", result["message"])
+                else:
+                    self.send_error_response(502, "CLIENT_REQUEST_FAILED", result["message"])
+                return
+
             # Client commands dispatch (POST /api/v1/clients/{client_id}/commands)
             m = re.match(r"^/api/v1/clients/([^/]+)/commands$", path)
             if m:
@@ -321,6 +369,14 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 args = payload.get("args")
                 if not command or not isinstance(command, str):
                     self.send_error_response(400, "MISSING_COMMAND", 'Field "command" is required.')
+                    return
+
+                if command in ("SCAN_NETWORK", "TRIGGER_ARP_SCAN"):
+                    self.send_error_response(
+                        409,
+                        "ACTIVE_NETWORK_SCAN_DISABLED",
+                        "Active ARP scanning is disabled while passive neighbourhood collection is being rolled out.",
+                    )
                     return
 
                 res = server_lib.execute_client_command(
@@ -356,49 +412,33 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
 
             # Active Server-Side ARP Scan (POST /api/v1/network/scans/active)
             if path == "/api/v1/network/scans/active":
-                try:
-                    from server_components.network_discovery import run_active_scan
-                    print("[REST API] Active server ARP scan started…")
-                    context, devices, result_path = run_active_scan()
-                    scan_id = context.get("scan_id", "active")
-                    event_broadcaster.broadcast_network_update(scan_id, len(devices))
-                    self.send_data({
-                        "status": "success",
-                        "scan_id": scan_id,
-                        "devices_found": len(devices),
-                        "result_path": str(result_path),
-                    }, status_code=201)
-                    return
-                except Exception as err:
-                    import traceback
-                    traceback.print_exc()
-                    print(f"Active network scan failed: {err}")
-                    self.send_error_response(500, "SCAN_FAILED", f"Active ARP scan failed: {err}")
-                    return
+                self.send_error_response(
+                    409,
+                    "ACTIVE_NETWORK_SCAN_DISABLED",
+                    "Active ARP scanning is disabled while passive neighbourhood collection is being rolled out.",
+                )
+                return
             # Global Active Neighbourhood Scan via All Clients.
             if path == "/api/v1/network/scans/global-active":
-                try:
-                    from server_components.network_discovery import run_global_active_scan
-                    print("[REST API] Global active neighbourhood scan started…")
-                    scan, created = run_global_active_scan()
-                    print(
-                        "[REST API] Global active scan job response: "
-                        f"scan_id={scan['id']} status={'started' if created else 'already_running'} "
-                        f"eligible_clients={scan['total_clients']} "
-                        f"max_concurrent_clients={scan['max_concurrent_clients']}.",
-                        flush=True,
-                    )
-                    self.send_data({
-                        **scan,
-                        "status": "started" if created else "already_running",
-                    }, status_code=202 if created else 200)
-                    return
-                except Exception as err:
-                    import traceback
-                    traceback.print_exc()
-                    print(f"Global active scan failed: {err}")
-                    self.send_error_response(500, "SCAN_FAILED", f"Global active scan failed: {err}")
-                    return
+                self.send_error_response(
+                    409,
+                    "ACTIVE_NETWORK_SCAN_DISABLED",
+                    "Global active ARP scanning is disabled; global passive neighbourhood collection will replace it.",
+                )
+                return
+
+            if path == "/api/v1/network/neighbourhood/collections":
+                from server_components.network_discovery import (
+                    run_global_neighbourhood_collection,
+                )
+
+                collection, created = run_global_neighbourhood_collection()
+                response = {
+                    **collection,
+                    "status": "started" if created else "already_running",
+                }
+                self.send_data(response, status_code=202 if created else 200)
+                return
 
             # Fallback 404
             self.send_error_response(404, "NOT_FOUND", f"Unknown POST endpoint '{path}'.")
