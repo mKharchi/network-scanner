@@ -73,7 +73,7 @@
       "sources": [
         "dhcp"
       ],
-      "observed_at": "2026-08-20T15:27:04.190163+01:00",
+      "observed_at": "2026-08-20T16:20:14.936756+01:00",
       "dhcp_message_type": 3,
       "dhcp_client_id": "01:B0:3C:DC:95:39:36"
     },
@@ -119,7 +119,7 @@
       "sources": [
         "dhcp"
       ],
-      "observed_at": "2026-08-20T13:06:43.770520+01:00",
+      "observed_at": "2026-08-20T16:21:30.708457+01:00",
       "dhcp_message_type": 3,
       "dhcp_client_id": "01:8E:75:CB:20:08:A6"
     },
@@ -383,7 +383,7 @@
       "sources": [
         "dhcp"
       ],
-      "observed_at": "2026-08-20T13:22:51.887351+01:00",
+      "observed_at": "2026-08-20T16:35:17.519701+01:00",
       "dhcp_message_type": 3,
       "dhcp_client_id": "01:2E:86:83:FC:2E:D4"
     },
@@ -718,7 +718,7 @@
       "sources": [
         "dhcp"
       ],
-      "observed_at": "2026-08-20T13:49:06.473326+01:00",
+      "observed_at": "2026-08-20T16:31:54.602648+01:00",
       "dhcp_message_type": 3,
       "dhcp_vendor_class": "android-dhcp-12",
       "dhcp_client_id": "01:CA:D5:F6:8A:E1:FE"
@@ -803,7 +803,7 @@
       "sources": [
         "dhcp"
       ],
-      "observed_at": "2026-08-20T15:26:18.533623+01:00",
+      "observed_at": "2026-08-20T16:27:04.615712+01:00",
       "dhcp_message_type": 3,
       "dhcp_vendor_class": "android-dhcp-15",
       "dhcp_client_id": "01:8E:28:52:F9:4F:19"
@@ -904,7 +904,7 @@
       "sources": [
         "dhcp"
       ],
-      "observed_at": "2026-08-20T13:44:41.186142+01:00",
+      "observed_at": "2026-08-20T16:23:57.738007+01:00",
       "dhcp_message_type": 3,
       "dhcp_vendor_class": "HUAWEI:android:JNY",
       "dhcp_client_id": "01:32:76:8E:F6:74:46"
@@ -1272,7 +1272,7 @@
       "sources": [
         "dhcp"
       ],
-      "observed_at": "2026-08-20T14:23:24.455543+01:00",
+      "observed_at": "2026-08-20T16:27:02.764575+01:00",
       "dhcp_message_type": 3,
       "dhcp_vendor_class": "android-dhcp-15",
       "dhcp_client_id": "01:2A:F5:3A:1F:0B:AA"
@@ -1559,7 +1559,7 @@
       "sources": [
         "dhcp"
       ],
-      "observed_at": "2026-08-20T15:23:57.531165+01:00",
+      "observed_at": "2026-08-20T16:21:48.526932+01:00",
       "dhcp_message_type": 3,
       "dhcp_client_id": "01:C6:B9:5D:47:CE:0A"
     },
@@ -1609,7 +1609,7 @@
       "sources": [
         "dhcp"
       ],
-      "observed_at": "2026-08-20T15:30:20.729593+01:00",
+      "observed_at": "2026-08-20T16:38:51.739412+01:00",
       "dhcp_message_type": 3,
       "dhcp_vendor_class": "android-dhcp-16",
       "dhcp_client_id": "01:B2:2D:BE:E8:2B:6F"
@@ -1630,6 +1630,237 @@
       "dhcp_message_type": 3,
       "dhcp_vendor_class": "MSFT 5.0",
       "dhcp_client_id": "01:98:3B:8F:C6:EB:A2"
+    },
+    {
+      "ip_address": "172.16.1.40",
+      "mac_address": "EE:1E:C2:C1:EA:F4",
+      "hostname": null,
+      "vendor": null,
+      "os": null,
+      "entry_type": "dynamic",
+      "interface": null,
+      "source": "dhcp",
+      "sources": [
+        "dhcp"
+      ],
+      "observed_at": "2026-08-20T16:23:53.029740+01:00",
+      "dhcp_message_type": 3,
+      "dhcp_client_id": "01:EE:1E:C2:C1:EA:F4"
+    },
+    {
+      "ip_address": "172.16.3.79",
+      "mac_address": "86:55:0D:36:83:0F",
+      "hostname": null,
+      "vendor": null,
+      "os": null,
+      "entry_type": "dynamic",
+      "interface": null,
+      "source": "dhcp",
+      "sources": [
+        "dhcp"
+      ],
+      "observed_at": "2026-08-20T16:24:16.172340+01:00",
+      "dhcp_message_type": 3,
+      "dhcp_client_id": "01:86:55:0D:36:83:0F"
+    },
+    {
+      "ip_address": "172.16.0.103",
+      "mac_address": "D2:E4:44:DF:4C:3A",
+      "hostname": null,
+      "vendor": null,
+      "os": null,
+      "entry_type": "dynamic",
+      "interface": null,
+      "source": "dhcp",
+      "sources": [
+        "dhcp"
+      ],
+      "observed_at": "2026-08-20T16:36:10.765997+01:00",
+      "dhcp_message_type": 3,
+      "dhcp_client_id": "01:D2:E4:44:DF:4C:3A"
+    },
+    {
+      "ip_address": "172.16.2.19",
+      "mac_address": "8A:01:4D:18:2B:FC",
+      "hostname": "Galaxy-A05",
+      "vendor": null,
+      "os": null,
+      "entry_type": "dynamic",
+      "interface": null,
+      "source": "dhcp",
+      "sources": [
+        "dhcp"
+      ],
+      "observed_at": "2026-08-20T16:26:13.721088+01:00",
+      "dhcp_message_type": 3,
+      "dhcp_vendor_class": "android-dhcp-15",
+      "dhcp_client_id": "01:8A:01:4D:18:2B:FC"
+    },
+    {
+      "ip_address": "172.16.1.218",
+      "mac_address": "A2:D5:EC:2F:11:22",
+      "hostname": "realme-10-Pro-5G",
+      "vendor": null,
+      "os": null,
+      "entry_type": "dynamic",
+      "interface": null,
+      "source": "dhcp",
+      "sources": [
+        "dhcp"
+      ],
+      "observed_at": "2026-08-20T16:26:43.009277+01:00",
+      "dhcp_message_type": 3,
+      "dhcp_vendor_class": "android-dhcp-14",
+      "dhcp_client_id": "01:A2:D5:EC:2F:11:22"
+    },
+    {
+      "ip_address": "172.16.2.183",
+      "mac_address": "02:DF:1E:FA:5B:24",
+      "hostname": null,
+      "vendor": null,
+      "os": null,
+      "entry_type": "dynamic",
+      "interface": null,
+      "source": "dhcp",
+      "sources": [
+        "dhcp"
+      ],
+      "observed_at": "2026-08-20T16:26:49.348217+01:00",
+      "dhcp_message_type": 3,
+      "dhcp_client_id": "01:02:DF:1E:FA:5B:24"
+    },
+    {
+      "ip_address": "172.16.3.197",
+      "mac_address": "16:F2:AE:64:38:E4",
+      "hostname": "Infinix-HOT-40i",
+      "vendor": null,
+      "os": null,
+      "entry_type": "dynamic",
+      "interface": null,
+      "source": "dhcp",
+      "sources": [
+        "dhcp"
+      ],
+      "observed_at": "2026-08-20T16:27:29.178289+01:00",
+      "dhcp_message_type": 3,
+      "dhcp_vendor_class": "android-dhcp-13",
+      "dhcp_client_id": "01:16:F2:AE:64:38:E4"
+    },
+    {
+      "ip_address": "172.16.3.103",
+      "mac_address": "72:9C:49:E7:30:5D",
+      "hostname": "itel-A60s",
+      "vendor": null,
+      "os": null,
+      "entry_type": "dynamic",
+      "interface": null,
+      "source": "dhcp",
+      "sources": [
+        "dhcp"
+      ],
+      "observed_at": "2026-08-20T16:28:41.672135+01:00",
+      "dhcp_message_type": 3,
+      "dhcp_vendor_class": "android-dhcp-12",
+      "dhcp_client_id": "01:72:9C:49:E7:30:5D"
+    },
+    {
+      "ip_address": "172.16.0.195",
+      "mac_address": "3C:4E:56:FB:A6:B9",
+      "hostname": null,
+      "vendor": "SHENZHEN CHUANGWEI-RGB ELECTRONICS CO.,LTD",
+      "os": null,
+      "entry_type": "dynamic",
+      "interface": null,
+      "source": "dhcp",
+      "sources": [
+        "dhcp"
+      ],
+      "observed_at": "2026-08-20T16:33:14.450452+01:00",
+      "dhcp_message_type": 2
+    },
+    {
+      "ip_address": "172.16.3.89",
+      "mac_address": "2E:95:32:04:79:CF",
+      "hostname": null,
+      "vendor": null,
+      "os": null,
+      "entry_type": "dynamic",
+      "interface": null,
+      "source": "dhcp",
+      "sources": [
+        "dhcp"
+      ],
+      "observed_at": "2026-08-20T16:33:15.886115+01:00",
+      "dhcp_message_type": 3,
+      "dhcp_client_id": "01:2E:95:32:04:79:CF"
+    },
+    {
+      "ip_address": "172.16.0.255",
+      "mac_address": "F6:B1:C7:B5:71:FD",
+      "hostname": "Infinix-SMART-10",
+      "vendor": null,
+      "os": null,
+      "entry_type": "dynamic",
+      "interface": null,
+      "source": "dhcp",
+      "sources": [
+        "dhcp"
+      ],
+      "observed_at": "2026-08-20T16:34:01.136114+01:00",
+      "dhcp_message_type": 3,
+      "dhcp_vendor_class": "android-dhcp-15",
+      "dhcp_client_id": "01:F6:B1:C7:B5:71:FD"
+    },
+    {
+      "ip_address": "172.16.3.179",
+      "mac_address": "9E:65:CD:A9:F5:8E",
+      "hostname": "Galaxy-A16",
+      "vendor": null,
+      "os": null,
+      "entry_type": "dynamic",
+      "interface": null,
+      "source": "dhcp",
+      "sources": [
+        "dhcp"
+      ],
+      "observed_at": "2026-08-20T16:39:16.729137+01:00",
+      "dhcp_message_type": 3,
+      "dhcp_vendor_class": "android-dhcp-16",
+      "dhcp_client_id": "01:9E:65:CD:A9:F5:8E"
+    },
+    {
+      "ip_address": "172.16.0.110",
+      "mac_address": "2A:FD:BD:71:9A:B0",
+      "hostname": "Will-s-M17",
+      "vendor": null,
+      "os": null,
+      "entry_type": "dynamic",
+      "interface": null,
+      "source": "dhcp",
+      "sources": [
+        "dhcp"
+      ],
+      "observed_at": "2026-08-20T16:38:47.849703+01:00",
+      "dhcp_message_type": 3,
+      "dhcp_vendor_class": "android-dhcp-16",
+      "dhcp_client_id": "01:2A:FD:BD:71:9A:B0"
+    },
+    {
+      "ip_address": "172.16.1.43",
+      "mac_address": "A6:8E:90:8D:BA:C6",
+      "hostname": "realme-C75x",
+      "vendor": null,
+      "os": null,
+      "entry_type": "dynamic",
+      "interface": null,
+      "source": "dhcp",
+      "sources": [
+        "dhcp"
+      ],
+      "observed_at": "2026-08-20T16:39:10.581006+01:00",
+      "dhcp_message_type": 3,
+      "dhcp_vendor_class": "android-dhcp-16",
+      "dhcp_client_id": "01:A6:8E:90:8D:BA:C6"
     }
   ]
 }

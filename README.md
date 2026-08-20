@@ -160,6 +160,35 @@ On Windows, install the Npcap driver before running the client; it supplies
 the capture interface used by Scapy. It is a system driver, not a Python
 package named `winpcap`.
 
+### Windows: run in the signed-in user's session
+
+`GET_ACTIVITY_LOG` reads browser history and the Windows Recent folder from
+the account that runs the client. Do not use the `NetworkClient` LocalSystem
+service when activity should be collected for the person currently signed in.
+Instead, install the per-user logon task once from that user's PowerShell:
+
+```powershell
+cd client
+.\install_user_logon_task.ps1
+```
+
+The task starts `user_agent.py` at that user's next sign-in (or start it now
+with `Start-ScheduledTask -TaskName NetworkClientUserAgent`). It uses an
+interactive-user token, needs no stored password, and collects only that
+user's profile activity. Install it separately for each Windows account that
+should report its own activity.
+
+Before starting the task, stop the legacy machine-wide service to avoid two
+clients connecting as the same device:
+
+```powershell
+Stop-Service NetworkClient
+Set-Service NetworkClient -StartupType Disabled
+```
+
+To remove the logon task later, run `./uninstall_user_logon_task.ps1` from the
+same account.
+
 ---
 
 ## Supported Commands
