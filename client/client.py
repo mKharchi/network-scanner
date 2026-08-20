@@ -41,6 +41,16 @@ active_network_scan_global_id = None
 forbidden_processes = []
 
 
+class _StopEventProxy:
+    """Combine the global shutdown event with a per-session event."""
+
+    def __init__(self, *events):
+        self._events = events
+
+    def is_set(self):
+        return any(event is not None and event.is_set() for event in self._events)
+
+
 def disabled_active_network_scan_result(command):
     """Return the compatibility response for retired on-demand ARP scans.
 
@@ -460,10 +470,14 @@ def send_alerts(client_socket, alerts, source):
                 return
 
 
-def background_scanner(client_socket):
-    time.sleep(10)
+def background_scanner(client_socket, stop_event=None):
+    if stop_event:
+        if stop_event.wait(10):
+            return
+    else:
+        time.sleep(10)
 
-    while True:
+    while not (stop_event and stop_event.is_set()):
         try:
             print("Background scanner running...")
             # Generate 1h activity log
@@ -478,7 +492,11 @@ def background_scanner(client_socket):
         except Exception as e:
             print(f"Background scanner error: {e}")
 
-        time.sleep(3600)
+        if stop_event:
+            if stop_event.wait(3600):
+                break
+        else:
+            time.sleep(3600)
 
 
 # ============================================================
@@ -486,161 +504,191 @@ def background_scanner(client_socket):
 # ============================================================
 
 
-def start_client():
-    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+def start_client(stop_event=None):
+    if stop_event is None:
+        stop_event = threading.Event()
 
-    try:
-        client.connect((SERVER_IP, SERVER_PORT))
-    except OSError as error:
-        print(f"Could not connect to server: {error}")
-        return
+    while not stop_event.is_set():
+        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        session_stop_event = threading.Event()
+        stop_proxy = _StopEventProxy(stop_event, session_stop_event)
+        background_thread = None
+        dhcp_listener = None
 
-    print(f"Connected to server {SERVER_IP}:{SERVER_PORT}")
-
-    # --------------------------------------------------------
-    # Register
-    # --------------------------------------------------------
-    with socket_lock:
-        send_message(client, create_registration_message(client.getsockname()[0]))
-    print("Registration sent.")
-
-    # --------------------------------------------------------
-    # Wait for commands
-    # --------------------------------------------------------
-    while True:
         try:
-            message = receive_message(client)
-
-            if message is None:
-                print("Server disconnected.")
-                break
-
-            msg_type = message.get("type")
-
-            # Silently acknowledge registration confirmation
-            if msg_type == "REGISTERED":
-                # Send stored snapshot if available.
-                # Do NOT collect synchronously during registration.
-                threading.Thread(
-                    target=send_stored_daily_neighbourhood,
-                    args=(client,),
-                    daemon=True,
-                ).start()
-
-                # Immediately request forbidden processes.
-                with socket_lock:
-                    send_message(
-                        client,
-                        {
-                            "type": "REQUEST",
-                            "command": "GET_FORBIDDEN_PROCESSES",
-                        },
-                    )
+            try:
+                client.settimeout(5)
+                client.connect((SERVER_IP, SERVER_PORT))
+            except OSError as error:
+                print(f"Could not connect to server: {error}")
+                if stop_event.wait(5):
+                    break
                 continue
+            finally:
+                client.settimeout(None)
 
-            if msg_type == "FORBIDDEN_PROCESSES":
-                global forbidden_processes
-                forbidden_processes = message.get("data", [])
-                print(f"Received {len(forbidden_processes)} forbidden processes.")
+            print(f"Connected to server {SERVER_IP}:{SERVER_PORT}")
 
-                # Start background daily neighbour snapshot collection so it never blocks command execution
-                threading.Thread(
-                    target=collect_daily_network_neighbours,
-                    daemon=True,
-                ).start()
-
-                # Start background scanner
-                t = threading.Thread(
-                    target=background_scanner,
-                    args=(client,),
-                    daemon=True,
-                )
-                t.start()
-
-                # Start passive DHCP listener (idempotent)
-                try:
-                    if (
-                        "_dhcp_listener" not in globals()
-                        or globals().get("_dhcp_listener") is None
-                    ):
-
-                        def _on_dhcp_obs(obs):
-                            store_dhcp_neighbourhood_observation(obs)
-
-                        # Auto-detect active network interface for sniffing
-                        detected_iface = None
-                        try:
-                            from network_neighbour_collector import get_local_network
-
-                            local_net = get_local_network()
-                            if local_net:
-                                detected_iface = local_net.get("interface")
-                        except Exception:
-                            pass
-
-                        listen_iface = (
-                            os.getenv("DHCP_LISTEN_INTERFACE") or detected_iface
-                        )
-                        _dhcp_listener = DHCPListener(
-                            _on_dhcp_obs,
-                            interface=listen_iface,
-                        )
-                        _dhcp_listener.start()
-                        globals()["_dhcp_listener"] = _dhcp_listener
-                except Exception as e:
-                    print(f"[DHCP] Could not start listener: {e}")
-                continue
-
-            if msg_type != "COMMAND":
-                print("Invalid message from server.")
-                continue
-
-            command = message.get("command")
-
-            if not command:
-                print("Command missing.")
-                continue
-
-            print(f"Command received: {command}")
-
-            if command in ("SCAN_NETWORK", "TRIGGER_ARP_SCAN"):
-                _scan_log(f"Ignored disabled active-scan command: {command}.")
-                result = disabled_active_network_scan_result(command)
-            elif command == "GET_NETWORK_NEIGHBOURHOOD":
-                start_requested_neighbourhood_command(client)
-                continue
-            else:
-                result = handle_command(message)
-
-            # A server-requested activity log (including the standard 24-hour
-            # request) is another detection opportunity.  Send any resulting
-            # alerts before the response containing the full log.
-            if command == "GET_ACTIVITY_LOG" and isinstance(result, dict):
-                alerts = scan_activity_log(result)
-                print(
-                    f"Activity-log scan ({result.get('period', 'unknown')}) "
-                    f"found {len(alerts)} new alerts."
-                )
-                send_alerts(client, alerts, "server-requested activity log")
-
+            # --------------------------------------------------------
+            # Register
+            # --------------------------------------------------------
             with socket_lock:
-                send_message(
-                    client, {"type": "RESPONSE", "command": command, "data": result}
-                )
+                send_message(client, create_registration_message(client.getsockname()[0]))
+            print("Registration sent.")
 
-            print("Response sent.")
+            # --------------------------------------------------------
+            # Wait for commands
+            # --------------------------------------------------------
+            while not stop_proxy.is_set():
+                try:
+                    message = receive_message(client, stop_event=stop_proxy)
 
-            if command == "DISCONNECT":
-                break
+                    if message is None:
+                        if stop_proxy.is_set():
+                            break
+                        print("Server disconnected.")
+                        break
 
-        except json.JSONDecodeError:
-            print("Received invalid JSON.")
+                    msg_type = message.get("type")
 
-        except (ConnectionResetError, BrokenPipeError, OSError):
-            print("Connection with server lost.")
-            break
+                    # Silently acknowledge registration confirmation
+                    if msg_type == "REGISTERED":
+                        # Send stored snapshot if available.
+                        # Do NOT collect synchronously during registration.
+                        threading.Thread(
+                            target=send_stored_daily_neighbourhood,
+                            args=(client,),
+                            daemon=True,
+                        ).start()
 
-    client.close()
+                        # Immediately request forbidden processes.
+                        with socket_lock:
+                            send_message(
+                                client,
+                                {
+                                    "type": "REQUEST",
+                                    "command": "GET_FORBIDDEN_PROCESSES",
+                                },
+                            )
+                        continue
+
+                    if msg_type == "FORBIDDEN_PROCESSES":
+                        global forbidden_processes
+                        forbidden_processes = message.get("data", [])
+                        print(f"Received {len(forbidden_processes)} forbidden processes.")
+
+                        # Start background daily neighbour snapshot collection so it never blocks command execution
+                        threading.Thread(
+                            target=collect_daily_network_neighbours,
+                            daemon=True,
+                        ).start()
+
+                        # Start background scanner
+                        if background_thread is None or not background_thread.is_alive():
+                            background_thread = threading.Thread(
+                                target=background_scanner,
+                                args=(client, session_stop_event),
+                                daemon=True,
+                                name="background-scanner",
+                            )
+                            background_thread.start()
+
+                        # Start passive DHCP listener (idempotent per session)
+                        try:
+                            if dhcp_listener is None:
+
+                                def _on_dhcp_obs(obs):
+                                    store_dhcp_neighbourhood_observation(obs)
+
+                                # Auto-detect active network interface for sniffing
+                                detected_iface = None
+                                try:
+                                    from network_neighbour_collector import get_local_network
+
+                                    local_net = get_local_network()
+                                    if local_net:
+                                        detected_iface = local_net.get("interface")
+                                except Exception:
+                                    pass
+
+                                listen_iface = (
+                                    os.getenv("DHCP_LISTEN_INTERFACE") or detected_iface
+                                )
+                                dhcp_listener = DHCPListener(
+                                    _on_dhcp_obs,
+                                    interface=listen_iface,
+                                )
+                                dhcp_listener.start()
+                        except Exception as e:
+                            print(f"[DHCP] Could not start listener: {e}")
+                        continue
+
+                    if msg_type != "COMMAND":
+                        print("Invalid message from server.")
+                        continue
+
+                    command = message.get("command")
+
+                    if not command:
+                        print("Command missing.")
+                        continue
+
+                    print(f"Command received: {command}")
+
+                    if command in ("SCAN_NETWORK", "TRIGGER_ARP_SCAN"):
+                        _scan_log(f"Ignored disabled active-scan command: {command}.")
+                        result = disabled_active_network_scan_result(command)
+                    elif command == "GET_NETWORK_NEIGHBOURHOOD":
+                        start_requested_neighbourhood_command(client)
+                        continue
+                    else:
+                        result = handle_command(message)
+
+                    # A server-requested activity log (including the standard 24-hour
+                    # request) is another detection opportunity.  Send any resulting
+                    # alerts before the response containing the full log.
+                    if command == "GET_ACTIVITY_LOG" and isinstance(result, dict):
+                        alerts = scan_activity_log(result)
+                        print(
+                            f"Activity-log scan ({result.get('period', 'unknown')}) "
+                            f"found {len(alerts)} new alerts."
+                        )
+                        send_alerts(client, alerts, "server-requested activity log")
+
+                    with socket_lock:
+                        send_message(
+                            client, {"type": "RESPONSE", "command": command, "data": result}
+                        )
+
+                    print("Response sent.")
+
+                    if command == "DISCONNECT":
+                        stop_event.set()
+                        break
+
+                except json.JSONDecodeError:
+                    print("Received invalid JSON.")
+
+                except (ConnectionResetError, BrokenPipeError, OSError):
+                    print("Connection with server lost.")
+                    break
+
+        except KeyboardInterrupt:
+            stop_event.set()
+        finally:
+            session_stop_event.set()
+            if dhcp_listener is not None:
+                try:
+                    dhcp_listener.stop()
+                except Exception as error:
+                    print(f"[DHCP] Could not stop listener cleanly: {error}")
+            if background_thread is not None and background_thread.is_alive():
+                background_thread.join(timeout=2)
+            try:
+                client.close()
+            except OSError:
+                pass
+
     print("Client stopped.")
 
 

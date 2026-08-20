@@ -2,6 +2,7 @@
 
 import sys
 import tempfile
+import socket
 import threading
 import types
 import unittest
@@ -26,6 +27,18 @@ class ClientBackgroundScanTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "disabled")
         self.assertIn("active ARP scanning", result["message"])
+
+    def test_receive_message_honours_shutdown_before_reading(self):
+        reader, writer = socket.socketpair()
+        stop_event = threading.Event()
+        stop_event.set()
+        try:
+            self.assertIsNone(
+                client_module.receive_message(reader, stop_event=stop_event)
+            )
+        finally:
+            reader.close()
+            writer.close()
 
     def test_daily_snapshot_uses_passive_collection_only(self):
         neighbours = [
