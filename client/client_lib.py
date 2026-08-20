@@ -5,6 +5,7 @@ import platform
 import re
 import shutil
 import socket
+import select
 import sqlite3
 import subprocess
 import tempfile
@@ -885,10 +886,23 @@ def send_message(connection, message):
     connection.sendall(len(data).to_bytes(4, byteorder="big") + data)
 
 
-def receive_message(connection):
-    # Read the 4-byte length header first
+def receive_message(connection, stop_event=None, poll_interval=0.5):
+    def wait_for_readable():
+        while True:
+            if stop_event and stop_event.is_set():
+                return False
+            try:
+                readable, _, _ = select.select([connection], [], [], poll_interval)
+            except (OSError, ValueError):
+                return False
+            if readable:
+                return True
+
+    # Read the 4-byte length header first.
     header = b""
     while len(header) < 4:
+        if not wait_for_readable():
+            return None
         chunk = connection.recv(4 - len(header))
         if not chunk:
             return None
@@ -896,9 +910,11 @@ def receive_message(connection):
 
     total = int.from_bytes(header, byteorder="big")
 
-    # Read exactly `total` bytes
+    # Read exactly `total` bytes.
     data = b""
     while len(data) < total:
+        if not wait_for_readable():
+            return None
         chunk = connection.recv(min(65536, total - len(data)))
         if not chunk:
             return None

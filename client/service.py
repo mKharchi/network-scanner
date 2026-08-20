@@ -1,7 +1,7 @@
 import win32serviceutil
 import win32service
-import win32event
 import servicemanager
+import threading
 
 from client import start_client
 
@@ -14,21 +14,24 @@ class ClientService(win32serviceutil.ServiceFramework):
     def __init__(self, args):
         super().__init__(args)
 
-        self.stop_event = win32event.CreateEvent(None, 0, 0, None)
+        self.stop_event = threading.Event()
 
     def SvcStop(self):
         self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
 
-        win32event.SetEvent(self.stop_event)
-
-        self.ReportServiceStatus(win32service.SERVICE_STOPPED)
+        self.stop_event.set()
 
     def SvcDoRun(self):
         servicemanager.LogInfoMsg(
             "NetworkClient service started."
         )
 
-        start_client()
+        self.ReportServiceStatus(win32service.SERVICE_RUNNING)
+
+        try:
+            start_client(self.stop_event)
+        finally:
+            self.ReportServiceStatus(win32service.SERVICE_STOPPED)
 
 
 if __name__ == "__main__":
