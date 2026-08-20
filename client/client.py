@@ -151,9 +151,7 @@ def collect_daily_network_neighbours():
         f"elapsed={time.monotonic() - started_at:.1f}s."
     )
     try:
-        file_path, payload = update_daily_neighbourhood(
-            neighbours, date=snapshot_date
-        )
+        file_path, payload = update_daily_neighbourhood(neighbours, date=snapshot_date)
         _save_neighbour_snapshot_state(snapshot_date, client_mac)
         _scan_log(
             f"Daily snapshot stored: file={file_path} reporter={client_mac or 'unknown'} "
@@ -192,7 +190,9 @@ def send_stored_daily_neighbourhood(client_socket):
     try:
         payload = load_daily_neighbourhood(date=snapshot_date)
     except (OSError, ValueError) as error:
-        print(f"Could not load local network neighbourhood for synchronization: {error}")
+        print(
+            f"Could not load local network neighbourhood for synchronization: {error}"
+        )
         return False
 
     neighbours = payload["observations"]
@@ -324,11 +324,15 @@ def store_dhcp_neighbourhood_observation(observation):
     return neighbour
 
 
-def send_active_network_neighbours(client_socket, *, lock_held=False, global_scan_id=None):
+def send_active_network_neighbours(
+    client_socket, *, lock_held=False, global_scan_id=None
+):
     """Run an active ARP scan without blocking the client command loop."""
     global active_network_scan_global_id
     if not lock_held and not network_scan_lock.acquire(blocking=False):
-        _scan_log("Active scan request rejected: another active scan is already running.")
+        _scan_log(
+            "Active scan request rejected: another active scan is already running."
+        )
         return False
 
     try:
@@ -364,7 +368,9 @@ def send_active_network_neighbours(client_socket, *, lock_held=False, global_sca
         _scan_log(f"Active scan report delivery failed: {error}")
         return False
     except Exception as error:
-        _scan_log(f"Active scan failed: reporter={_snapshot_client_mac() or 'unknown'} error={error}")
+        _scan_log(
+            f"Active scan failed: reporter={_snapshot_client_mac() or 'unknown'} error={error}"
+        )
         if global_scan_id:
             try:
                 with socket_lock:
@@ -389,7 +395,9 @@ def send_active_network_neighbours(client_socket, *, lock_held=False, global_sca
         with network_scan_state_lock:
             active_network_scan_global_id = None
         network_scan_lock.release()
-        _scan_log(f"Active scan slot released: global_scan_id={global_scan_id or 'none'}.")
+        _scan_log(
+            f"Active scan slot released: global_scan_id={global_scan_id or 'none'}."
+        )
 
 
 def start_active_network_scan(client_socket, *, global_scan_id=None):
@@ -511,11 +519,22 @@ def start_client():
 
             # Silently acknowledge registration confirmation
             if msg_type == "REGISTERED":
-                send_stored_daily_neighbourhood(client)
+                # Send stored snapshot if available.
+                # Do NOT collect synchronously during registration.
+                threading.Thread(
+                    target=send_stored_daily_neighbourhood,
+                    args=(client,),
+                    daemon=True,
+                ).start()
+
+                # Immediately request forbidden processes.
                 with socket_lock:
                     send_message(
                         client,
-                        {"type": "REQUEST", "command": "GET_FORBIDDEN_PROCESSES"},
+                        {
+                            "type": "REQUEST",
+                            "command": "GET_FORBIDDEN_PROCESSES",
+                        },
                     )
                 continue
 
@@ -552,13 +571,16 @@ def start_client():
                         detected_iface = None
                         try:
                             from network_neighbour_collector import get_local_network
+
                             local_net = get_local_network()
                             if local_net:
                                 detected_iface = local_net.get("interface")
                         except Exception:
                             pass
 
-                        listen_iface = os.getenv("DHCP_LISTEN_INTERFACE") or detected_iface
+                        listen_iface = (
+                            os.getenv("DHCP_LISTEN_INTERFACE") or detected_iface
+                        )
                         _dhcp_listener = DHCPListener(
                             _on_dhcp_obs,
                             interface=listen_iface,
