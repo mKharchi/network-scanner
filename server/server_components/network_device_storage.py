@@ -96,6 +96,12 @@ def validate_neighbour_report(payload):
         vendor = _normalise_metadata(neighbour.get("vendor"))
         if vendor:
             record["vendor"] = vendor
+        sources = neighbour.get("sources")
+        if not isinstance(sources, list):
+            sources = [neighbour.get("source")]
+        sources = [source for source in sources if source in {"arp", "dhcp"}]
+        if sources:
+            record["sources"] = list(dict.fromkeys(sources))
         validated.append(record)
     return validated
 
@@ -211,6 +217,49 @@ def store_client_dhcp_observations(reporter_mac, neighbours, *, observed_at=None
         reporter_mac,
     )
     return stored
+
+
+def store_client_neighbourhood_observations(reporter_mac, neighbours, *, observed_at=None):
+    """Persist one accumulated local-neighbourhood report with source fidelity.
+
+    A device observed by both ARP and DHCP is represented by one device row and
+    two immutable source-attributed observation rows.  This preserves the
+    useful discovery provenance while later merge operations still correlate
+    the physical device by MAC address.
+    """
+    reporter_mac = _normalise_mac_address(reporter_mac)
+    if not reporter_mac:
+        raise ValueError("reporting client MAC is invalid")
+
+    arp_neighbours = []
+    dhcp_neighbours = []
+    for neighbour in neighbours:
+        if not isinstance(neighbour, dict):
+            continue
+        sources = neighbour.get("sources") or [neighbour.get("source")]
+        if not isinstance(sources, list):
+            sources = []
+        if "dhcp" in sources:
+            dhcp_neighbours.append(neighbour)
+        if "arp" in sources or not sources:
+            arp_neighbours.append(neighbour)
+
+    if arp_neighbours:
+        _store_observations(
+            reporter_mac, arp_neighbours, "CLIENT_ARP", observed_at=observed_at
+        )
+    if dhcp_neighbours:
+        _store_observations(
+            reporter_mac, dhcp_neighbours, "CLIENT_DHCP", observed_at=observed_at
+        )
+    LOGGER.info(
+        "Stored %d client neighbourhood device(s) from %s (%d ARP, %d DHCP source rows).",
+        len(neighbours),
+        reporter_mac,
+        len(arp_neighbours),
+        len(dhcp_neighbours),
+    )
+    return len(neighbours)
 
 
 def store_daily_network_scan_reference(file_path, *, observed_at=None):

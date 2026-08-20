@@ -110,6 +110,24 @@ class NetworkDeviceStorageTests(unittest.TestCase):
                 {"observed_at": "2026-08-17T10:00:00Z", "neighbours": {}}
             )
 
+    def test_validation_preserves_normalized_client_observation_sources(self):
+        neighbours = network_device_storage.validate_neighbour_report(
+            {
+                "observed_at": "2026-08-20T10:00:00Z",
+                "neighbours": [
+                    {
+                        "ip_address": "172.16.0.102",
+                        "mac_address": "E4:FD:45:BA:8B:96",
+                        "entry_type": "dynamic",
+                        "source": "dhcp",
+                        "sources": ["arp", "dhcp", "invalid"],
+                    }
+                ],
+            }
+        )
+
+        self.assertEqual(neighbours[0]["sources"], ["arp", "dhcp"])
+
     def test_store_creates_device_and_source_attributed_observation(self):
         connection = FakeConnection()
         original_get_connection = network_device_storage.get_connection
@@ -228,6 +246,22 @@ class NetworkDeviceStorageTests(unittest.TestCase):
             daily_scan_reference_storer=lambda *_: self.fail("duplicate was referenced"),
         )
         self.assertTrue(accepted)
+
+    def test_handler_stores_requested_neighbourhood_without_daily_deduplication(self):
+        stored = []
+        neighbours = [{"mac_address": "12:22:33:44:55:66"}]
+
+        accepted = server_lib.handle_network_neighbour_report(
+            "AA:BB:CC:DD:EE:FF",
+            {"observation_source": "REQUESTED_NEIGHBOURHOOD"},
+            report_validator=lambda _: neighbours,
+            observation_storer=lambda reporter_mac, rows: (
+                stored.append((reporter_mac, rows)) or len(rows)
+            ),
+        )
+
+        self.assertTrue(accepted)
+        self.assertEqual(stored, [("AA:BB:CC:DD:EE:FF", neighbours)])
 
     def test_handler_merges_active_scan_report(self):
         from server_components import event_broadcaster, network_discovery
@@ -364,6 +398,68 @@ class NetworkDeviceStorageTests(unittest.TestCase):
         self.assertEqual(observation[:3], (13, "CLIENT_DHCP", 7))
         self.assertEqual(observation[3], "172.16.0.102")
         self.assertEqual(observation[5:7], ("dynamic", datetime(2026, 8, 17, 10, 0, 0)))
+
+    def test_store_local_neighbourhood_preserves_arp_and_dhcp_sources(self):
+        connection = FakeConnection()
+        original_get_connection = network_device_storage.get_connection
+        network_device_storage.get_connection = lambda: connection
+        try:
+            stored = network_device_storage.store_client_neighbourhood_observations(
+                "AA:BB:CC:DD:EE:FF",
+                [
+                    {
+                        "ip_address": "172.16.0.102",
+                        "mac_address": "E4:FD:45:BA:8B:96",
+                        "entry_type": "dynamic",
+                        "sources": ["arp", "dhcp"],
+                    }
+                ],
+                observed_at=datetime(2026, 8, 17, 10, 0, 0),
+            )
+        finally:
+            network_device_storage.get_connection = original_get_connection
+
+        self.assertEqual(stored, 1)
+        source_types = [
+            params[1]
+            for query, params in connection.cursor_instance.executed
+            if "INSERT INTO network_device_observations" in query
+        ]
+        self.assertEqual(source_types, ["CLIENT_ARP", "CLIENT_DHCP"])
+
+    def test_request_client_neighbourhood_returns_completed_or_timeout(self):
+        with patch.object(
+            server_lib,
+            "execute_client_command",
+            return_value={
+                "status": "ok",
+                "data": {"status": "ok", "observations_sent": 2},
+            },
+        ) as execute:
+            completed = server_lib.request_client_network_neighbourhood(
+                "client-a", timeout=4.0
+            )
+
+        self.assertEqual(completed["status"], "completed")
+        self.assertEqual(completed["observations_sent"], 2)
+        execute.assert_called_once_with(
+            "client-a",
+            "GET_NETWORK_NEIGHBOURHOOD",
+            timeout=4.0,
+            process_network_scan=False,
+        )
+
+        with patch.object(
+            server_lib,
+            "execute_client_command",
+            return_value={"status": "error", "message": "Command timed out after 4.0s."},
+        ):
+            timed_out = server_lib.request_client_network_neighbourhood(
+                "client-a", timeout=4.0
+            )
+
+        self.assertEqual(timed_out["status"], "client_timeout")
+        self.assertEqual(timed_out["timeout_seconds"], 4.0)
 
 
 if __name__ == "__main__":

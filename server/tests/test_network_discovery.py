@@ -8,6 +8,7 @@ import json
 import sys
 import threading
 import time
+import types
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,6 +19,14 @@ from tempfile import TemporaryDirectory
 
 SERVER_DIRECTORY = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SERVER_DIRECTORY))
+
+try:
+    import mysql.connector  # noqa: F401
+except ModuleNotFoundError:
+    mysql_module = types.ModuleType("mysql")
+    mysql_module.connector = types.ModuleType("mysql.connector")
+    sys.modules["mysql"] = mysql_module
+    sys.modules["mysql.connector"] = mysql_module.connector
 
 from server_components import (
     network_device_classification,
@@ -304,6 +313,41 @@ class NetworkDiscoveryTests(unittest.TestCase):
         self.assertEqual(
             [s["source_type"] for s in merged[0]["observation_sources"]],
             ["SERVER_SCAN", "CLIENT_DHCP"],
+        )
+
+    def test_merge_discovery_sources_keeps_multiple_ips_for_one_mac(self):
+        merged = network_discovery.merge_discovery_sources(
+            [],
+            [
+                {
+                    "source_type": "CLIENT_ARP",
+                    "source_client_id": "client-a",
+                    "ip_address": "172.16.0.102",
+                    "mac_address": "E4:FD:45:BA:8B:96",
+                    "entry_type": "dynamic",
+                    "hostname": "desktop",
+                    "vendor": "Example Vendor",
+                    "observed_at": "2026-08-20T10:00:00+00:00",
+                },
+                {
+                    "source_type": "CLIENT_DHCP",
+                    "source_client_id": "client-b",
+                    "ip_address": "172.16.0.150",
+                    "mac_address": "E4:FD:45:BA:8B:96",
+                    "entry_type": "dynamic",
+                    "hostname": "desktop",
+                    "vendor": "Example Vendor",
+                    "observed_at": "2026-08-20T10:01:00+00:00",
+                },
+            ],
+        )
+
+        self.assertEqual(len(merged), 1)
+        self.assertEqual(merged[0]["mac_address"], "E4:FD:45:BA:8B:96")
+        self.assertEqual(merged[0]["ip_addresses"], ["172.16.0.102", "172.16.0.150"])
+        self.assertEqual(
+            [source["source_type"] for source in merged[0]["observation_sources"]],
+            ["CLIENT_ARP", "CLIENT_DHCP"],
         )
 
     def test_hostname_normalisation_decodes_avahi_octal_escapes(self):
@@ -654,6 +698,203 @@ class NetworkDiscoveryTests(unittest.TestCase):
             self.assertEqual(call.kwargs["timeout"], 10.0)
             self.assertFalse(call.kwargs["process_network_scan"])
             self.assertEqual(call.kwargs["args"]["global_scan_id"], result["id"])
+
+    def test_global_neighbourhood_collection_finishes_each_bucket_before_next(self):
+        from server_components import server_lib
+        from server_components.global_network_scan import (
+            GlobalNeighbourhoodCollectionManager,
+        )
+
+        clients = [
+            {"client_id": "client-a", "mac": "AA:AA:AA:AA:AA:AA"},
+            {"client_id": "client-b", "mac": "BB:BB:BB:BB:BB:BB"},
+            {"client_id": "client-c", "mac": "CC:CC:CC:CC:CC:CC"},
+        ]
+        first_bucket_entered = threading.Event()
+        release_first_bucket = threading.Event()
+        call_lock = threading.Lock()
+        calls = []
+
+        def request_neighbourhood(client_id, *, timeout):
+            with call_lock:
+                calls.append(client_id)
+                if {"client-a", "client-b"}.issubset(calls):
+                    first_bucket_entered.set()
+            if client_id in {"client-a", "client-b"}:
+                release_first_bucket.wait(1)
+            return {
+                "status": "completed",
+                "client_id": client_id,
+                "observations_sent": 1,
+            }
+
+        with patch.dict(
+            "os.environ", {"GLOBAL_NEIGHBOURHOOD_COLLECTION_BUCKET_SIZE": "2"}
+        ), patch.object(
+            server_lib,
+            "request_client_network_neighbourhood",
+            side_effect=request_neighbourhood,
+        ):
+            manager = GlobalNeighbourhoodCollectionManager()
+            result, created = manager.start(clients)
+            self.assertTrue(first_bucket_entered.wait(1))
+            with call_lock:
+                self.assertEqual(set(calls), {"client-a", "client-b"})
+            release_first_bucket.set()
+
+            deadline = time.monotonic() + 1
+            while time.monotonic() < deadline:
+                completed = manager.get(result["id"])
+                if completed and completed["status"] == "completed":
+                    break
+                time.sleep(0.01)
+
+        self.assertTrue(created)
+        self.assertEqual(completed["total_clients"], 3)
+        self.assertEqual(completed["completed"], 3)
+        self.assertEqual(completed["buckets_total"], 2)
+        self.assertEqual(completed["buckets_completed"], 2)
+        self.assertEqual(calls[2], "client-c")
+
+    def test_global_neighbourhood_collection_isolates_client_timeout(self):
+        from server_components import server_lib
+        from server_components.global_network_scan import (
+            GlobalNeighbourhoodCollectionManager,
+        )
+
+        clients = [
+            {"client_id": "client-a", "mac": "AA:AA:AA:AA:AA:AA"},
+            {"client_id": "client-b", "mac": "BB:BB:BB:BB:BB:BB"},
+            {"client_id": "client-c", "mac": "CC:CC:CC:CC:CC:CC"},
+        ]
+        calls = []
+
+        def request_neighbourhood(client_id, *, timeout):
+            calls.append((client_id, timeout))
+            if client_id == "client-a":
+                return {
+                    "status": "client_timeout",
+                    "client_id": client_id,
+                    "timeout_seconds": timeout,
+                    "message": "Command timed out.",
+                }
+            return {
+                "status": "completed",
+                "client_id": client_id,
+                "observations_sent": 2,
+                "timeout_seconds": timeout,
+            }
+
+        with patch.dict(
+            "os.environ",
+            {
+                "GLOBAL_NEIGHBOURHOOD_COLLECTION_BUCKET_SIZE": "2",
+                "GLOBAL_NEIGHBOURHOOD_COLLECTION_CLIENT_TIMEOUT": "4.5",
+            },
+        ), patch.object(
+            server_lib,
+            "request_client_network_neighbourhood",
+            side_effect=request_neighbourhood,
+        ):
+            manager = GlobalNeighbourhoodCollectionManager()
+            result, created = manager.start(clients)
+            deadline = time.monotonic() + 1
+            completed = None
+            while time.monotonic() < deadline:
+                completed = manager.get(result["id"])
+                if completed and completed["status"] == "partial":
+                    break
+                time.sleep(0.01)
+
+        self.assertTrue(created)
+        self.assertEqual(completed["completed"], 2)
+        self.assertEqual(completed["timed_out"], 1)
+        self.assertEqual(completed["buckets_completed"], 2)
+        self.assertEqual(completed["request_timeout"], 4.5)
+        self.assertEqual({client_id for client_id, _ in calls[:2]}, {"client-a", "client-b"})
+        self.assertEqual(calls[2][0], "client-c")
+        self.assertTrue(all(timeout == 4.5 for _, timeout in calls))
+
+    def test_global_neighbourhood_collection_reports_partial_success_result(self):
+        from server_components import server_lib
+        from server_components.global_network_scan import (
+            GlobalNeighbourhoodCollectionManager,
+        )
+
+        clients = [
+            {"client_id": "client-a", "mac": "AA:AA:AA:AA:AA:AA"},
+            {"client_id": "client-b", "mac": "BB:BB:BB:BB:BB:BB"},
+            {"client_id": "client-c", "mac": "CC:CC:CC:CC:CC:CC"},
+        ]
+        responses = {
+            "client-a": {"status": "completed", "observations_sent": 2},
+            "client-b": {"status": "client_timeout", "message": "Timed out."},
+            "client-c": {"status": "client_unavailable", "message": "Offline."},
+        }
+
+        with patch.dict(
+            "os.environ", {"GLOBAL_NEIGHBOURHOOD_COLLECTION_BUCKET_SIZE": "2"}
+        ), patch.object(
+            server_lib,
+            "request_client_network_neighbourhood",
+            side_effect=lambda client_id, **_: responses[client_id],
+        ), patch.object(
+            server_lib,
+            "merge_and_broadcast_neighbourhood",
+            return_value=([{"mac_address": "11:22:33:44:55:66"}], "/tmp/scan.json"),
+        ) as merge:
+            manager = GlobalNeighbourhoodCollectionManager()
+            result, created = manager.start(clients)
+            deadline = time.monotonic() + 1
+            completed = None
+            while time.monotonic() < deadline:
+                completed = manager.get(result["id"])
+                if completed and completed["status"] == "partial":
+                    break
+                time.sleep(0.01)
+
+        self.assertTrue(created)
+        self.assertEqual(completed["clients_requested"], 3)
+        self.assertEqual(completed["clients_succeeded"], 1)
+        self.assertEqual(completed["clients_failed"], 1)
+        self.assertEqual(completed["clients_timed_out"], 1)
+        self.assertEqual(completed["devices_discovered"], 1)
+        self.assertEqual(completed["buckets_completed"], 2)
+        self.assertIsNone(completed["merge_error"])
+        merge.assert_called_once()
+
+    def test_global_neighbourhood_collection_logs_lifecycle(self):
+        from server_components import global_network_scan, server_lib
+        from server_components.global_network_scan import (
+            GlobalNeighbourhoodCollectionManager,
+        )
+
+        with patch.object(
+            server_lib,
+            "request_client_network_neighbourhood",
+            return_value={"status": "completed", "observations_sent": 3},
+        ), patch.object(
+            server_lib,
+            "merge_and_broadcast_neighbourhood",
+            return_value=([{"mac_address": "11:22:33:44:55:66"}], "/tmp/scan.json"),
+        ), patch.object(global_network_scan, "_collection_log") as collection_log:
+            manager = GlobalNeighbourhoodCollectionManager()
+            result, _ = manager.start([
+                {"client_id": "client-a", "mac": "AA:AA:AA:AA:AA:AA"}
+            ])
+            deadline = time.monotonic() + 1
+            while time.monotonic() < deadline:
+                completed = manager.get(result["id"])
+                if completed and completed["status"] == "completed":
+                    break
+                time.sleep(0.01)
+
+        messages = [call.args[0] for call in collection_log.call_args_list]
+        self.assertTrue(any("started: eligible_clients" in message for message in messages))
+        self.assertTrue(any("bucket %d/%d started" in message for message in messages))
+        self.assertTrue(any("responded: observations" in message for message in messages))
+        self.assertTrue(any("bucket %d/%d completed" in message for message in messages))
+        self.assertTrue(any("completed: status" in message for message in messages))
 
 
 if __name__ == "__main__":

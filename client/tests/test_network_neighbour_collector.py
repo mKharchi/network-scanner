@@ -98,6 +98,31 @@ class NetworkNeighbourCollectorTests(unittest.TestCase):
         )
         self.assertEqual(collector.collect(), [])
 
+    def test_collector_returns_normalized_neighbourhood_observations(self):
+        collector = NetworkNeighbourCollector(
+            system_name="Linux",
+            command_runner=lambda _: SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps(
+                    [
+                        {
+                            "dst": "172.16.0.102",
+                            "lladdr": "aa-bb-cc-dd-ee-ff",
+                            "state": "REACHABLE",
+                            "dev": "eth0",
+                        }
+                    ]
+                ),
+            ),
+        )
+
+        observations = collector.collect()
+
+        self.assertEqual(len(observations), 1)
+        self.assertEqual(observations[0]["source"], "arp")
+        self.assertEqual(observations[0]["sources"], ["arp"])
+        self.assertIn("observed_at", observations[0])
+
     def test_get_local_network_parses_linux_ip_routes_and_addrs(self):
         def fake_runner(cmd, **kwargs):
             if "route" in cmd:

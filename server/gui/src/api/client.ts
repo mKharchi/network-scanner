@@ -144,6 +144,22 @@ export interface GlobalNetworkScan {
   max_concurrent_clients: number;
 }
 
+export interface GlobalNeighbourhoodCollection {
+  id: string;
+  status: 'started' | 'already_running' | 'pending' | 'running' | 'completed' | 'partial';
+  clients_requested: number;
+  clients_succeeded: number;
+  clients_failed: number;
+  clients_timed_out: number;
+  devices_discovered: number;
+  buckets_completed: number;
+  buckets_total: number;
+  current_bucket: number | null;
+  request_timeout: number;
+  finished_at: string | null;
+  merge_error: string | null;
+}
+
 export interface Alert {
   id: number;
   client: { id: string; hostname: string } | null;
@@ -407,6 +423,32 @@ export const api = {
       return (await resp.json()).data;
     })(),
 
+  requestClientNeighbourhood: (clientId: string) =>
+    (async () => {
+      const baseWithApi = API_ORIGIN.replace(/\/+$/, "") + BASE;
+      const resp = await fetch(
+        baseWithApi + `/clients/${encodeURIComponent(clientId)}/network-neighbourhood`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+        },
+      );
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => null);
+        throw new ApiError(
+          body?.error?.code ?? "UNKNOWN_ERROR",
+          body?.error?.message ?? `HTTP ${resp.status}`,
+          resp.status,
+        );
+      }
+      return (await resp.json()).data as {
+        status: "completed";
+        client_id: string;
+        observations_sent: number;
+        timeout_seconds: number;
+      };
+    })(),
+
   triggerManualScan: () =>
     (async () => {
       const baseWithApi = API_ORIGIN.replace(/\/+$/, "") + BASE;
@@ -426,6 +468,29 @@ export const api = {
       }
       return (await resp.json()).data;
     })(),
+
+  startGlobalNeighbourhoodCollection: () =>
+    (async () => {
+      const baseWithApi = API_ORIGIN.replace(/\/+$/, "") + BASE;
+      const resp = await fetch(baseWithApi + "/network/neighbourhood/collections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+      });
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => null);
+        throw new ApiError(
+          body?.error?.code ?? "UNKNOWN_ERROR",
+          body?.error?.message ?? `HTTP ${resp.status}`,
+          resp.status,
+        );
+      }
+      return (await resp.json()).data as GlobalNeighbourhoodCollection;
+    })(),
+
+  getGlobalNeighbourhoodCollection: (collectionId: string) =>
+    get<GlobalNeighbourhoodCollection>(
+      `/network/neighbourhood/collections/${encodeURIComponent(collectionId)}`,
+    ),
 
   triggerActiveScan: () =>
     (async () => {

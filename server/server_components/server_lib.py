@@ -28,6 +28,21 @@ dhcp_observation_worker_lock = threading.Lock()
 dhcp_observation_worker_started = False
 
 
+def merge_and_broadcast_neighbourhood(*, context_overrides=None):
+    """Create and announce one MAC-deduplicated client-neighbourhood snapshot."""
+    from server_components.network_discovery import (
+        merge_and_persist_client_neighbourhood,
+    )
+    from server_components import event_broadcaster
+
+    _, devices, scan_path = merge_and_persist_client_neighbourhood(
+        context_overrides=context_overrides
+    )
+    scan_id = os.path.splitext(os.path.basename(scan_path))[0]
+    event_broadcaster.broadcast_network_update(scan_id, len(devices))
+    return devices, scan_path
+
+
 def _run_dhcp_observation_writer():
     """Persist DHCP audit events away from the TCP connection reader."""
     while True:
@@ -1016,13 +1031,7 @@ def handle_network_neighbour_report(
 
             # Automatically trigger a fresh scan merge & SSE broadcast so the UI updates
             try:
-                from server_components.network_discovery import run_manual_scan
-                from server_components import event_broadcaster
-                import os
-
-                _, dev_list, scan_path = run_manual_scan()
-                scan_id = os.path.splitext(os.path.basename(scan_path))[0]
-                event_broadcaster.broadcast_network_update(scan_id, len(dev_list))
+                merge_and_broadcast_neighbourhood()
             except Exception as auto_err:
                 pass
 
@@ -1030,10 +1039,10 @@ def handle_network_neighbour_report(
 
         if observation_storer is None:
             from server_components.network_device_storage import (
-                store_client_neighbour_observations,
+                store_client_neighbourhood_observations,
             )
 
-            observation_storer = store_client_neighbour_observations
+            observation_storer = store_client_neighbourhood_observations
 
         if source == "DAILY_NEIGHBOUR_SNAPSHOT":
             if daily_snapshot_exists is None or daily_snapshot_storer is None:
@@ -1075,19 +1084,26 @@ def handle_network_neighbour_report(
 
                 # Automatically trigger a fresh scan merge & SSE broadcast so the UI updates
                 try:
-                    from server_components.network_discovery import run_manual_scan
-                    from server_components import event_broadcaster
-                    import os
-
-                    _, dev_list, scan_path = run_manual_scan()
-                    scan_id = os.path.splitext(os.path.basename(scan_path))[0]
-                    event_broadcaster.broadcast_network_update(scan_id, len(dev_list))
+                    merge_and_broadcast_neighbourhood()
                 except Exception as auto_err:
                     pass
             except Exception as error:
                 # Database storage remains valid even if its readable mirror
                 # cannot be updated on this attempt.
                 print(f"Could not append daily neighbour snapshot: {error}")
+            return True
+
+        if source == "REQUESTED_NEIGHBOURHOOD":
+            stored = observation_storer(reporter_mac, neighbours)
+            print(
+                f"Stored {stored} requested neighbourhood observation(s) from {reporter_mac}."
+            )
+            try:
+                merge_and_broadcast_neighbourhood(
+                    context_overrides={"scan_type": "REQUESTED_NEIGHBOURHOOD"}
+                )
+            except Exception as error:
+                print(f"Could not merge requested neighbourhood report: {error}")
             return True
 
         if source == "ACTIVE_NEIGHBOUR_SCAN":
@@ -1364,6 +1380,62 @@ def execute_client_command(
         return {"status": "error", "message": f"Connection lost: {e}"}
 
 
+def request_client_network_neighbourhood(client_id, *, timeout=None):
+    """Request one connected client's stored daily neighbourhood.
+
+    The client sends its local report before its command response. A timeout
+    is isolated to this client and returned as structured state for the REST
+    layer and the later bucket orchestrator.
+    """
+    if timeout is None:
+        try:
+            timeout = max(
+                0.1,
+                float(os.getenv("NETWORK_NEIGHBOURHOOD_REQUEST_TIMEOUT", "12")),
+            )
+        except ValueError:
+            timeout = 12.0
+
+    result = execute_client_command(
+        client_id,
+        "GET_NETWORK_NEIGHBOURHOOD",
+        timeout=timeout,
+        process_network_scan=False,
+    )
+    if result.get("status") != "ok":
+        message = result.get("message", "Client neighbourhood request failed.")
+        if "timed out" in message.lower():
+            return {
+                "status": "client_timeout",
+                "client_id": client_id,
+                "timeout_seconds": timeout,
+                "message": message,
+            }
+        if "not connected" in message.lower():
+            return {
+                "status": "client_unavailable",
+                "client_id": client_id,
+                "message": message,
+            }
+        return {"status": "client_error", "client_id": client_id, "message": message}
+
+    data = result.get("data")
+    if not isinstance(data, dict) or data.get("status") != "ok":
+        message = data.get("message") if isinstance(data, dict) else None
+        return {
+            "status": "client_error",
+            "client_id": client_id,
+            "message": message or "Client could not provide its stored neighbourhood.",
+        }
+
+    return {
+        "status": "completed",
+        "client_id": client_id,
+        "observations_sent": data.get("observations_sent", 0),
+        "timeout_seconds": timeout,
+    }
+
+
 def send_command(client_id, command, args=None):
     res = execute_client_command(client_id, command, args, timeout=25.0)
     if res.get("status") == "ok":
@@ -1397,10 +1469,9 @@ def client_menu(client_id):
         print("7.  Ping")
         print("8.  Kill process")
         print("9.  Start process")
-        print("10. Scan local network (ARP)")
-        print("11. Activity log")
-        print("12. Disconnect client")
-        print("13. Back")
+        print("10. Activity log")
+        print("11. Disconnect client")
+        print("12. Back")
 
         choice = input("\nSelect command: ").strip()
 
@@ -1414,12 +1485,11 @@ def client_menu(client_id):
             "7": "PING",
             "8": "KILL_PROCESS",
             "9": "START_PROCESS",
-            "10": "SCAN_NETWORK",
-            "11": "GET_ACTIVITY_LOG",
-            "12": "DISCONNECT",
+            "10": "GET_ACTIVITY_LOG",
+            "11": "DISCONNECT",
         }
 
-        if choice == "13":
+        if choice == "12":
             break
 
         command = commands.get(choice)

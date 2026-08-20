@@ -1,6 +1,6 @@
-"""Bounded orchestration for client-based active network scans.
+"""Bounded orchestration for legacy active scans and passive collection jobs.
 
-This module deliberately keeps only job metadata in memory.  The observations
+This module deliberately keeps only job metadata in memory. The observations
 themselves continue through the existing network-device storage path as each
 client report arrives.
 """
@@ -22,6 +22,16 @@ def _job_log(message, *args):
     """Write scan-job progress to both configured logs and the server console."""
     LOGGER.info(message, *args)
     print("[GLOBAL NETWORK SCAN] " + (message % args if args else message), flush=True)
+
+
+def _collection_log(message, *args, level="info"):
+    """Write passive collection progress to configured logs and the console."""
+    getattr(LOGGER, level)(message, *args)
+    print(
+        "[GLOBAL NEIGHBOURHOOD COLLECTION] "
+        + (message % args if args else message),
+        flush=True,
+    )
 
 
 def _positive_int(name, default):
@@ -366,4 +376,332 @@ class GlobalNetworkScanManager:
         }
 
 
+class GlobalNeighbourhoodCollectionManager:
+    """Collect stored neighbourhoods one concurrent bucket at a time.
+
+    Unlike :class:`GlobalNetworkScanManager`, this class never initiates ARP
+    scans.  Its workers use the direct ``GET_NETWORK_NEIGHBOURHOOD`` request
+    operation, whose client report is received, persisted, and merged through
+    the normal server path before the request is reported as completed.
+    """
+
+    def __init__(self):
+        self._lock = threading.RLock()
+        self._active_collection_id = None
+        self._sessions = {}
+
+    def start(self, clients):
+        """Start a collection over a stable snapshot of online clients.
+
+        Only one passive collection runs at once. Targets are deduplicated by
+        normalized reporter MAC and sorted so bucket membership is stable.
+        """
+        with self._lock:
+            if self._active_collection_id:
+                return self._summary_locked(
+                    self._sessions[self._active_collection_id]
+                ), False
+
+            collection_id = (
+                f"neighbourhood-{_utc_now().strftime('%Y%m%d%H%M%S')}-"
+                f"{uuid.uuid4().hex[:8]}"
+            )
+            now = _utc_now()
+            bucket_size = _positive_int(
+                "GLOBAL_NEIGHBOURHOOD_COLLECTION_BUCKET_SIZE", 5
+            )
+            direct_request_timeout = _positive_float(
+                "NETWORK_NEIGHBOURHOOD_REQUEST_TIMEOUT", 12
+            )
+            request_timeout = _positive_float(
+                "GLOBAL_NEIGHBOURHOOD_COLLECTION_CLIENT_TIMEOUT",
+                direct_request_timeout,
+            )
+            targets_by_mac = {}
+            for client in clients:
+                client_id = client.get("client_id") if isinstance(client, dict) else None
+                client_mac = client.get("mac") if isinstance(client, dict) else None
+                if not client_id or not client_mac:
+                    continue
+                normalized_mac = client_mac.upper().replace("-", ":")
+                targets_by_mac.setdefault(
+                    normalized_mac,
+                    {
+                        "client_id": client_id,
+                        "client_mac": normalized_mac,
+                        "status": "PENDING",
+                        "bucket": None,
+                        "dispatched_at": None,
+                        "completed_at": None,
+                        "observations_sent": 0,
+                        "error": None,
+                    },
+                )
+
+            targets = [
+                targets_by_mac[mac]
+                for mac in sorted(targets_by_mac)
+            ]
+            for index, target in enumerate(targets):
+                target["bucket"] = index // bucket_size + 1
+
+            session = {
+                "id": collection_id,
+                "status": "PENDING",
+                "started_at": now,
+                "finished_at": None,
+                "updated_at": now,
+                "targets": targets,
+                "bucket_size": bucket_size,
+                "request_timeout": request_timeout,
+                "buckets_total": (len(targets) + bucket_size - 1) // bucket_size,
+                "buckets_completed": 0,
+                "current_bucket": None,
+                "devices_discovered": 0,
+                "merge_error": None,
+            }
+            self._sessions[collection_id] = session
+            self._active_collection_id = collection_id
+            _collection_log(
+                "Collection %s started: eligible_clients=%d bucket_size=%d request_timeout=%.1fs.",
+                collection_id,
+                len(targets),
+                bucket_size,
+                request_timeout,
+            )
+            threading.Thread(
+                target=self._run_session,
+                args=(collection_id,),
+                daemon=True,
+                name=f"global-neighbourhood-{collection_id[-8:]}",
+            ).start()
+            return self._summary_locked(session), True
+
+    def get(self, collection_id):
+        with self._lock:
+            session = self._sessions.get(collection_id)
+            return self._summary_locked(session) if session else None
+
+    def active(self):
+        with self._lock:
+            if not self._active_collection_id:
+                return None
+            return self._summary_locked(self._sessions[self._active_collection_id])
+
+    def _run_session(self, collection_id):
+        with self._lock:
+            session = self._sessions.get(collection_id)
+            if not session:
+                return
+            session["status"] = "RUNNING"
+            session["updated_at"] = _utc_now()
+            buckets = [
+                session["targets"][start:start + session["bucket_size"]]
+                for start in range(0, len(session["targets"]), session["bucket_size"])
+            ]
+
+        for bucket_number, bucket in enumerate(buckets, start=1):
+            with self._lock:
+                session = self._sessions.get(collection_id)
+                if not session:
+                    return
+                session["current_bucket"] = bucket_number
+                session["updated_at"] = _utc_now()
+                for target in bucket:
+                    target["status"] = "DISPATCHING"
+                    target["dispatched_at"] = _utc_now()
+                _collection_log(
+                    "Collection %s bucket %d/%d started: clients=%d.",
+                    collection_id,
+                    bucket_number,
+                    session["buckets_total"],
+                    len(bucket),
+                )
+
+            # Exiting this executor waits for every request in this bucket.
+            # The following bucket cannot be dispatched until all of them have
+            # produced a terminal outcome.
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=len(bucket)
+            ) as executor:
+                futures = {
+                    executor.submit(
+                        self._request_target,
+                        target.copy(),
+                        session["request_timeout"],
+                    ): target
+                    for target in bucket
+                }
+                for future in concurrent.futures.as_completed(futures):
+                    target = futures[future]
+                    try:
+                        result = future.result()
+                    except Exception as error:  # Defensive worker boundary.
+                        result = {
+                            "status": "client_error",
+                            "message": str(error),
+                        }
+                    with self._lock:
+                        session = self._sessions.get(collection_id)
+                        if session:
+                            self._record_target_result_locked(session, target, result)
+
+            with self._lock:
+                session = self._sessions.get(collection_id)
+                if not session:
+                    return
+                session["buckets_completed"] += 1
+                session["updated_at"] = _utc_now()
+                _collection_log(
+                    "Collection %s bucket %d/%d completed.",
+                    collection_id,
+                    bucket_number,
+                    session["buckets_total"],
+                )
+
+        with self._lock:
+            session = self._sessions.get(collection_id)
+            should_merge = bool(
+                session
+                and any(target["status"] == "COMPLETED" for target in session["targets"])
+            )
+
+        devices_discovered = 0
+        merge_error = None
+        if should_merge:
+            try:
+                devices_discovered = len(
+                    self._merge_collection_results(collection_id)
+                )
+            except Exception as error:
+                merge_error = str(error)[:255]
+                LOGGER.warning(
+                    "Global neighbourhood collection %s final merge failed: %s",
+                    collection_id,
+                    merge_error,
+                )
+
+        with self._lock:
+            session = self._sessions.get(collection_id)
+            if session:
+                session["devices_discovered"] = devices_discovered
+                session["merge_error"] = merge_error
+                self._finalize_locked(session)
+
+    @staticmethod
+    def _merge_collection_results(collection_id):
+        """Return the final MAC-deduplicated snapshot for a collection job."""
+        from server_components import server_lib
+
+        devices, _ = server_lib.merge_and_broadcast_neighbourhood(
+            context_overrides={
+                "scan_type": "GLOBAL_NEIGHBOURHOOD_COLLECTION",
+                "collection_id": collection_id,
+            }
+        )
+        return devices
+
+    @staticmethod
+    def _request_target(target, request_timeout):
+        from server_components import server_lib
+
+        try:
+            return server_lib.request_client_network_neighbourhood(
+                target["client_id"], timeout=request_timeout
+            )
+        except Exception as error:  # Defensive boundary around a worker thread.
+            return {"status": "client_error", "message": str(error)}
+
+    def _record_target_result_locked(self, session, target, result):
+        now = _utc_now()
+        result = result if isinstance(result, dict) else {}
+        result_status = result.get("status")
+        target["completed_at"] = now
+        target["observations_sent"] = result.get("observations_sent", 0)
+        if result_status == "completed":
+            target["status"] = "COMPLETED"
+        elif result_status == "client_timeout":
+            target["status"] = "TIMED_OUT"
+        elif result_status == "client_unavailable":
+            target["status"] = "UNAVAILABLE"
+        else:
+            target["status"] = "FAILED"
+        if target["status"] != "COMPLETED":
+            target["error"] = str(
+                result.get("message", "Client neighbourhood request failed.")
+            )[:255]
+        session["updated_at"] = now
+        if target["status"] == "COMPLETED":
+            _collection_log(
+                "Collection %s client %s responded: observations=%d.",
+                session["id"],
+                target["client_id"],
+                target["observations_sent"],
+            )
+        else:
+            level = "warning" if target["status"] == "TIMED_OUT" else "info"
+            _collection_log(
+                "Collection %s client %s %s: %s",
+                session["id"],
+                target["client_id"],
+                target["status"].lower(),
+                target["error"],
+                level=level,
+            )
+
+    def _finalize_locked(self, session):
+        statuses = [target["status"] for target in session["targets"]]
+        session["status"] = (
+            "COMPLETED" if all(status == "COMPLETED" for status in statuses) else "PARTIAL"
+        )
+        session["finished_at"] = _utc_now()
+        session["updated_at"] = session["finished_at"]
+        session["current_bucket"] = None
+        if self._active_collection_id == session["id"]:
+            self._active_collection_id = None
+        _collection_log(
+            "Collection %s completed: status=%s requested=%d succeeded=%d failed=%d timed_out=%d devices=%d buckets=%d.",
+            session["id"],
+            session["status"],
+            len(statuses),
+            statuses.count("COMPLETED"),
+            statuses.count("FAILED") + statuses.count("UNAVAILABLE"),
+            statuses.count("TIMED_OUT"),
+            session["devices_discovered"],
+            session["buckets_completed"],
+        )
+
+    def _summary_locked(self, session):
+        if not session:
+            return None
+        statuses = [target["status"] for target in session["targets"]]
+        failed = statuses.count("FAILED") + statuses.count("UNAVAILABLE")
+        return {
+            "id": session["id"],
+            "status": session["status"].lower(),
+            "total_clients": len(statuses),
+            "completed": statuses.count("COMPLETED"),
+            "failed": failed,
+            "timed_out": statuses.count("TIMED_OUT"),
+            "unavailable": statuses.count("UNAVAILABLE"),
+            "running": statuses.count("DISPATCHING"),
+            "pending": statuses.count("PENDING"),
+            "bucket_size": session["bucket_size"],
+            "request_timeout": session["request_timeout"],
+            "buckets_total": session["buckets_total"],
+            "buckets_completed": session["buckets_completed"],
+            "current_bucket": session["current_bucket"],
+            "devices_discovered": session["devices_discovered"],
+            "merge_error": session["merge_error"],
+            "clients_requested": len(statuses),
+            "clients_succeeded": statuses.count("COMPLETED"),
+            "clients_failed": failed,
+            "clients_timed_out": statuses.count("TIMED_OUT"),
+            "started_at": _timestamp(session["started_at"]),
+            "updated_at": _timestamp(session["updated_at"]),
+            "finished_at": _timestamp(session["finished_at"]),
+        }
+
+
 global_network_scan_manager = GlobalNetworkScanManager()
+global_neighbourhood_collection_manager = GlobalNeighbourhoodCollectionManager()
