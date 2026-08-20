@@ -1,6 +1,7 @@
 import json
 import os
 import socket
+from pathlib import Path
 
 from client_lib import (
     create_registration_message,
@@ -24,7 +25,19 @@ import time
 from datetime import datetime
 from dotenv import load_dotenv
 
-load_dotenv()
+CLIENT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = CLIENT_DIR.parent
+
+
+def _load_env_file(path):
+    try:
+        load_dotenv(path)
+    except TypeError:
+        load_dotenv()
+
+
+_load_env_file(REPO_ROOT / ".env")
+_load_env_file(CLIENT_DIR / ".env")
 
 SERVER_IP = os.getenv("SERVER_IP", "127.0.0.1")
 SERVER_PORT = int(os.getenv("SERVER_PORT", "5000"))
@@ -32,6 +45,7 @@ ALERT_STATE_FILE = os.path.join(os.path.dirname(__file__), "reported_alerts.json
 NEIGHBOUR_SNAPSHOT_STATE_FILE = os.path.join(
     os.path.dirname(__file__), "neighbour_snapshot_state.json"
 )
+STARTUP_LOG_FILE = CLIENT_DIR / "client_service.log"
 
 socket_lock = threading.Lock()
 scanner_lock = threading.Lock()
@@ -70,6 +84,17 @@ def disabled_active_network_scan_result(command):
 def _scan_log(message):
     """Emit scan lifecycle telemetry without printing device tables."""
     print(f"[CLIENT NETWORK SCAN] {message}", flush=True)
+
+
+def _startup_log(message):
+    """Persist startup/connectivity messages for Windows service troubleshooting."""
+    line = f"{datetime.now().astimezone().isoformat()} {message}\n"
+    try:
+        with open(STARTUP_LOG_FILE, "a", encoding="utf-8") as log_file:
+            log_file.write(line)
+    except OSError:
+        pass
+    print(f"[CLIENT STARTUP] {message}", flush=True)
 
 
 def load_reported_alerts():
@@ -508,6 +533,8 @@ def start_client(stop_event=None):
     if stop_event is None:
         stop_event = threading.Event()
 
+    _startup_log(f"Client starting with server target {SERVER_IP}:{SERVER_PORT}.")
+
     while not stop_event.is_set():
         client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         session_stop_event = threading.Event()
@@ -520,21 +547,23 @@ def start_client(stop_event=None):
                 client.settimeout(5)
                 client.connect((SERVER_IP, SERVER_PORT))
             except OSError as error:
-                print(f"Could not connect to server: {error}")
+                _startup_log(
+                    f"Could not connect to server {SERVER_IP}:{SERVER_PORT}: {error}"
+                )
                 if stop_event.wait(5):
                     break
                 continue
             finally:
                 client.settimeout(None)
 
-            print(f"Connected to server {SERVER_IP}:{SERVER_PORT}")
+            _startup_log(f"Connected to server {SERVER_IP}:{SERVER_PORT}.")
 
             # --------------------------------------------------------
             # Register
             # --------------------------------------------------------
             with socket_lock:
                 send_message(client, create_registration_message(client.getsockname()[0]))
-            print("Registration sent.")
+            _startup_log("Registration sent.")
 
             # --------------------------------------------------------
             # Wait for commands
@@ -546,7 +575,7 @@ def start_client(stop_event=None):
                     if message is None:
                         if stop_proxy.is_set():
                             break
-                        print("Server disconnected.")
+                        _startup_log("Server disconnected.")
                         break
 
                     msg_type = message.get("type")
@@ -575,7 +604,9 @@ def start_client(stop_event=None):
                     if msg_type == "FORBIDDEN_PROCESSES":
                         global forbidden_processes
                         forbidden_processes = message.get("data", [])
-                        print(f"Received {len(forbidden_processes)} forbidden processes.")
+                        _startup_log(
+                            f"Received {len(forbidden_processes)} forbidden processes."
+                        )
 
                         # Start background daily neighbour snapshot collection so it never blocks command execution
                         threading.Thread(
@@ -667,10 +698,10 @@ def start_client(stop_event=None):
                         break
 
                 except json.JSONDecodeError:
-                    print("Received invalid JSON.")
+                    _startup_log("Received invalid JSON.")
 
                 except (ConnectionResetError, BrokenPipeError, OSError):
-                    print("Connection with server lost.")
+                    _startup_log("Connection with server lost.")
                     break
 
         except KeyboardInterrupt:
