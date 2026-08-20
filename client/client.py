@@ -258,6 +258,36 @@ def send_requested_network_neighbourhood(client_socket):
         }
 
 
+def _complete_requested_neighbourhood_command(client_socket):
+    """Send one stored report and its response without blocking the receive loop."""
+    result = send_requested_network_neighbourhood(client_socket)
+    try:
+        with socket_lock:
+            send_message(
+                client_socket,
+                {
+                    "type": "RESPONSE",
+                    "command": "GET_NETWORK_NEIGHBOURHOOD",
+                    "data": result,
+                },
+            )
+        _scan_log("Requested neighbourhood command response sent.")
+    except OSError as error:
+        _scan_log(f"Requested neighbourhood command response failed: {error}")
+
+
+def start_requested_neighbourhood_command(client_socket):
+    """Run a stored-neighbourhood request in the background."""
+    worker = threading.Thread(
+        target=_complete_requested_neighbourhood_command,
+        args=(client_socket,),
+        daemon=True,
+        name="requested-neighbourhood-report",
+    )
+    worker.start()
+    return worker
+
+
 def _lookup_dhcp_vendor(mac_address):
     if not mac_address:
         return None
@@ -555,7 +585,8 @@ def start_client():
                 _scan_log(f"Ignored disabled active-scan command: {command}.")
                 result = disabled_active_network_scan_result(command)
             elif command == "GET_NETWORK_NEIGHBOURHOOD":
-                result = send_requested_network_neighbourhood(client)
+                start_requested_neighbourhood_command(client)
+                continue
             else:
                 result = handle_command(message)
 

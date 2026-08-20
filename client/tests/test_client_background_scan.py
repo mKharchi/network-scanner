@@ -1,6 +1,8 @@
 """Unit tests for asynchronous client-side active network scans."""
 
 import sys
+import tempfile
+import threading
 import types
 import unittest
 from pathlib import Path
@@ -15,6 +17,7 @@ dotenv_module.load_dotenv = lambda: None
 sys.modules.setdefault("dotenv", dotenv_module)
 
 import client as client_module  # noqa: E402
+import neighbourhood as neighbourhood_module  # noqa: E402
 
 
 class ClientBackgroundScanTests(unittest.TestCase):
@@ -69,6 +72,34 @@ class ClientBackgroundScanTests(unittest.TestCase):
         self.assertEqual(stored["dhcp_vendor_class"], "MSFT 5.0")
         update.assert_called_once_with([stored])
         send.assert_not_called()
+
+    def test_dhcp_observation_is_persisted_in_the_daily_client_file(self):
+        observation = {
+            "requested_ip": "192.168.1.10",
+            "mac_address": "AA:BB:CC:DD:EE:FF",
+            "hostname": "desktop",
+            "vendor_class": "MSFT 5.0",
+            "client_id": "01:AA:BB:CC:DD:EE:FF",
+            "dhcp_message_type": 3,
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(client_module, "_lookup_dhcp_vendor", return_value="Example Vendor"), patch.object(
+                client_module,
+                "update_daily_neighbourhood",
+                side_effect=lambda observations: neighbourhood_module.update_daily_neighbourhood(
+                    observations, date="2026-08-20", storage_dir=directory
+                ),
+            ):
+                stored = client_module.store_dhcp_neighbourhood_observation(observation)
+
+            payload = neighbourhood_module.load_daily_neighbourhood(
+                date="2026-08-20", storage_dir=directory
+            )
+
+        self.assertEqual(len(payload["observations"]), 1)
+        self.assertEqual(payload["observations"][0]["mac_address"], stored["mac_address"])
+        self.assertEqual(payload["observations"][0]["source"], "dhcp")
+        self.assertEqual(payload["observations"][0]["dhcp_vendor_class"], "MSFT 5.0")
 
     def test_normal_arp_and_dhcp_collection_never_transmit_immediately(self):
         arp_neighbours = [{
@@ -230,6 +261,39 @@ class ClientBackgroundScanTests(unittest.TestCase):
         collector.assert_not_called()
         self.assertEqual(sent[0]["data"]["observation_source"], "REQUESTED_NEIGHBOURHOOD")
         self.assertEqual(sent[0]["data"]["neighbours"], neighbours)
+
+    def test_requested_neighbourhood_command_runs_in_a_background_worker(self):
+        entered = threading.Event()
+        release = threading.Event()
+        sent = []
+
+        def delayed_report(_socket):
+            entered.set()
+            release.wait(1)
+            return {"status": "ok", "observations_sent": 2}
+
+        with patch.object(
+            client_module,
+            "send_requested_network_neighbourhood",
+            side_effect=delayed_report,
+        ), patch.object(
+            client_module,
+            "send_message",
+            side_effect=lambda _socket, message: sent.append(message),
+        ):
+            worker = client_module.start_requested_neighbourhood_command(object())
+            self.assertTrue(entered.wait(1))
+            self.assertTrue(worker.is_alive())
+            self.assertEqual(sent, [])
+            release.set()
+            worker.join(1)
+
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(sent, [{
+            "type": "RESPONSE",
+            "command": "GET_NETWORK_NEIGHBOURHOOD",
+            "data": {"status": "ok", "observations_sent": 2},
+        }])
 
     def test_active_scan_reports_results_as_an_async_neighbour_message(self):
         neighbours = [
