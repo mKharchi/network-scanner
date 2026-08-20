@@ -10,6 +10,7 @@ CLIENT_DIRECTORY = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(CLIENT_DIRECTORY))
 
 from neighbourhood import (  # noqa: E402
+    ensure_daily_neighbourhood,
     merge_neighbourhood_observations,
     load_daily_neighbourhood,
     normalise_dhcp_observation,
@@ -19,6 +20,24 @@ from neighbourhood import (  # noqa: E402
 
 
 class NeighbourhoodTests(unittest.TestCase):
+    def test_missing_directory_and_daily_file_are_created_on_load(self):
+        with tempfile.TemporaryDirectory() as directory:
+            storage_directory = Path(directory) / "missing" / "neighbourhood"
+            payload = load_daily_neighbourhood(
+                date="2026-08-20", storage_dir=storage_directory
+            )
+            file_path = storage_directory / "2026-08-20.json"
+
+            self.assertTrue(storage_directory.is_dir())
+            self.assertTrue(file_path.is_file())
+            self.assertEqual(payload, {"date": "2026-08-20", "observations": []})
+            self.assertEqual(
+                ensure_daily_neighbourhood(
+                    date="2026-08-20", storage_dir=storage_directory
+                ),
+                file_path,
+            )
+
     def test_normalises_passive_arp_record(self):
         observation = normalise_neighbourhood_observation(
             {

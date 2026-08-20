@@ -14,6 +14,7 @@ from process_scanner import scan_for_forbidden_processes
 from network_neighbour_collector import NetworkNeighbourCollector
 from dhcp_listener import DHCPListener
 from neighbourhood import (
+    get_daily_neighbourhood_path,
     load_daily_neighbourhood,
     normalise_dhcp_observation,
     update_daily_neighbourhood,
@@ -128,6 +129,7 @@ def collect_daily_network_neighbours():
     """
     snapshot_date = _local_date()
     client_mac = _snapshot_client_mac()
+    snapshot_path = get_daily_neighbourhood_path(date=snapshot_date)
     _scan_log(
         f"Daily neighbour snapshot check: client_mac={client_mac or 'unknown'} date={snapshot_date}."
     )
@@ -136,6 +138,7 @@ def collect_daily_network_neighbours():
         client_mac
         and state.get("last_snapshot_date") == snapshot_date
         and state.get("client_mac") == client_mac
+        and snapshot_path.exists()
     ):
         print("Today's local network neighbour snapshot was already collected.")
         return False
@@ -179,6 +182,13 @@ def send_stored_daily_neighbourhood(client_socket):
     registration remains safe for new clients.
     """
     snapshot_date = _local_date()
+    snapshot_path = get_daily_neighbourhood_path(date=snapshot_date)
+    if not snapshot_path.exists():
+        _scan_log(
+            "Daily neighbourhood file was missing; collecting a passive "
+            "snapshot before registration synchronization."
+        )
+        collect_daily_network_neighbours()
     try:
         payload = load_daily_neighbourhood(date=snapshot_date)
     except (OSError, ValueError) as error:

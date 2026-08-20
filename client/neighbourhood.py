@@ -17,7 +17,7 @@ VALID_SOURCES = {"arp", "dhcp"}
 DEFAULT_NEIGHBOURHOOD_STORAGE_DIR = (
     Path(__file__).resolve().parent / "storage" / "network_neighbourhood"
 )
-_DAILY_STORAGE_LOCK = threading.Lock()
+_DAILY_STORAGE_LOCK = threading.RLock()
 
 
 def _normalise_mac_address(value):
@@ -173,14 +173,31 @@ def get_daily_neighbourhood_path(*, date=None, storage_dir=None):
     return directory / f"{date_string}.json"
 
 
-def load_daily_neighbourhood(*, date=None, storage_dir=None):
-    """Load a day's local observations, returning an empty valid payload if absent."""
+def ensure_daily_neighbourhood(*, date=None, storage_dir=None):
+    """Create a day's storage directory and valid empty file when absent."""
     date_string = _local_date_string(date)
     if not date_string:
         raise ValueError("date must be an ISO-8601 date or datetime")
-    file_path = get_daily_neighbourhood_path(date=date_string, storage_dir=storage_dir)
-    if not file_path.exists():
-        return {"date": date_string, "observations": []}
+    file_path = get_daily_neighbourhood_path(
+        date=date_string, storage_dir=storage_dir
+    )
+    with _DAILY_STORAGE_LOCK:
+        if not file_path.exists():
+            _write_daily_neighbourhood(
+                file_path,
+                {"date": date_string, "observations": []},
+            )
+    return file_path
+
+
+def load_daily_neighbourhood(*, date=None, storage_dir=None):
+    """Load a day's local observations, creating an empty file if absent."""
+    date_string = _local_date_string(date)
+    if not date_string:
+        raise ValueError("date must be an ISO-8601 date or datetime")
+    file_path = ensure_daily_neighbourhood(
+        date=date_string, storage_dir=storage_dir
+    )
     try:
         with file_path.open("r", encoding="utf-8") as file:
             payload = json.load(file)

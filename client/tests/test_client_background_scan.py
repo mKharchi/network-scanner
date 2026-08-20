@@ -115,6 +115,8 @@ class ClientBackgroundScanTests(unittest.TestCase):
         with patch.object(client_module, "_local_date", return_value="2026-08-20"), patch.object(
             client_module, "load_daily_neighbourhood", return_value={"date": "2026-08-20", "observations": neighbours}
         ) as load, patch.object(
+            client_module, "get_daily_neighbourhood_path", return_value=Path(__file__)
+        ), patch.object(
             client_module, "NetworkNeighbourCollector"
         ) as collector, patch.object(
             client_module, "send_message", side_effect=lambda _socket, message: sent.append(message)
@@ -127,10 +129,46 @@ class ClientBackgroundScanTests(unittest.TestCase):
         self.assertEqual(sent[0]["data"]["observation_source"], "DAILY_NEIGHBOUR_SNAPSHOT")
         self.assertEqual(sent[0]["data"]["neighbours"], neighbours)
 
-    def test_registration_sync_sends_empty_snapshot_when_local_file_is_missing(self):
+    def test_deleted_daily_file_ignores_stale_snapshot_marker(self):
+        snapshot_path = Path("/tmp/missing-neighbourhood/2026-08-20.json")
+        neighbours = [{
+            "ip_address": "192.168.1.10",
+            "mac_address": "AA:BB:CC:DD:EE:FF",
+            "entry_type": "dynamic",
+        }]
+        with patch.object(client_module, "_local_date", return_value="2026-08-20"), patch.object(
+            client_module, "_snapshot_client_mac", return_value="AA:BB:CC:DD:EE:FF"
+        ), patch.object(
+            client_module,
+            "get_daily_neighbourhood_path",
+            return_value=snapshot_path,
+        ), patch.object(
+            client_module,
+            "_load_neighbour_snapshot_state",
+            return_value={
+                "last_snapshot_date": "2026-08-20",
+                "client_mac": "AA:BB:CC:DD:EE:FF",
+            },
+        ), patch.object(client_module, "_save_neighbour_snapshot_state"), patch.object(
+            client_module, "NetworkNeighbourCollector"
+        ) as collector, patch.object(
+            client_module,
+            "update_daily_neighbourhood",
+            return_value=(snapshot_path, {"observations": neighbours}),
+        ):
+            collector.return_value.collect.return_value = neighbours
+            self.assertTrue(client_module.collect_daily_network_neighbours())
+
+        collector.return_value.collect.assert_called_once_with(
+            enrich=True, active_scan=False
+        )
+
+    def test_registration_sync_sends_an_empty_existing_snapshot(self):
         sent = []
         with patch.object(client_module, "_local_date", return_value="2026-08-20"), patch.object(
             client_module, "load_daily_neighbourhood", return_value={"date": "2026-08-20", "observations": []}
+        ), patch.object(
+            client_module, "get_daily_neighbourhood_path", return_value=Path(__file__)
         ), patch.object(
             client_module, "send_message", side_effect=lambda _socket, message: sent.append(message)
         ):
@@ -138,6 +176,33 @@ class ClientBackgroundScanTests(unittest.TestCase):
 
         self.assertTrue(completed)
         self.assertEqual(sent[0]["data"]["neighbours"], [])
+
+    def test_registration_rebuilds_missing_daily_file_before_synchronizing(self):
+        snapshot_path = Path("/tmp/missing-neighbourhood/2026-08-20.json")
+        neighbours = [{
+            "ip_address": "192.168.1.10",
+            "mac_address": "AA:BB:CC:DD:EE:FF",
+            "entry_type": "dynamic",
+        }]
+        sent = []
+        with patch.object(client_module, "_local_date", return_value="2026-08-20"), patch.object(
+            client_module, "get_daily_neighbourhood_path", return_value=snapshot_path
+        ), patch.object(
+            client_module, "collect_daily_network_neighbours", return_value=True
+        ) as collect, patch.object(
+            client_module,
+            "load_daily_neighbourhood",
+            return_value={"date": "2026-08-20", "observations": neighbours},
+        ), patch.object(
+            client_module,
+            "send_message",
+            side_effect=lambda _socket, message: sent.append(message),
+        ):
+            completed = client_module.send_stored_daily_neighbourhood(object())
+
+        self.assertTrue(completed)
+        collect.assert_called_once_with()
+        self.assertEqual(sent[0]["data"]["neighbours"], neighbours)
 
     def test_server_request_sends_stored_neighbourhood_without_collecting(self):
         neighbours = [
