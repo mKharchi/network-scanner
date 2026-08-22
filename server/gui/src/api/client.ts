@@ -100,15 +100,19 @@ export interface PassiveProtocolObservation {
   observed_at?: string;
   first_observed_at?: string;
   seen_count?: number;
+  observation_kind?: "query" | "response" | "announcement" | "search" | "advertisement";
   ip_address?: string;
   mac_address?: string;
   hostname?: string;
   device_name?: string;
   service_type?: string;
   service_name?: string;
+  service_port?: number;
   device_type?: string;
   vendor?: string;
   model?: string;
+  server?: string;
+  location?: string;
   raw_fields?: {
     usn?: string;
     [key: string]: unknown;
