@@ -686,6 +686,10 @@ class PassiveProtocolListener:
             LOG.exception("[PASSIVE LISTENER] Packet parser failed")
             return 0
 
+    def _handle_scapy_packet(self, packet: Any) -> None:
+        """Buffer a captured packet without letting Scapy print a numeric result."""
+        self.process_packet(packet)
+
     @staticmethod
     def _is_supported_packet(packet: Any) -> bool:
         try:
@@ -705,7 +709,7 @@ class PassiveProtocolListener:
             self._capture_error = "Scapy is not installed"
             return False
 
-        kwargs = {"prn": self.process_packet, "store": False, "timeout": 1}
+        kwargs = {"prn": self._handle_scapy_packet, "store": False, "timeout": 1}
         if self.interface:
             kwargs["iface"] = self.interface
         try:
