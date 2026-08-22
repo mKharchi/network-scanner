@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { api } from '../api/client';
+import { api, type ClientPassiveNeighbourhood } from '../api/client';
 import { useFetch } from '../hooks/useFetch';
 import { useToast } from '../hooks/useToast';
 import { OnlineBadge, OfflineBadge, Badge } from '../components/Badge';
@@ -70,6 +70,8 @@ export function ClientDetailPage() {
   const [commandLoading, setCommandLoading] = useState(false);
   const [commandResult, setCommandResult] = useState<any>(null);
   const [neighbourhoodLoading, setNeighbourhoodLoading] = useState(false);
+  const [passiveNeighbourhoodLoading, setPassiveNeighbourhoodLoading] = useState(false);
+  const [passiveNeighbourhood, setPassiveNeighbourhood] = useState<ClientPassiveNeighbourhood | null>(null);
 
   // Process management states
   const [processList, setProcessList] = useState<ProcessItem[] | null>(null);
@@ -174,6 +176,29 @@ export function ClientDetailPage() {
       });
     } finally {
       setNeighbourhoodLoading(false);
+    }
+  };
+
+  const requestPassiveNeighbourhood = async () => {
+    if (!clientId) return;
+    setPassiveNeighbourhoodLoading(true);
+    try {
+      const result = await api.requestClientPassiveNeighbourhood(clientId);
+      setPassiveNeighbourhood(result);
+      const protocols = new Set(result.observations.map((observation) => observation.protocol));
+      addToast({
+        title: 'Passive information received',
+        message: `Received ${result.observation_count} observation(s) across ${protocols.size} protocol(s) from ${c.hostname}.`,
+        severity: 'SUCCESS',
+      });
+    } catch (err: any) {
+      addToast({
+        title: 'Passive information request failed',
+        message: err?.message || 'The client did not provide passive network information.',
+        severity: 'CRITICAL',
+      });
+    } finally {
+      setPassiveNeighbourhoodLoading(false);
     }
   };
 
@@ -370,10 +395,19 @@ export function ClientDetailPage() {
           <Button
             variant="primary"
             size="sm"
-            disabled={!isOnline || commandLoading || neighbourhoodLoading}
+            disabled={!isOnline || commandLoading || neighbourhoodLoading || passiveNeighbourhoodLoading}
             onClick={requestNeighbourhood}
           >
             {neighbourhoodLoading ? 'Collecting Neighbourhood…' : 'Collect Neighbourhood'}
+          </Button>
+
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={!isOnline || commandLoading || neighbourhoodLoading || passiveNeighbourhoodLoading}
+            onClick={requestPassiveNeighbourhood}
+          >
+            {passiveNeighbourhoodLoading ? 'Requesting Passive Info…' : 'Get Passive Network Information'}
           </Button>
 
           {/* Activity Log dropdown & button */}
@@ -471,6 +505,55 @@ export function ClientDetailPage() {
           </div>
         )}
       </SectionCard>
+
+      {passiveNeighbourhood && (() => {
+        const protocols = [...new Set(
+          passiveNeighbourhood.observations.map((observation) => observation.protocol),
+        )].sort();
+        const devices = new Set(
+          passiveNeighbourhood.observations.map((observation) =>
+            observation.mac_address
+            || observation.ip_address
+            || observation.hostname
+            || observation.service_name
+            || observation.device_type
+            || observation.raw_fields?.usn
+            || observation.protocol,
+          ),
+        );
+        const latestObservation = passiveNeighbourhood.observations.reduce<string | null>(
+          (latest, observation) => (
+            observation.observed_at && (!latest || observation.observed_at > latest)
+              ? observation.observed_at
+              : latest
+          ),
+          null,
+        );
+
+        return (
+          <div style={{ marginTop: 'var(--space-6)' }}>
+            <SectionCard title="Passive Network Information">
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                  gap: 'var(--space-3)',
+                }}
+              >
+                <MetricCard label="Observations" value={String(passiveNeighbourhood.observation_count)} />
+                <MetricCard label="Observed endpoints" value={String(devices.size)} />
+                <MetricCard label="Protocols" value={String(protocols.length)} />
+              </div>
+              <div style={{ marginTop: 'var(--space-4)' }}>
+                <DetailRow label="Protocols detected" value={protocols.length ? protocols.join(', ') : 'None'} />
+                <DetailRow label="Latest observation" value={latestObservation ? formatDateTime(latestObservation) : 'No observations'} />
+                <DetailRow label="Snapshot received" value={formatDateTime(passiveNeighbourhood.observed_at)} />
+                <DetailRow label="Reporter" value={passiveNeighbourhood.reporter} mono />
+              </div>
+            </SectionCard>
+          </div>
+        );
+      })()}
 
       {/* Live Process Explorer & Manager */}
       {processList && (
