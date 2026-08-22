@@ -1,0 +1,20 @@
+`WSAEACCES` / Windows socket error `10013` means the **client machine is blocking its own outbound connection**, not that the server refused it.
+
+The current quarantine implementation can cause this: `AgentQuarantine-Outbound` is a broad explicit block rule. In Windows Firewall, explicit block rules override the server allow rule, so it can block `172.16.1.238:5000` too.
+
+To immediately restore connectivity on the affected Windows client, open an elevated PowerShell or Command Prompt and run:
+
+```powershell
+netsh advfirewall firewall delete rule name="AgentQuarantine-Outbound"
+netsh advfirewall firewall delete rule name="AgentQuarantine-Inbound"
+netsh advfirewall firewall delete rule name="AgentQuarantine-Server-Allow-Out"
+netsh advfirewall firewall delete rule name="AgentQuarantine-Server-Allow-In"
+netsh advfirewall firewall delete rule name="AgentQuarantine-Loopback-In"
+netsh advfirewall firewall delete rule name="AgentQuarantine-Loopback-Out"
+```
+
+Then restart the `NetworkClient` service or user agent.
+
+The client is configured to connect to `172.16.1.238:5000`, and its prior logs show that endpoint was reachable. The permanent correction needs a quarantine policy redesign: use a profile-level default outbound block with an explicit server allow and safe restoration of the previous firewall policy, rather than conflicting broad block rules.
+
+Should quarantine isolate all internet traffic while preserving only the server connection, or only isolate local/LAN traffic?
