@@ -678,13 +678,16 @@ def start_client(stop_event=None):
                         except Exception as e:
                             print(f"[DHCP] Could not start listener: {e}")
 
-                        # Passive protocol capture is independent from DHCP and
-                        # the daily neighbourhood store, but uses the same NIC.
+                        # Start unified passive discovery listener covering DHCP, mDNS, SSDP, LLMNR, NBNS
                         try:
                             if passive_protocol_listener is None:
+                                def _on_passive_dhcp(obs):
+                                    store_dhcp_neighbourhood_observation(obs)
+
                                 passive_protocol_listener = PassiveProtocolListener(
                                     interface=listen_iface,
                                     status_callback=_startup_log,
+                                    dhcp_callback=_on_passive_dhcp,
                                 )
                                 passive_protocol_listener.start()
                         except Exception as error:

@@ -5423,6 +5423,3629 @@
           "service_name": "{\"nm\":\"Redmi Note 8\",\"as\":\"[8193, 8194]\",\"ip\":\"21\"}._mi-connect._udp.local"
         }
       ]
+    },
+    {
+      "received_at": "2026-08-22T13:53:03.376708+00:00",
+      "client_id": "client-e4fd45ba8b96",
+      "reporter": "E4:FD:45:BA:8B:96",
+      "observed_at": "2026-08-22T14:52:29.475716+01:00",
+      "observation_count": 55,
+      "observations": [
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:29.440209+00:00",
+          "first_observed_at": "2026-08-22T13:52:28.415131+00:00",
+          "seen_count": 2,
+          "observation_kind": "query",
+          "ip_address": "fe80::147c:522f:1fa2:10d",
+          "mac_address": "F2:F8:35:6E:62:DA",
+          "hostname": "_sleep-proxy._udp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:29.439997+00:00",
+          "first_observed_at": "2026-08-22T13:52:28.415087+00:00",
+          "seen_count": 2,
+          "observation_kind": "query",
+          "ip_address": "fe80::147c:522f:1fa2:10d",
+          "mac_address": "F2:F8:35:6E:62:DA",
+          "hostname": "_companion-link._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:29.436354+00:00",
+          "first_observed_at": "2026-08-22T13:52:28.414809+00:00",
+          "seen_count": 2,
+          "observation_kind": "query",
+          "ip_address": "172.16.0.227",
+          "mac_address": "F2:F8:35:6E:62:DA",
+          "hostname": "_sleep-proxy._udp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:29.436168+00:00",
+          "first_observed_at": "2026-08-22T13:52:28.414778+00:00",
+          "seen_count": 2,
+          "observation_kind": "query",
+          "ip_address": "172.16.0.227",
+          "mac_address": "F2:F8:35:6E:62:DA",
+          "hostname": "_companion-link._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:29.236859+00:00",
+          "first_observed_at": "2026-08-22T13:52:28.414384+00:00",
+          "seen_count": 8,
+          "observation_kind": "query",
+          "ip_address": "fe80::58eb:5186:736b:e6fd",
+          "mac_address": "A4:9B:4F:C1:6A:CB",
+          "hostname": "Android-3.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:29.236836+00:00",
+          "first_observed_at": "2026-08-22T13:52:28.412059+00:00",
+          "seen_count": 8,
+          "observation_kind": "query",
+          "ip_address": "172.16.0.100",
+          "mac_address": "A4:9B:4F:C1:6A:CB",
+          "hostname": "Android-3.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:29.236806+00:00",
+          "first_observed_at": "2026-08-22T13:52:29.236806+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "fe80::58eb:5186:736b:e6fd",
+          "mac_address": "A4:9B:4F:C1:6A:CB",
+          "service_type": "D.F.6.E.B.6.3.7.6.8.1.5.B.E.8.5.0.0.0.0.0.0.0.0.0.0.0.0.0.8.E.F.ip6.arpa",
+          "service_name": "Android-3.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:29.236760+00:00",
+          "first_observed_at": "2026-08-22T13:52:29.236760+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "fe80::58eb:5186:736b:e6fd",
+          "mac_address": "A4:9B:4F:C1:6A:CB",
+          "service_type": "100.0.16.172.in-addr.arpa",
+          "service_name": "Android-3.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:29.235462+00:00",
+          "first_observed_at": "2026-08-22T13:52:29.235462+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.100",
+          "mac_address": "A4:9B:4F:C1:6A:CB",
+          "service_type": "D.F.6.E.B.6.3.7.6.8.1.5.B.E.8.5.0.0.0.0.0.0.0.0.0.0.0.0.0.8.E.F.ip6.arpa",
+          "service_name": "Android-3.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:29.235305+00:00",
+          "first_observed_at": "2026-08-22T13:52:29.235305+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.100",
+          "mac_address": "A4:9B:4F:C1:6A:CB",
+          "service_type": "100.0.16.172.in-addr.arpa",
+          "service_name": "Android-3.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:27.592835+00:00",
+          "first_observed_at": "2026-08-22T13:52:16.734270+00:00",
+          "seen_count": 5,
+          "observation_kind": "query",
+          "ip_address": "fe80::834:5b49:773a:b960",
+          "mac_address": "C6:E9:C8:43:E1:CF",
+          "hostname": "_rdlink._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:27.592600+00:00",
+          "first_observed_at": "2026-08-22T13:52:16.734014+00:00",
+          "seen_count": 5,
+          "observation_kind": "query",
+          "ip_address": "fe80::834:5b49:773a:b960",
+          "mac_address": "C6:E9:C8:43:E1:CF",
+          "hostname": "_companion-link._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:27.590690+00:00",
+          "first_observed_at": "2026-08-22T13:52:23.707926+00:00",
+          "seen_count": 3,
+          "observation_kind": "query",
+          "ip_address": "172.16.2.173",
+          "mac_address": "C6:E9:C8:43:E1:CF",
+          "hostname": "_rdlink._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:27.590476+00:00",
+          "first_observed_at": "2026-08-22T13:52:23.707752+00:00",
+          "seen_count": 3,
+          "observation_kind": "query",
+          "ip_address": "172.16.2.173",
+          "mac_address": "C6:E9:C8:43:E1:CF",
+          "hostname": "_companion-link._tcp.local"
+        },
+        {
+          "protocol": "nbns",
+          "observed_at": "2026-08-22T13:52:26.567790+00:00",
+          "first_observed_at": "2026-08-22T13:52:24.935504+00:00",
+          "seen_count": 3,
+          "observation_kind": "query",
+          "ip_address": "172.16.0.36",
+          "mac_address": "E4:FD:45:BB:18:45",
+          "hostname": "DESKTOP-LSQ0HIB"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:25.551893+00:00",
+          "first_observed_at": "2026-08-22T13:52:24.521513+00:00",
+          "seen_count": 12,
+          "observation_kind": "query",
+          "ip_address": "fe80::f63f:164d:3d86:7009",
+          "mac_address": "E4:FD:45:BB:18:45",
+          "hostname": "DESKTOP-LSQ0HIB.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:25.551543+00:00",
+          "first_observed_at": "2026-08-22T13:52:24.515462+00:00",
+          "seen_count": 12,
+          "observation_kind": "query",
+          "ip_address": "172.16.0.36",
+          "mac_address": "E4:FD:45:BB:18:45",
+          "hostname": "DESKTOP-LSQ0HIB.local"
+        },
+        {
+          "protocol": "llmnr",
+          "observed_at": "2026-08-22T13:52:25.547428+00:00",
+          "first_observed_at": "2026-08-22T13:52:24.937966+00:00",
+          "seen_count": 4,
+          "observation_kind": "query",
+          "ip_address": "fe80::f63f:164d:3d86:7009",
+          "mac_address": "E4:FD:45:BB:18:45",
+          "hostname": "DESKTOP-LSQ0HIB"
+        },
+        {
+          "protocol": "llmnr",
+          "observed_at": "2026-08-22T13:52:25.546280+00:00",
+          "first_observed_at": "2026-08-22T13:52:24.939657+00:00",
+          "seen_count": 4,
+          "observation_kind": "query",
+          "ip_address": "172.16.0.36",
+          "mac_address": "E4:FD:45:BB:18:45",
+          "hostname": "DESKTOP-LSQ0HIB"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:22.891294+00:00",
+          "first_observed_at": "2026-08-22T13:52:22.891294+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "fe80::d4da:dbff:fea8:8776",
+          "mac_address": "D6:DA:DB:A8:87:76",
+          "service_type": "_services._dns-sd._udp.local",
+          "service_name": "_FC9F5ED42C8A._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:22.891253+00:00",
+          "first_observed_at": "2026-08-22T13:52:22.891253+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "fe80::d4da:dbff:fea8:8776",
+          "mac_address": "D6:DA:DB:A8:87:76",
+          "service_name": "IzdLSDP8n14AAA._FC9F5ED42C8A._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "f": "5540",
+              "n": "MkHVKx72Z63spLDNox-imkw",
+              "IPv4": "172.16.0.142"
+            }
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:22.891228+00:00",
+          "first_observed_at": "2026-08-22T13:52:22.891228+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "fe80::d4da:dbff:fea8:8776",
+          "mac_address": "D6:DA:DB:A8:87:76",
+          "hostname": "Android_RMBKKB9B.local",
+          "service_name": "IzdLSDP8n14AAA._FC9F5ED42C8A._tcp.local",
+          "service_port": 53601
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:22.891201+00:00",
+          "first_observed_at": "2026-08-22T13:52:22.891201+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "fe80::d4da:dbff:fea8:8776",
+          "mac_address": "D6:DA:DB:A8:87:76",
+          "service_type": "_FC9F5ED42C8A._tcp.local",
+          "service_name": "IzdLSDP8n14AAA._FC9F5ED42C8A._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:22.891180+00:00",
+          "first_observed_at": "2026-08-22T13:52:22.889383+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.142",
+          "mac_address": "D6:DA:DB:A8:87:76",
+          "hostname": "Android_RMBKKB9B.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:22.891153+00:00",
+          "first_observed_at": "2026-08-22T13:52:22.891153+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "fe80::d4da:dbff:fea8:8776",
+          "mac_address": "D6:DA:DB:A8:87:76",
+          "service_type": "142.0.16.172.in-addr.arpa",
+          "service_name": "Android_RMBKKB9B.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:22.891117+00:00",
+          "first_observed_at": "2026-08-22T13:52:22.889313+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "fe80::d4da:dbff:fea8:8776",
+          "mac_address": "D6:DA:DB:A8:87:76",
+          "hostname": "Android_RMBKKB9B.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:22.891067+00:00",
+          "first_observed_at": "2026-08-22T13:52:22.891067+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "fe80::d4da:dbff:fea8:8776",
+          "mac_address": "D6:DA:DB:A8:87:76",
+          "service_type": "6.7.7.8.8.A.E.F.F.F.B.D.A.D.4.D.0.0.0.0.0.0.0.0.0.0.0.0.0.8.E.F.ip6.arpa",
+          "service_name": "Android_RMBKKB9B.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:22.889456+00:00",
+          "first_observed_at": "2026-08-22T13:52:22.889456+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.142",
+          "mac_address": "D6:DA:DB:A8:87:76",
+          "service_type": "_services._dns-sd._udp.local",
+          "service_name": "_FC9F5ED42C8A._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:22.889423+00:00",
+          "first_observed_at": "2026-08-22T13:52:22.889423+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.142",
+          "mac_address": "D6:DA:DB:A8:87:76",
+          "service_name": "IzdLSDP8n14AAA._FC9F5ED42C8A._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "f": "5540",
+              "n": "MkHVKx72Z63spLDNox-imkw",
+              "IPv4": "172.16.0.142"
+            }
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:22.889410+00:00",
+          "first_observed_at": "2026-08-22T13:52:22.889410+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.142",
+          "mac_address": "D6:DA:DB:A8:87:76",
+          "hostname": "Android_RMBKKB9B.local",
+          "service_name": "IzdLSDP8n14AAA._FC9F5ED42C8A._tcp.local",
+          "service_port": 53601
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:22.889397+00:00",
+          "first_observed_at": "2026-08-22T13:52:22.889397+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.142",
+          "mac_address": "D6:DA:DB:A8:87:76",
+          "service_type": "_FC9F5ED42C8A._tcp.local",
+          "service_name": "IzdLSDP8n14AAA._FC9F5ED42C8A._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:22.889364+00:00",
+          "first_observed_at": "2026-08-22T13:52:22.889364+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.142",
+          "mac_address": "D6:DA:DB:A8:87:76",
+          "service_type": "142.0.16.172.in-addr.arpa",
+          "service_name": "Android_RMBKKB9B.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:22.889267+00:00",
+          "first_observed_at": "2026-08-22T13:52:22.889267+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.142",
+          "mac_address": "D6:DA:DB:A8:87:76",
+          "service_type": "6.7.7.8.8.A.E.F.F.F.B.D.A.D.4.D.0.0.0.0.0.0.0.0.0.0.0.0.0.8.E.F.ip6.arpa",
+          "service_name": "Android_RMBKKB9B.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:20.432469+00:00",
+          "first_observed_at": "2026-08-22T13:52:20.432469+00:00",
+          "seen_count": 1,
+          "observation_kind": "query",
+          "ip_address": "fe80::d3c:b1e7:78c1:7fe7",
+          "mac_address": "34:86:DA:DA:A9:F3",
+          "hostname": "_CC32E753._sub._googlecast._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:20.432347+00:00",
+          "first_observed_at": "2026-08-22T13:52:20.432347+00:00",
+          "seen_count": 1,
+          "observation_kind": "query",
+          "ip_address": "fe80::d3c:b1e7:78c1:7fe7",
+          "mac_address": "34:86:DA:DA:A9:F3",
+          "hostname": "_CC1AD845._sub._googlecast._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:20.432139+00:00",
+          "first_observed_at": "2026-08-22T13:52:20.432139+00:00",
+          "seen_count": 1,
+          "observation_kind": "query",
+          "ip_address": "fe80::d3c:b1e7:78c1:7fe7",
+          "mac_address": "34:86:DA:DA:A9:F3",
+          "hostname": "_googlecast._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:20.430630+00:00",
+          "first_observed_at": "2026-08-22T13:52:20.430630+00:00",
+          "seen_count": 1,
+          "observation_kind": "query",
+          "ip_address": "172.16.2.6",
+          "mac_address": "34:86:DA:DA:A9:F3",
+          "hostname": "_CC32E753._sub._googlecast._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:20.430559+00:00",
+          "first_observed_at": "2026-08-22T13:52:20.430559+00:00",
+          "seen_count": 1,
+          "observation_kind": "query",
+          "ip_address": "172.16.2.6",
+          "mac_address": "34:86:DA:DA:A9:F3",
+          "hostname": "_CC1AD845._sub._googlecast._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:20.430392+00:00",
+          "first_observed_at": "2026-08-22T13:52:20.430392+00:00",
+          "seen_count": 1,
+          "observation_kind": "query",
+          "ip_address": "172.16.2.6",
+          "mac_address": "34:86:DA:DA:A9:F3",
+          "hostname": "_googlecast._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:17.977879+00:00",
+          "first_observed_at": "2026-08-22T13:52:17.977879+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "fe80::491:2a41:1c71:fec4",
+          "mac_address": "86:55:0D:36:83:0F",
+          "hostname": "moncecs-MacBook-Air.local",
+          "service_name": "moncec’s MacBook Air._companion-link._tcp.local",
+          "service_port": 49388
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:17.977857+00:00",
+          "first_observed_at": "2026-08-22T13:52:17.975280+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "172.16.3.79",
+          "mac_address": "86:55:0D:36:83:0F",
+          "hostname": "moncecs-MacBook-Air.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:17.977828+00:00",
+          "first_observed_at": "2026-08-22T13:52:17.975106+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "fe80::491:2a41:1c71:fec4",
+          "mac_address": "86:55:0D:36:83:0F",
+          "hostname": "moncecs-MacBook-Air.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:17.977784+00:00",
+          "first_observed_at": "2026-08-22T13:52:17.977784+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "fe80::491:2a41:1c71:fec4",
+          "mac_address": "86:55:0D:36:83:0F",
+          "service_name": "moncec’s MacBook Air._companion-link._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "rpMac": "0",
+              "rpHN": "9bbf683874b4",
+              "rpFl": "0x20000",
+              "rpHA": "b7548c01b3d3",
+              "rpVr": "680.1.1",
+              "rpAD": "74ea295b9d0c",
+              "rpHI": "922e6576dace",
+              "rpBA": "EB:8A:F7:5D:ED:00"
+            }
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:17.977736+00:00",
+          "first_observed_at": "2026-08-22T13:52:17.977736+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "fe80::491:2a41:1c71:fec4",
+          "mac_address": "86:55:0D:36:83:0F",
+          "service_name": "moncec’s MacBook Air._device-info._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "model": "Mac14,2",
+              "osxvers": "24",
+              "icolor": "7"
+            }
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:17.977688+00:00",
+          "first_observed_at": "2026-08-22T13:52:17.977688+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "fe80::491:2a41:1c71:fec4",
+          "mac_address": "86:55:0D:36:83:0F",
+          "service_type": "_companion-link._tcp.local",
+          "service_name": "moncec’s MacBook Air._companion-link._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:17.975346+00:00",
+          "first_observed_at": "2026-08-22T13:52:17.975346+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "172.16.3.79",
+          "mac_address": "86:55:0D:36:83:0F",
+          "hostname": "moncecs-MacBook-Air.local",
+          "service_name": "moncec’s MacBook Air._companion-link._tcp.local",
+          "service_port": 49388
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:17.974968+00:00",
+          "first_observed_at": "2026-08-22T13:52:17.974968+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "172.16.3.79",
+          "mac_address": "86:55:0D:36:83:0F",
+          "service_name": "moncec’s MacBook Air._companion-link._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "rpMac": "0",
+              "rpHN": "9bbf683874b4",
+              "rpFl": "0x20000",
+              "rpHA": "b7548c01b3d3",
+              "rpVr": "680.1.1",
+              "rpAD": "74ea295b9d0c",
+              "rpHI": "922e6576dace",
+              "rpBA": "EB:8A:F7:5D:ED:00"
+            }
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:17.974817+00:00",
+          "first_observed_at": "2026-08-22T13:52:17.974817+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "172.16.3.79",
+          "mac_address": "86:55:0D:36:83:0F",
+          "service_name": "moncec’s MacBook Air._device-info._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "model": "Mac14,2",
+              "osxvers": "24",
+              "icolor": "7"
+            }
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:17.974673+00:00",
+          "first_observed_at": "2026-08-22T13:52:17.974673+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "172.16.3.79",
+          "mac_address": "86:55:0D:36:83:0F",
+          "service_type": "_companion-link._tcp.local",
+          "service_name": "moncec’s MacBook Air._companion-link._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:16.953157+00:00",
+          "first_observed_at": "2026-08-22T13:52:15.920935+00:00",
+          "seen_count": 2,
+          "observation_kind": "query",
+          "ip_address": "fe80::1440:e854:85e0:6657",
+          "mac_address": "02:DA:AC:CF:ED:B3",
+          "hostname": "lb._dns-sd._udp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:16.953028+00:00",
+          "first_observed_at": "2026-08-22T13:52:15.920857+00:00",
+          "seen_count": 2,
+          "observation_kind": "query",
+          "ip_address": "fe80::1440:e854:85e0:6657",
+          "mac_address": "02:DA:AC:CF:ED:B3",
+          "hostname": "_rdlink._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:16.952803+00:00",
+          "first_observed_at": "2026-08-22T13:52:15.920725+00:00",
+          "seen_count": 3,
+          "observation_kind": "query",
+          "ip_address": "fe80::1440:e854:85e0:6657",
+          "mac_address": "02:DA:AC:CF:ED:B3",
+          "hostname": "_companion-link._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:16.950741+00:00",
+          "first_observed_at": "2026-08-22T13:52:15.919717+00:00",
+          "seen_count": 2,
+          "observation_kind": "query",
+          "ip_address": "172.16.1.13",
+          "mac_address": "02:DA:AC:CF:ED:B3",
+          "hostname": "lb._dns-sd._udp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:16.950655+00:00",
+          "first_observed_at": "2026-08-22T13:52:15.919640+00:00",
+          "seen_count": 2,
+          "observation_kind": "query",
+          "ip_address": "172.16.1.13",
+          "mac_address": "02:DA:AC:CF:ED:B3",
+          "hostname": "_rdlink._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:16.950461+00:00",
+          "first_observed_at": "2026-08-22T13:52:15.919439+00:00",
+          "seen_count": 3,
+          "observation_kind": "query",
+          "ip_address": "172.16.1.13",
+          "mac_address": "02:DA:AC:CF:ED:B3",
+          "hostname": "_companion-link._tcp.local"
+        }
+      ]
+    },
+    {
+      "received_at": "2026-08-22T13:55:51.738848+00:00",
+      "client_id": "client-e4fd45ba8b96",
+      "reporter": "E4:FD:45:BA:8B:96",
+      "observed_at": "2026-08-22T14:55:17.722455+01:00",
+      "observation_count": 236,
+      "observations": [
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:17.559915+00:00",
+          "first_observed_at": "2026-08-22T13:53:49.914047+00:00",
+          "seen_count": 21,
+          "observation_kind": "query",
+          "ip_address": "fe80::425e:714:175c:a48d",
+          "mac_address": "E4:FD:45:BB:33:98",
+          "hostname": "DESKTOP-DOLPJRM._dosvc._tcp.local",
+          "service_name": "DESKTOP-DOLPJRM._dosvc._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "P": "256",
+              "SH00": "Ah/Ly9i3HWpVk/7t"
+            }
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:17.558961+00:00",
+          "first_observed_at": "2026-08-22T13:53:49.912905+00:00",
+          "seen_count": 21,
+          "observation_kind": "query",
+          "ip_address": "172.16.0.98",
+          "mac_address": "E4:FD:45:BB:33:98",
+          "hostname": "DESKTOP-DOLPJRM._dosvc._tcp.local",
+          "service_name": "DESKTOP-DOLPJRM._dosvc._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "P": "256",
+              "SH00": "Ah/Ly9i3HWpVk/7t"
+            }
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:16.334015+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.736913+00:00",
+          "seen_count": 9,
+          "observation_kind": "response",
+          "ip_address": "fe80::425e:714:175c:a48d",
+          "mac_address": "E4:FD:45:BB:33:98",
+          "hostname": "DESKTOP-DOLPJRM.local",
+          "service_name": "DESKTOP-DOLPJRM._dosvc._tcp.local",
+          "service_port": 7680
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:16.333958+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.736820+00:00",
+          "seen_count": 6,
+          "observation_kind": "response",
+          "ip_address": "fe80::425e:714:175c:a48d",
+          "mac_address": "E4:FD:45:BB:33:98",
+          "service_type": "_dosvc._tcp.local",
+          "service_name": "DESKTOP-DOLPJRM._dosvc._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:16.331614+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.734022+00:00",
+          "seen_count": 9,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.98",
+          "mac_address": "E4:FD:45:BB:33:98",
+          "hostname": "DESKTOP-DOLPJRM.local",
+          "service_name": "DESKTOP-DOLPJRM._dosvc._tcp.local",
+          "service_port": 7680
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:16.331437+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.733848+00:00",
+          "seen_count": 6,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.98",
+          "mac_address": "E4:FD:45:BB:33:98",
+          "service_type": "_dosvc._tcp.local",
+          "service_name": "DESKTOP-DOLPJRM._dosvc._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:14.284886+00:00",
+          "first_observed_at": "2026-08-22T13:54:56.465691+00:00",
+          "seen_count": 4,
+          "observation_kind": "query",
+          "ip_address": "fe80::451:3e7b:ba8a:5260",
+          "mac_address": "36:2F:23:27:3C:29",
+          "hostname": "_rdlink._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:14.284718+00:00",
+          "first_observed_at": "2026-08-22T13:54:56.465443+00:00",
+          "seen_count": 4,
+          "observation_kind": "query",
+          "ip_address": "fe80::451:3e7b:ba8a:5260",
+          "mac_address": "36:2F:23:27:3C:29",
+          "hostname": "_companion-link._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:14.282959+00:00",
+          "first_observed_at": "2026-08-22T13:55:02.200998+00:00",
+          "seen_count": 3,
+          "observation_kind": "query",
+          "ip_address": "172.16.3.146",
+          "mac_address": "36:2F:23:27:3C:29",
+          "hostname": "_rdlink._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:14.282776+00:00",
+          "first_observed_at": "2026-08-22T13:55:02.200735+00:00",
+          "seen_count": 3,
+          "observation_kind": "query",
+          "ip_address": "172.16.3.146",
+          "mac_address": "36:2F:23:27:3C:29",
+          "hostname": "_companion-link._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:13.463807+00:00",
+          "first_observed_at": "2026-08-22T13:54:33.328439+00:00",
+          "seen_count": 5,
+          "observation_kind": "query",
+          "ip_address": "fe80::460:470c:2fec:6d2c",
+          "mac_address": "86:31:DB:F9:EC:68",
+          "hostname": "_sleep-proxy._udp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:13.463729+00:00",
+          "first_observed_at": "2026-08-22T13:52:31.906439+00:00",
+          "seen_count": 7,
+          "observation_kind": "query",
+          "ip_address": "fe80::460:470c:2fec:6d2c",
+          "mac_address": "86:31:DB:F9:EC:68",
+          "hostname": "_homekit._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:13.071649+00:00",
+          "first_observed_at": "2026-08-22T13:52:51.975758+00:00",
+          "seen_count": 15,
+          "observation_kind": "query",
+          "ip_address": "fe80::430:86ff:fe7f:9bd",
+          "mac_address": "06:30:86:7F:09:BD",
+          "hostname": "_8E6C866D._sub._googlecast._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:13.071522+00:00",
+          "first_observed_at": "2026-08-22T13:52:51.975287+00:00",
+          "seen_count": 19,
+          "observation_kind": "query",
+          "ip_address": "fe80::430:86ff:fe7f:9bd",
+          "mac_address": "06:30:86:7F:09:BD",
+          "hostname": "_674A0243._sub._googlecast._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:13.071316+00:00",
+          "first_observed_at": "2026-08-22T13:52:51.975234+00:00",
+          "seen_count": 22,
+          "observation_kind": "query",
+          "ip_address": "fe80::430:86ff:fe7f:9bd",
+          "mac_address": "06:30:86:7F:09:BD",
+          "hostname": "_googlecast._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:13.069713+00:00",
+          "first_observed_at": "2026-08-22T13:52:51.973380+00:00",
+          "seen_count": 15,
+          "observation_kind": "query",
+          "ip_address": "172.16.0.193",
+          "mac_address": "06:30:86:7F:09:BD",
+          "hostname": "_8E6C866D._sub._googlecast._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:13.069635+00:00",
+          "first_observed_at": "2026-08-22T13:52:51.971720+00:00",
+          "seen_count": 19,
+          "observation_kind": "query",
+          "ip_address": "172.16.0.193",
+          "mac_address": "06:30:86:7F:09:BD",
+          "hostname": "_674A0243._sub._googlecast._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:13.069454+00:00",
+          "first_observed_at": "2026-08-22T13:52:51.971554+00:00",
+          "seen_count": 22,
+          "observation_kind": "query",
+          "ip_address": "172.16.0.193",
+          "mac_address": "06:30:86:7F:09:BD",
+          "hostname": "_googlecast._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:11.009073+00:00",
+          "first_observed_at": "2026-08-22T13:55:11.009073+00:00",
+          "seen_count": 1,
+          "observation_kind": "query",
+          "ip_address": "fe80::c69:4eff:fe2e:ad7d",
+          "mac_address": "0E:69:4E:2E:AD:7D",
+          "hostname": "_nsdswc._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:11.004299+00:00",
+          "first_observed_at": "2026-08-22T13:55:11.004299+00:00",
+          "seen_count": 1,
+          "observation_kind": "query",
+          "ip_address": "172.16.2.233",
+          "mac_address": "0E:69:4E:2E:AD:7D",
+          "hostname": "_nsdswc._tcp.local"
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:55:10.805620+00:00",
+          "first_observed_at": "2026-08-22T13:55:10.805032+00:00",
+          "seen_count": 3,
+          "observation_kind": "search",
+          "ip_address": "172.16.3.161",
+          "mac_address": "B2:2D:BE:E8:2B:6F",
+          "device_type": "urn:schemas-upnp-org:device:InternetGatewayDevice:1",
+          "raw_fields": {
+            "host": "239.255.255.250:1900",
+            "man": "\"ssdp:discover\""
+          }
+        },
+        {
+          "protocol": "nbns",
+          "observed_at": "2026-08-22T13:55:05.887802+00:00",
+          "first_observed_at": "2026-08-22T13:52:24.935504+00:00",
+          "seen_count": 15,
+          "observation_kind": "query",
+          "ip_address": "172.16.0.36",
+          "mac_address": "E4:FD:45:BB:18:45",
+          "hostname": "DESKTOP-LSQ0HIB"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:05.693269+00:00",
+          "first_observed_at": "2026-08-22T13:52:39.887090+00:00",
+          "seen_count": 31,
+          "observation_kind": "query",
+          "ip_address": "172.16.2.146",
+          "mac_address": "C6:B9:5D:47:CE:0A",
+          "hostname": "MACs-iPhone.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:05.693239+00:00",
+          "first_observed_at": "2026-08-22T13:52:39.885535+00:00",
+          "seen_count": 31,
+          "observation_kind": "query",
+          "ip_address": "fe80::10d8:4abc:765d:a15f",
+          "mac_address": "C6:B9:5D:47:CE:0A",
+          "hostname": "MACs-iPhone.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:05.693203+00:00",
+          "first_observed_at": "2026-08-22T13:54:59.543995+00:00",
+          "seen_count": 4,
+          "observation_kind": "response",
+          "ip_address": "fe80::10d8:4abc:765d:a15f",
+          "mac_address": "C6:B9:5D:47:CE:0A",
+          "hostname": "MACs-iPhone.local",
+          "service_name": "F15A64A8-F73C-4818-84DB-FB8C5A491437._remotepairing._tcp.local",
+          "service_port": 49152
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:05.693175+00:00",
+          "first_observed_at": "2026-08-22T13:54:59.543966+00:00",
+          "seen_count": 4,
+          "observation_kind": "response",
+          "ip_address": "fe80::10d8:4abc:765d:a15f",
+          "mac_address": "C6:B9:5D:47:CE:0A",
+          "service_type": "_remotepairing._tcp.local",
+          "service_name": "F15A64A8-F73C-4818-84DB-FB8C5A491437._remotepairing._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:05.693142+00:00",
+          "first_observed_at": "2026-08-22T13:52:40.709012+00:00",
+          "seen_count": 11,
+          "observation_kind": "response",
+          "ip_address": "fe80::10d8:4abc:765d:a15f",
+          "mac_address": "C6:B9:5D:47:CE:0A",
+          "service_type": "_services._dns-sd._udp.local",
+          "service_name": "_remotepairing._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:05.693089+00:00",
+          "first_observed_at": "2026-08-22T13:54:58.927064+00:00",
+          "seen_count": 7,
+          "observation_kind": "query",
+          "ip_address": "fe80::10d8:4abc:765d:a15f",
+          "mac_address": "C6:B9:5D:47:CE:0A",
+          "hostname": "F15A64A8-F73C-4818-84DB-FB8C5A491437._remotepairing._tcp.local",
+          "service_name": "F15A64A8-F73C-4818-84DB-FB8C5A491437._remotepairing._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "identifier": "F15A64A8-F73C-4818-84DB-FB8C5A491437",
+              "authTag": "AnRqirUO",
+              "ver": "24",
+              "minVer": "8",
+              "flags": "0"
+            }
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:05.693055+00:00",
+          "first_observed_at": "2026-08-22T13:52:39.486839+00:00",
+          "seen_count": 11,
+          "observation_kind": "response",
+          "ip_address": "fe80::10d8:4abc:765d:a15f",
+          "mac_address": "C6:B9:5D:47:CE:0A",
+          "service_type": "146.2.16.172.in-addr.arpa",
+          "service_name": "MACs-iPhone.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:05.693001+00:00",
+          "first_observed_at": "2026-08-22T13:52:39.486786+00:00",
+          "seen_count": 11,
+          "observation_kind": "response",
+          "ip_address": "fe80::10d8:4abc:765d:a15f",
+          "mac_address": "C6:B9:5D:47:CE:0A",
+          "service_type": "F.5.1.A.D.5.6.7.C.B.A.4.8.D.0.1.0.0.0.0.0.0.0.0.0.0.0.0.0.8.E.F.ip6.arpa",
+          "service_name": "MACs-iPhone.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:05.690393+00:00",
+          "first_observed_at": "2026-08-22T13:54:59.542683+00:00",
+          "seen_count": 4,
+          "observation_kind": "response",
+          "ip_address": "172.16.2.146",
+          "mac_address": "C6:B9:5D:47:CE:0A",
+          "hostname": "MACs-iPhone.local",
+          "service_name": "F15A64A8-F73C-4818-84DB-FB8C5A491437._remotepairing._tcp.local",
+          "service_port": 49152
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:05.690362+00:00",
+          "first_observed_at": "2026-08-22T13:54:59.542669+00:00",
+          "seen_count": 4,
+          "observation_kind": "response",
+          "ip_address": "172.16.2.146",
+          "mac_address": "C6:B9:5D:47:CE:0A",
+          "service_type": "_remotepairing._tcp.local",
+          "service_name": "F15A64A8-F73C-4818-84DB-FB8C5A491437._remotepairing._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:05.690323+00:00",
+          "first_observed_at": "2026-08-22T13:52:40.707589+00:00",
+          "seen_count": 11,
+          "observation_kind": "response",
+          "ip_address": "172.16.2.146",
+          "mac_address": "C6:B9:5D:47:CE:0A",
+          "service_type": "_services._dns-sd._udp.local",
+          "service_name": "_remotepairing._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:05.690231+00:00",
+          "first_observed_at": "2026-08-22T13:54:58.924463+00:00",
+          "seen_count": 7,
+          "observation_kind": "query",
+          "ip_address": "172.16.2.146",
+          "mac_address": "C6:B9:5D:47:CE:0A",
+          "hostname": "F15A64A8-F73C-4818-84DB-FB8C5A491437._remotepairing._tcp.local",
+          "service_name": "F15A64A8-F73C-4818-84DB-FB8C5A491437._remotepairing._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "identifier": "F15A64A8-F73C-4818-84DB-FB8C5A491437",
+              "authTag": "AnRqirUO",
+              "ver": "24",
+              "minVer": "8",
+              "flags": "0"
+            }
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:05.690171+00:00",
+          "first_observed_at": "2026-08-22T13:52:39.486066+00:00",
+          "seen_count": 10,
+          "observation_kind": "response",
+          "ip_address": "172.16.2.146",
+          "mac_address": "C6:B9:5D:47:CE:0A",
+          "service_type": "146.2.16.172.in-addr.arpa",
+          "service_name": "MACs-iPhone.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:05.690065+00:00",
+          "first_observed_at": "2026-08-22T13:52:39.486033+00:00",
+          "seen_count": 10,
+          "observation_kind": "response",
+          "ip_address": "172.16.2.146",
+          "mac_address": "C6:B9:5D:47:CE:0A",
+          "service_type": "F.5.1.A.D.5.6.7.C.B.A.4.8.D.0.1.0.0.0.0.0.0.0.0.0.0.0.0.0.8.E.F.ip6.arpa",
+          "service_name": "MACs-iPhone.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:05.276161+00:00",
+          "first_observed_at": "2026-08-22T13:52:22.891201+00:00",
+          "seen_count": 5,
+          "observation_kind": "response",
+          "ip_address": "fe80::d4da:dbff:fea8:8776",
+          "mac_address": "D6:DA:DB:A8:87:76",
+          "service_type": "_FC9F5ED42C8A._tcp.local",
+          "service_name": "IzdLSDP8n14AAA._FC9F5ED42C8A._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:05.275808+00:00",
+          "first_observed_at": "2026-08-22T13:52:22.889397+00:00",
+          "seen_count": 5,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.142",
+          "mac_address": "D6:DA:DB:A8:87:76",
+          "service_type": "_FC9F5ED42C8A._tcp.local",
+          "service_name": "IzdLSDP8n14AAA._FC9F5ED42C8A._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:04.879817+00:00",
+          "first_observed_at": "2026-08-22T13:52:24.521513+00:00",
+          "seen_count": 60,
+          "observation_kind": "query",
+          "ip_address": "fe80::f63f:164d:3d86:7009",
+          "mac_address": "E4:FD:45:BB:18:45",
+          "hostname": "DESKTOP-LSQ0HIB.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:04.879549+00:00",
+          "first_observed_at": "2026-08-22T13:52:24.515462+00:00",
+          "seen_count": 60,
+          "observation_kind": "query",
+          "ip_address": "172.16.0.36",
+          "mac_address": "E4:FD:45:BB:18:45",
+          "hostname": "DESKTOP-LSQ0HIB.local"
+        },
+        {
+          "protocol": "llmnr",
+          "observed_at": "2026-08-22T13:55:04.877578+00:00",
+          "first_observed_at": "2026-08-22T13:52:24.937966+00:00",
+          "seen_count": 20,
+          "observation_kind": "query",
+          "ip_address": "fe80::f63f:164d:3d86:7009",
+          "mac_address": "E4:FD:45:BB:18:45",
+          "hostname": "DESKTOP-LSQ0HIB"
+        },
+        {
+          "protocol": "llmnr",
+          "observed_at": "2026-08-22T13:55:04.876553+00:00",
+          "first_observed_at": "2026-08-22T13:52:24.939657+00:00",
+          "seen_count": 20,
+          "observation_kind": "query",
+          "ip_address": "172.16.0.36",
+          "mac_address": "E4:FD:45:BB:18:45",
+          "hostname": "DESKTOP-LSQ0HIB"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:02.816483+00:00",
+          "first_observed_at": "2026-08-22T13:52:40.709048+00:00",
+          "seen_count": 11,
+          "observation_kind": "response",
+          "ip_address": "fe80::10d8:4abc:765d:a15f",
+          "mac_address": "C6:B9:5D:47:CE:0A",
+          "service_type": "_remotepairing._tcp.local",
+          "service_name": "C48FAC00-D7DB-4140-B927-68E98FF714AF._remotepairing._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:02.814393+00:00",
+          "first_observed_at": "2026-08-22T13:52:40.707612+00:00",
+          "seen_count": 11,
+          "observation_kind": "response",
+          "ip_address": "172.16.2.146",
+          "mac_address": "C6:B9:5D:47:CE:0A",
+          "service_type": "_remotepairing._tcp.local",
+          "service_name": "C48FAC00-D7DB-4140-B927-68E98FF714AF._remotepairing._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:02.407984+00:00",
+          "first_observed_at": "2026-08-22T13:52:17.977784+00:00",
+          "seen_count": 3,
+          "observation_kind": "response",
+          "ip_address": "fe80::491:2a41:1c71:fec4",
+          "mac_address": "86:55:0D:36:83:0F",
+          "service_name": "moncec’s MacBook Air._companion-link._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "rpMac": "0",
+              "rpHN": "9bbf683874b4",
+              "rpFl": "0x20000",
+              "rpHA": "b7548c01b3d3",
+              "rpVr": "680.1.1",
+              "rpAD": "74ea295b9d0c",
+              "rpHI": "922e6576dace",
+              "rpBA": "EB:8A:F7:5D:ED:00"
+            }
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:02.405614+00:00",
+          "first_observed_at": "2026-08-22T13:52:17.974968+00:00",
+          "seen_count": 3,
+          "observation_kind": "response",
+          "ip_address": "172.16.3.79",
+          "mac_address": "86:55:0D:36:83:0F",
+          "service_name": "moncec’s MacBook Air._companion-link._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "rpMac": "0",
+              "rpHN": "9bbf683874b4",
+              "rpFl": "0x20000",
+              "rpHA": "b7548c01b3d3",
+              "rpVr": "680.1.1",
+              "rpAD": "74ea295b9d0c",
+              "rpHI": "922e6576dace",
+              "rpBA": "EB:8A:F7:5D:ED:00"
+            }
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:02.203634+00:00",
+          "first_observed_at": "2026-08-22T13:55:02.203634+00:00",
+          "seen_count": 1,
+          "observation_kind": "query",
+          "ip_address": "fe80::451:3e7b:ba8a:5260",
+          "mac_address": "36:2F:23:27:3C:29",
+          "hostname": "moncec’s MacBook Air._companion-link._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:55:02.201125+00:00",
+          "first_observed_at": "2026-08-22T13:55:02.201125+00:00",
+          "seen_count": 1,
+          "observation_kind": "query",
+          "ip_address": "172.16.3.146",
+          "mac_address": "36:2F:23:27:3C:29",
+          "hostname": "moncec’s MacBook Air._companion-link._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:54:59.541386+00:00",
+          "first_observed_at": "2026-08-22T13:52:20.432469+00:00",
+          "seen_count": 13,
+          "observation_kind": "query",
+          "ip_address": "fe80::d3c:b1e7:78c1:7fe7",
+          "mac_address": "34:86:DA:DA:A9:F3",
+          "hostname": "_CC32E753._sub._googlecast._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:54:59.541353+00:00",
+          "first_observed_at": "2026-08-22T13:52:20.432347+00:00",
+          "seen_count": 12,
+          "observation_kind": "query",
+          "ip_address": "fe80::d3c:b1e7:78c1:7fe7",
+          "mac_address": "34:86:DA:DA:A9:F3",
+          "hostname": "_CC1AD845._sub._googlecast._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:54:59.541247+00:00",
+          "first_observed_at": "2026-08-22T13:52:20.432139+00:00",
+          "seen_count": 13,
+          "observation_kind": "query",
+          "ip_address": "fe80::d3c:b1e7:78c1:7fe7",
+          "mac_address": "34:86:DA:DA:A9:F3",
+          "hostname": "_googlecast._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:54:59.538684+00:00",
+          "first_observed_at": "2026-08-22T13:52:20.430630+00:00",
+          "seen_count": 13,
+          "observation_kind": "query",
+          "ip_address": "172.16.2.6",
+          "mac_address": "34:86:DA:DA:A9:F3",
+          "hostname": "_CC32E753._sub._googlecast._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:54:59.538524+00:00",
+          "first_observed_at": "2026-08-22T13:52:20.430559+00:00",
+          "seen_count": 12,
+          "observation_kind": "query",
+          "ip_address": "172.16.2.6",
+          "mac_address": "34:86:DA:DA:A9:F3",
+          "hostname": "_CC1AD845._sub._googlecast._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:54:59.538228+00:00",
+          "first_observed_at": "2026-08-22T13:52:20.430392+00:00",
+          "seen_count": 13,
+          "observation_kind": "query",
+          "ip_address": "172.16.2.6",
+          "mac_address": "34:86:DA:DA:A9:F3",
+          "hostname": "_googlecast._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:54:56.679963+00:00",
+          "first_observed_at": "2026-08-22T13:52:39.675159+00:00",
+          "seen_count": 6,
+          "observation_kind": "query",
+          "ip_address": "fe80::10d8:4abc:765d:a15f",
+          "mac_address": "C6:B9:5D:47:CE:0A",
+          "hostname": "_rdlink._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:54:56.679916+00:00",
+          "first_observed_at": "2026-08-22T13:52:39.675050+00:00",
+          "seen_count": 6,
+          "observation_kind": "query",
+          "ip_address": "fe80::10d8:4abc:765d:a15f",
+          "mac_address": "C6:B9:5D:47:CE:0A",
+          "hostname": "_companion-link._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:54:56.679471+00:00",
+          "first_observed_at": "2026-08-22T13:52:39.674146+00:00",
+          "seen_count": 6,
+          "observation_kind": "query",
+          "ip_address": "172.16.2.146",
+          "mac_address": "C6:B9:5D:47:CE:0A",
+          "hostname": "_rdlink._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:54:56.679441+00:00",
+          "first_observed_at": "2026-08-22T13:52:39.674036+00:00",
+          "seen_count": 6,
+          "observation_kind": "query",
+          "ip_address": "172.16.2.146",
+          "mac_address": "C6:B9:5D:47:CE:0A",
+          "hostname": "_companion-link._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:54:56.678920+00:00",
+          "first_observed_at": "2026-08-22T13:52:40.709074+00:00",
+          "seen_count": 7,
+          "observation_kind": "response",
+          "ip_address": "fe80::10d8:4abc:765d:a15f",
+          "mac_address": "C6:B9:5D:47:CE:0A",
+          "hostname": "MACs-iPhone.local",
+          "service_name": "C48FAC00-D7DB-4140-B927-68E98FF714AF._remotepairing._tcp.local",
+          "service_port": 49152
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:54:56.678783+00:00",
+          "first_observed_at": "2026-08-22T13:52:39.885352+00:00",
+          "seen_count": 13,
+          "observation_kind": "query",
+          "ip_address": "fe80::10d8:4abc:765d:a15f",
+          "mac_address": "C6:B9:5D:47:CE:0A",
+          "hostname": "C48FAC00-D7DB-4140-B927-68E98FF714AF._remotepairing._tcp.local",
+          "service_name": "C48FAC00-D7DB-4140-B927-68E98FF714AF._remotepairing._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "identifier": "C48FAC00-D7DB-4140-B927-68E98FF714AF",
+              "authTag": "46TaR4Yi",
+              "ver": "24",
+              "minVer": "8",
+              "flags": "0"
+            }
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:54:56.677498+00:00",
+          "first_observed_at": "2026-08-22T13:52:40.707628+00:00",
+          "seen_count": 7,
+          "observation_kind": "response",
+          "ip_address": "172.16.2.146",
+          "mac_address": "C6:B9:5D:47:CE:0A",
+          "hostname": "MACs-iPhone.local",
+          "service_name": "C48FAC00-D7DB-4140-B927-68E98FF714AF._remotepairing._tcp.local",
+          "service_port": 49152
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:54:56.677387+00:00",
+          "first_observed_at": "2026-08-22T13:52:39.887056+00:00",
+          "seen_count": 13,
+          "observation_kind": "query",
+          "ip_address": "172.16.2.146",
+          "mac_address": "C6:B9:5D:47:CE:0A",
+          "hostname": "C48FAC00-D7DB-4140-B927-68E98FF714AF._remotepairing._tcp.local",
+          "service_name": "C48FAC00-D7DB-4140-B927-68E98FF714AF._remotepairing._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "identifier": "C48FAC00-D7DB-4140-B927-68E98FF714AF",
+              "authTag": "46TaR4Yi",
+              "ver": "24",
+              "minVer": "8",
+              "flags": "0"
+            }
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:54:56.265628+00:00",
+          "first_observed_at": "2026-08-22T13:52:28.414384+00:00",
+          "seen_count": 49,
+          "observation_kind": "query",
+          "ip_address": "fe80::58eb:5186:736b:e6fd",
+          "mac_address": "A4:9B:4F:C1:6A:CB",
+          "hostname": "Android-3.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:54:56.265601+00:00",
+          "first_observed_at": "2026-08-22T13:52:28.412059+00:00",
+          "seen_count": 49,
+          "observation_kind": "query",
+          "ip_address": "172.16.0.100",
+          "mac_address": "A4:9B:4F:C1:6A:CB",
+          "hostname": "Android-3.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:54:56.265468+00:00",
+          "first_observed_at": "2026-08-22T13:52:29.236806+00:00",
+          "seen_count": 16,
+          "observation_kind": "response",
+          "ip_address": "fe80::58eb:5186:736b:e6fd",
+          "mac_address": "A4:9B:4F:C1:6A:CB",
+          "service_type": "D.F.6.E.B.6.3.7.6.8.1.5.B.E.8.5.0.0.0.0.0.0.0.0.0.0.0.0.0.8.E.F.ip6.arpa",
+          "service_name": "Android-3.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:54:56.265227+00:00",
+          "first_observed_at": "2026-08-22T13:52:29.236760+00:00",
+          "seen_count": 16,
+          "observation_kind": "response",
+          "ip_address": "fe80::58eb:5186:736b:e6fd",
+          "mac_address": "A4:9B:4F:C1:6A:CB",
+          "service_type": "100.0.16.172.in-addr.arpa",
+          "service_name": "Android-3.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:54:55.034617+00:00",
+          "first_observed_at": "2026-08-22T13:54:52.166049+00:00",
+          "seen_count": 3,
+          "observation_kind": "query",
+          "ip_address": "fe80::78e7:1ede:dde4:35ad",
+          "mac_address": "E4:FD:45:BB:38:9D",
+          "hostname": "_googlecast._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:54:55.031860+00:00",
+          "first_observed_at": "2026-08-22T13:54:52.164877+00:00",
+          "seen_count": 3,
+          "observation_kind": "query",
+          "ip_address": "172.16.0.112",
+          "mac_address": "E4:FD:45:BB:38:9D",
+          "hostname": "_googlecast._tcp.local"
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:54:54.622649+00:00",
+          "first_observed_at": "2026-08-22T13:52:51.553651+00:00",
+          "seen_count": 8,
+          "observation_kind": "search",
+          "ip_address": "172.16.1.17",
+          "mac_address": "E4:FD:45:BB:2F:01",
+          "device_type": "urn:dial-multiscreen-org:service:dial:1",
+          "raw_fields": {
+            "host": "239.255.255.250:1900",
+            "man": "\"ssdp:discover\""
+          }
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:54:47.047096+00:00",
+          "first_observed_at": "2026-08-22T13:54:41.117263+00:00",
+          "seen_count": 8,
+          "observation_kind": "search",
+          "ip_address": "172.16.0.112",
+          "mac_address": "E4:FD:45:BB:38:9D",
+          "device_type": "urn:schemas-upnp-org:device:InternetGatewayDevice:1",
+          "raw_fields": {
+            "host": "239.255.255.250:1900",
+            "man": "\"ssdp:discover\""
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:54:46.431481+00:00",
+          "first_observed_at": "2026-08-22T13:54:33.325998+00:00",
+          "seen_count": 4,
+          "observation_kind": "query",
+          "ip_address": "172.16.3.202",
+          "mac_address": "86:31:DB:F9:EC:68",
+          "hostname": "_sleep-proxy._udp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:54:46.431295+00:00",
+          "first_observed_at": "2026-08-22T13:52:31.906187+00:00",
+          "seen_count": 6,
+          "observation_kind": "query",
+          "ip_address": "172.16.3.202",
+          "mac_address": "86:31:DB:F9:EC:68",
+          "hostname": "_homekit._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:54:41.931138+00:00",
+          "first_observed_at": "2026-08-22T13:54:40.904035+00:00",
+          "seen_count": 3,
+          "observation_kind": "query",
+          "ip_address": "fe80::48a:f882:7905:9859",
+          "mac_address": "B6:6D:DD:64:9C:E1",
+          "hostname": "_companion-link._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:54:41.930906+00:00",
+          "first_observed_at": "2026-08-22T13:54:40.903802+00:00",
+          "seen_count": 2,
+          "observation_kind": "query",
+          "ip_address": "fe80::48a:f882:7905:9859",
+          "mac_address": "B6:6D:DD:64:9C:E1",
+          "hostname": "_rdlink._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:54:41.926775+00:00",
+          "first_observed_at": "2026-08-22T13:54:40.909277+00:00",
+          "seen_count": 3,
+          "observation_kind": "query",
+          "ip_address": "172.16.3.122",
+          "mac_address": "B6:6D:DD:64:9C:E1",
+          "hostname": "_companion-link._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:54:41.926578+00:00",
+          "first_observed_at": "2026-08-22T13:54:40.909101+00:00",
+          "seen_count": 2,
+          "observation_kind": "query",
+          "ip_address": "172.16.3.122",
+          "mac_address": "B6:6D:DD:64:9C:E1",
+          "hostname": "_rdlink._tcp.local"
+        },
+        {
+          "protocol": "llmnr",
+          "observed_at": "2026-08-22T13:54:37.431056+00:00",
+          "first_observed_at": "2026-08-22T13:54:36.202528+00:00",
+          "seen_count": 4,
+          "observation_kind": "query",
+          "ip_address": "172.16.0.112",
+          "mac_address": "E4:FD:45:BB:38:9D",
+          "hostname": "DESKTOP-J0LR2GT"
+        },
+        {
+          "protocol": "llmnr",
+          "observed_at": "2026-08-22T13:54:37.430024+00:00",
+          "first_observed_at": "2026-08-22T13:54:34.972908+00:00",
+          "seen_count": 6,
+          "observation_kind": "query",
+          "ip_address": "fe80::78e7:1ede:dde4:35ad",
+          "mac_address": "E4:FD:45:BB:38:9D",
+          "hostname": "DESKTOP-J0LR2GT"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:54:37.226143+00:00",
+          "first_observed_at": "2026-08-22T13:54:33.325746+00:00",
+          "seen_count": 3,
+          "observation_kind": "query",
+          "ip_address": "172.16.3.202",
+          "mac_address": "86:31:DB:F9:EC:68",
+          "hostname": "_companion-link._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:54:37.225495+00:00",
+          "first_observed_at": "2026-08-22T13:54:33.328057+00:00",
+          "seen_count": 3,
+          "observation_kind": "query",
+          "ip_address": "fe80::460:470c:2fec:6d2c",
+          "mac_address": "86:31:DB:F9:EC:68",
+          "hostname": "_companion-link._tcp.local"
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:53:59.535046+00:00",
+          "first_observed_at": "2026-08-22T13:53:39.056710+00:00",
+          "seen_count": 9,
+          "observation_kind": "search",
+          "ip_address": "172.16.3.19",
+          "mac_address": "96:17:CB:EE:58:E7",
+          "device_type": "urn:dial-multiscreen-org:service:dial:1",
+          "raw_fields": {
+            "host": "239.255.255.250:1900",
+            "man": "\"ssdp:discover\""
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:56.071998+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.734414+00:00",
+          "seen_count": 12,
+          "observation_kind": "response",
+          "ip_address": "fe80::425e:714:175c:a48d",
+          "mac_address": "E4:FD:45:BB:33:98",
+          "hostname": "DESKTOP-DOLPJRM.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:56.071978+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.734302+00:00",
+          "seen_count": 12,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.98",
+          "mac_address": "E4:FD:45:BB:33:98",
+          "hostname": "DESKTOP-DOLPJRM.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:56.068547+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.324224+00:00",
+          "seen_count": 5,
+          "observation_kind": "response",
+          "ip_address": "fe80::66b1:b1ea:80d3:bfe3",
+          "mac_address": "E4:FD:45:BB:39:38",
+          "hostname": "DESKTOP-MJ8ITA4.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:56.068524+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.324157+00:00",
+          "seen_count": 5,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.67",
+          "mac_address": "E4:FD:45:BB:39:38",
+          "hostname": "DESKTOP-MJ8ITA4.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:56.068466+00:00",
+          "first_observed_at": "2026-08-22T13:53:52.385243+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "fe80::66b1:b1ea:80d3:bfe3",
+          "mac_address": "E4:FD:45:BB:39:38",
+          "service_name": "DESKTOP-MJ8ITA4._dosvc._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "P": "256",
+              "SH00": "CDa/IO2OBHL8Z2ka",
+              "SH01": "F9UYqaqsxXleWlxS",
+              "SH02": "JVC/v1zs+HydytGG",
+              "SH03": "M75zDkND+1YHXLb6",
+              "SH04": "O02HOIddUqWd5mKi",
+              "SH05": "RAK2g0uCyMeN429E",
+              "SH06": "TFvsk2UcwfLBewxT",
+              "SH07": "V0iuVZEc1LSvS7LI",
+              "SH08": "V1iowItNgItu7rBF",
+              "SH09": "aEce3susB2AvssSY",
+              "SH0a": "awxdIZeOjwkfDy6l",
+              "SH0b": "dFLHCfZbRhte2EM7",
+              "SH0c": "hUerW3AX33QULep9",
+              "SH0d": "jqIDcy0/bx8kZtwG",
+              "SH0e": "rJbrVVfPFD4I/kzA"
+            }
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:56.068437+00:00",
+          "first_observed_at": "2026-08-22T13:53:52.385215+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "fe80::66b1:b1ea:80d3:bfe3",
+          "mac_address": "E4:FD:45:BB:39:38",
+          "hostname": "DESKTOP-MJ8ITA4.local",
+          "service_name": "DESKTOP-MJ8ITA4._dosvc._tcp.local",
+          "service_port": 7680
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:56.068397+00:00",
+          "first_observed_at": "2026-08-22T13:53:52.385176+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "fe80::66b1:b1ea:80d3:bfe3",
+          "mac_address": "E4:FD:45:BB:39:38",
+          "service_type": "_dosvc._tcp.local",
+          "service_name": "DESKTOP-MJ8ITA4._dosvc._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:56.067441+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.323963+00:00",
+          "seen_count": 3,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.67",
+          "mac_address": "E4:FD:45:BB:39:38",
+          "service_name": "DESKTOP-MJ8ITA4._dosvc._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "P": "256",
+              "SH00": "CDa/IO2OBHL8Z2ka",
+              "SH01": "F9UYqaqsxXleWlxS",
+              "SH02": "JVC/v1zs+HydytGG",
+              "SH03": "M75zDkND+1YHXLb6",
+              "SH04": "O02HOIddUqWd5mKi",
+              "SH05": "RAK2g0uCyMeN429E",
+              "SH06": "TFvsk2UcwfLBewxT",
+              "SH07": "V0iuVZEc1LSvS7LI",
+              "SH08": "V1iowItNgItu7rBF",
+              "SH09": "aEce3susB2AvssSY",
+              "SH0a": "awxdIZeOjwkfDy6l",
+              "SH0b": "dFLHCfZbRhte2EM7",
+              "SH0c": "hUerW3AX33QULep9",
+              "SH0d": "jqIDcy0/bx8kZtwG",
+              "SH0e": "rJbrVVfPFD4I/kzA"
+            }
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:56.067422+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.323886+00:00",
+          "seen_count": 3,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.67",
+          "mac_address": "E4:FD:45:BB:39:38",
+          "hostname": "DESKTOP-MJ8ITA4.local",
+          "service_name": "DESKTOP-MJ8ITA4._dosvc._tcp.local",
+          "service_port": 7680
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:56.067393+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.323743+00:00",
+          "seen_count": 3,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.67",
+          "mac_address": "E4:FD:45:BB:39:38",
+          "service_type": "_dosvc._tcp.local",
+          "service_name": "DESKTOP-MJ8ITA4._dosvc._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:56.066498+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.330850+00:00",
+          "seen_count": 6,
+          "observation_kind": "response",
+          "ip_address": "fe80::327d:848e:1aaa:a6c3",
+          "mac_address": "E4:FD:45:BB:18:3B",
+          "hostname": "DESKTOP-C0PGHC7.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:56.066480+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.330795+00:00",
+          "seen_count": 6,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.17",
+          "mac_address": "E4:FD:45:BB:18:3B",
+          "hostname": "DESKTOP-C0PGHC7.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:56.066431+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.330634+00:00",
+          "seen_count": 3,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.17",
+          "mac_address": "E4:FD:45:BB:18:3B",
+          "service_name": "DESKTOP-C0PGHC7._dosvc._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "P": "256",
+              "SH00": "Ah/Ly9i3HWpVk/7t",
+              "SH01": "JVC/v1zs+HydytGG",
+              "SH02": "OAhLIv535dcacNHd",
+              "SH03": "RAK2g0uCyMeN429E",
+              "SH04": "S5JZRiACKWveBuBR",
+              "SH05": "V0iuVZEc1LSvS7LI",
+              "SH06": "V1iowItNgItu7rBF",
+              "SH07": "aEce3susB2AvssSY",
+              "SH08": "fX/WBwXzUk5rqxSo",
+              "SH09": "hUerW3AX33QULep9",
+              "SH0a": "jqIDcy0/bx8kZtwG",
+              "SH0b": "rJbrVVfPFD4I/kzA",
+              "SH0c": "10qqHrpyRxpg2I0Q",
+              "SH0d": "4njK7iAGLpvpRW5E",
+              "SH0e": "9Iy/+3qIDtZd1Pjk"
+            }
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:56.066409+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.330569+00:00",
+          "seen_count": 3,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.17",
+          "mac_address": "E4:FD:45:BB:18:3B",
+          "hostname": "DESKTOP-C0PGHC7.local",
+          "service_name": "DESKTOP-C0PGHC7._dosvc._tcp.local",
+          "service_port": 7680
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:56.066352+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.330434+00:00",
+          "seen_count": 3,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.17",
+          "mac_address": "E4:FD:45:BB:18:3B",
+          "service_type": "_dosvc._tcp.local",
+          "service_name": "DESKTOP-C0PGHC7._dosvc._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:56.065350+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.332414+00:00",
+          "seen_count": 3,
+          "observation_kind": "response",
+          "ip_address": "fe80::327d:848e:1aaa:a6c3",
+          "mac_address": "E4:FD:45:BB:18:3B",
+          "service_name": "DESKTOP-C0PGHC7._dosvc._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "P": "256",
+              "SH00": "Ah/Ly9i3HWpVk/7t",
+              "SH01": "JVC/v1zs+HydytGG",
+              "SH02": "OAhLIv535dcacNHd",
+              "SH03": "RAK2g0uCyMeN429E",
+              "SH04": "S5JZRiACKWveBuBR",
+              "SH05": "V0iuVZEc1LSvS7LI",
+              "SH06": "V1iowItNgItu7rBF",
+              "SH07": "aEce3susB2AvssSY",
+              "SH08": "fX/WBwXzUk5rqxSo",
+              "SH09": "hUerW3AX33QULep9",
+              "SH0a": "jqIDcy0/bx8kZtwG",
+              "SH0b": "rJbrVVfPFD4I/kzA",
+              "SH0c": "10qqHrpyRxpg2I0Q",
+              "SH0d": "4njK7iAGLpvpRW5E",
+              "SH0e": "9Iy/+3qIDtZd1Pjk"
+            }
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:56.065317+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.332384+00:00",
+          "seen_count": 3,
+          "observation_kind": "response",
+          "ip_address": "fe80::327d:848e:1aaa:a6c3",
+          "mac_address": "E4:FD:45:BB:18:3B",
+          "hostname": "DESKTOP-C0PGHC7.local",
+          "service_name": "DESKTOP-C0PGHC7._dosvc._tcp.local",
+          "service_port": 7680
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:56.065238+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.332343+00:00",
+          "seen_count": 3,
+          "observation_kind": "response",
+          "ip_address": "fe80::327d:848e:1aaa:a6c3",
+          "mac_address": "E4:FD:45:BB:18:3B",
+          "service_type": "_dosvc._tcp.local",
+          "service_name": "DESKTOP-C0PGHC7._dosvc._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:55.875161+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.129329+00:00",
+          "seen_count": 6,
+          "observation_kind": "response",
+          "ip_address": "fe80::f63f:164d:3d86:7009",
+          "mac_address": "E4:FD:45:BB:18:45",
+          "hostname": "DESKTOP-30OOMFF.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:55.875139+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.129295+00:00",
+          "seen_count": 6,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.36",
+          "mac_address": "E4:FD:45:BB:18:45",
+          "hostname": "DESKTOP-30OOMFF.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:55.875082+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.131073+00:00",
+          "seen_count": 3,
+          "observation_kind": "response",
+          "ip_address": "fe80::f63f:164d:3d86:7009",
+          "mac_address": "E4:FD:45:BB:18:45",
+          "service_name": "DESKTOP-30OOMFF._dosvc._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "P": "256",
+              "SH00": "Ah/Ly9i3HWpVk/7t",
+              "SH01": "CDa/IO2OBHL8Z2ka",
+              "SH02": "DMKksdjE/En+hA1C",
+              "SH03": "E2Caze5tY8LDgcHv",
+              "SH04": "F9UYqaqsxXleWlxS",
+              "SH05": "JVC/v1zs+HydytGG",
+              "SH06": "O02HOIddUqWd5mKi",
+              "SH07": "P7indb6RqQY8V3Vu",
+              "SH08": "RAK2g0uCyMeN429E",
+              "SH09": "RjdzOG4u328frsfr",
+              "SH0a": "TFvsk2UcwfLBewxT",
+              "SH0b": "Vk2UIdLNDkqFStH5",
+              "SH0c": "V0iuVZEc1LSvS7LI",
+              "SH0d": "V1iowItNgItu7rBF",
+              "SH0e": "aEce3susB2AvssSY"
+            }
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:55.875052+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.131032+00:00",
+          "seen_count": 3,
+          "observation_kind": "response",
+          "ip_address": "fe80::f63f:164d:3d86:7009",
+          "mac_address": "E4:FD:45:BB:18:45",
+          "hostname": "DESKTOP-30OOMFF.local",
+          "service_name": "DESKTOP-30OOMFF._dosvc._tcp.local",
+          "service_port": 7680
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:55.875011+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.130971+00:00",
+          "seen_count": 3,
+          "observation_kind": "response",
+          "ip_address": "fe80::f63f:164d:3d86:7009",
+          "mac_address": "E4:FD:45:BB:18:45",
+          "service_type": "_dosvc._tcp.local",
+          "service_name": "DESKTOP-30OOMFF._dosvc._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:55.874072+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.129168+00:00",
+          "seen_count": 3,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.36",
+          "mac_address": "E4:FD:45:BB:18:45",
+          "service_name": "DESKTOP-30OOMFF._dosvc._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "P": "256",
+              "SH00": "Ah/Ly9i3HWpVk/7t",
+              "SH01": "CDa/IO2OBHL8Z2ka",
+              "SH02": "DMKksdjE/En+hA1C",
+              "SH03": "E2Caze5tY8LDgcHv",
+              "SH04": "F9UYqaqsxXleWlxS",
+              "SH05": "JVC/v1zs+HydytGG",
+              "SH06": "O02HOIddUqWd5mKi",
+              "SH07": "P7indb6RqQY8V3Vu",
+              "SH08": "RAK2g0uCyMeN429E",
+              "SH09": "RjdzOG4u328frsfr",
+              "SH0a": "TFvsk2UcwfLBewxT",
+              "SH0b": "Vk2UIdLNDkqFStH5",
+              "SH0c": "V0iuVZEc1LSvS7LI",
+              "SH0d": "V1iowItNgItu7rBF",
+              "SH0e": "aEce3susB2AvssSY"
+            }
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:55.874052+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.129087+00:00",
+          "seen_count": 3,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.36",
+          "mac_address": "E4:FD:45:BB:18:45",
+          "hostname": "DESKTOP-30OOMFF.local",
+          "service_name": "DESKTOP-30OOMFF._dosvc._tcp.local",
+          "service_port": 7680
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:55.874020+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.129011+00:00",
+          "seen_count": 3,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.36",
+          "mac_address": "E4:FD:45:BB:18:45",
+          "service_type": "_dosvc._tcp.local",
+          "service_name": "DESKTOP-30OOMFF._dosvc._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:55.873110+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.132414+00:00",
+          "seen_count": 5,
+          "observation_kind": "response",
+          "ip_address": "fe80::7628:2487:bd0e:a9b9",
+          "mac_address": "E4:FD:45:BB:2F:01",
+          "hostname": "desktop-5J45QUP.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:55.873087+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.132397+00:00",
+          "seen_count": 5,
+          "observation_kind": "response",
+          "ip_address": "172.16.1.17",
+          "mac_address": "E4:FD:45:BB:2F:01",
+          "hostname": "desktop-5J45QUP.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:55.873029+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.133400+00:00",
+          "seen_count": 3,
+          "observation_kind": "response",
+          "ip_address": "fe80::7628:2487:bd0e:a9b9",
+          "mac_address": "E4:FD:45:BB:2F:01",
+          "service_name": "desktop-5J45QUP._dosvc._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "P": "256",
+              "SH00": "Ah/Ly9i3HWpVk/7t",
+              "SH01": "CDa/IO2OBHL8Z2ka",
+              "SH02": "DNNRK3k1cmo6PKdh",
+              "SH03": "F9UYqaqsxXleWlxS",
+              "SH04": "JVC/v1zs+HydytGG",
+              "SH05": "O02HOIddUqWd5mKi",
+              "SH06": "RAK2g0uCyMeN429E",
+              "SH07": "RjdzOG4u328frsfr",
+              "SH08": "S5JZRiACKWveBuBR",
+              "SH09": "TFvsk2UcwfLBewxT",
+              "SH0a": "V0iuVZEc1LSvS7LI",
+              "SH0b": "V1iowItNgItu7rBF",
+              "SH0c": "WPHI2ABHlA6b7nSD",
+              "SH0d": "aEce3susB2AvssSY",
+              "SH0e": "awxdIZeOjwkfDy6l"
+            }
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:55.872998+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.133371+00:00",
+          "seen_count": 3,
+          "observation_kind": "response",
+          "ip_address": "fe80::7628:2487:bd0e:a9b9",
+          "mac_address": "E4:FD:45:BB:2F:01",
+          "hostname": "desktop-5J45QUP.local",
+          "service_name": "desktop-5J45QUP._dosvc._tcp.local",
+          "service_port": 7680
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:55.872951+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.133333+00:00",
+          "seen_count": 3,
+          "observation_kind": "response",
+          "ip_address": "fe80::7628:2487:bd0e:a9b9",
+          "mac_address": "E4:FD:45:BB:2F:01",
+          "service_type": "_dosvc._tcp.local",
+          "service_name": "desktop-5J45QUP._dosvc._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:55.871509+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.333439+00:00",
+          "seen_count": 6,
+          "observation_kind": "response",
+          "ip_address": "fe80::3c7f:564d:a2c6:e8be",
+          "mac_address": "C0:BF:BE:A0:6D:BA",
+          "hostname": "DESKTOP-C6LGO7G.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:55.871488+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.333419+00:00",
+          "seen_count": 6,
+          "observation_kind": "response",
+          "ip_address": "172.16.1.68",
+          "mac_address": "C0:BF:BE:A0:6D:BA",
+          "hostname": "DESKTOP-C6LGO7G.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:55.871388+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.333381+00:00",
+          "seen_count": 3,
+          "observation_kind": "response",
+          "ip_address": "fe80::3c7f:564d:a2c6:e8be",
+          "mac_address": "C0:BF:BE:A0:6D:BA",
+          "service_name": "DESKTOP-C6LGO7G._dosvc._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "P": "256",
+              "SH00": "V0iuVZEc1LSvS7LI"
+            }
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:55.871268+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.333354+00:00",
+          "seen_count": 3,
+          "observation_kind": "response",
+          "ip_address": "fe80::3c7f:564d:a2c6:e8be",
+          "mac_address": "C0:BF:BE:A0:6D:BA",
+          "hostname": "DESKTOP-C6LGO7G.local",
+          "service_name": "DESKTOP-C6LGO7G._dosvc._tcp.local",
+          "service_port": 7680
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:55.871090+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.333317+00:00",
+          "seen_count": 3,
+          "observation_kind": "response",
+          "ip_address": "fe80::3c7f:564d:a2c6:e8be",
+          "mac_address": "C0:BF:BE:A0:6D:BA",
+          "service_type": "_dosvc._tcp.local",
+          "service_name": "DESKTOP-C6LGO7G._dosvc._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:55.867433+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.334325+00:00",
+          "seen_count": 3,
+          "observation_kind": "response",
+          "ip_address": "172.16.1.68",
+          "mac_address": "C0:BF:BE:A0:6D:BA",
+          "service_name": "DESKTOP-C6LGO7G._dosvc._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "P": "256",
+              "SH00": "V0iuVZEc1LSvS7LI"
+            }
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:55.867344+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.334303+00:00",
+          "seen_count": 3,
+          "observation_kind": "response",
+          "ip_address": "172.16.1.68",
+          "mac_address": "C0:BF:BE:A0:6D:BA",
+          "hostname": "DESKTOP-C6LGO7G.local",
+          "service_name": "DESKTOP-C6LGO7G._dosvc._tcp.local",
+          "service_port": 7680
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:55.867188+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.334269+00:00",
+          "seen_count": 3,
+          "observation_kind": "response",
+          "ip_address": "172.16.1.68",
+          "mac_address": "C0:BF:BE:A0:6D:BA",
+          "service_type": "_dosvc._tcp.local",
+          "service_name": "DESKTOP-C6LGO7G._dosvc._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:55.862705+00:00",
+          "first_observed_at": "2026-08-22T13:53:49.097231+00:00",
+          "seen_count": 6,
+          "observation_kind": "query",
+          "ip_address": "fe80::425e:714:175c:a48d",
+          "mac_address": "E4:FD:45:BB:33:98",
+          "hostname": "_dosvc._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:55.850172+00:00",
+          "first_observed_at": "2026-08-22T13:53:49.096377+00:00",
+          "seen_count": 6,
+          "observation_kind": "query",
+          "ip_address": "172.16.0.98",
+          "mac_address": "E4:FD:45:BB:33:98",
+          "hostname": "_dosvc._tcp.local"
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:53:52.579376+00:00",
+          "first_observed_at": "2026-08-22T13:53:52.579376+00:00",
+          "seen_count": 1,
+          "observation_kind": "advertisement",
+          "ip_address": "172.16.0.36",
+          "mac_address": "E4:FD:45:BB:18:45",
+          "device_type": "ut:client:service:pairing",
+          "server": "Windows/10.0.26200 UPnP/1.1 uTorrent(client)(native)/360",
+          "location": "http://172.16.0.36:53503",
+          "raw_fields": {
+            "usn": "uuid:230830a5-7fa0-f011-96fa-e4fd45bb1849",
+            "host": "239.255.255.250:1900"
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:52.392660+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.132350+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "172.16.1.17",
+          "mac_address": "E4:FD:45:BB:2F:01",
+          "service_name": "desktop-5J45QUP._dosvc._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "P": "256",
+              "SH00": "Ah/Ly9i3HWpVk/7t",
+              "SH01": "CDa/IO2OBHL8Z2ka",
+              "SH02": "DNNRK3k1cmo6PKdh",
+              "SH03": "F9UYqaqsxXleWlxS",
+              "SH04": "JVC/v1zs+HydytGG",
+              "SH05": "O02HOIddUqWd5mKi",
+              "SH06": "RAK2g0uCyMeN429E",
+              "SH07": "RjdzOG4u328frsfr",
+              "SH08": "S5JZRiACKWveBuBR",
+              "SH09": "TFvsk2UcwfLBewxT",
+              "SH0a": "V0iuVZEc1LSvS7LI",
+              "SH0b": "V1iowItNgItu7rBF",
+              "SH0c": "WPHI2ABHlA6b7nSD",
+              "SH0d": "aEce3susB2AvssSY",
+              "SH0e": "awxdIZeOjwkfDy6l"
+            }
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:52.392639+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.132327+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "172.16.1.17",
+          "mac_address": "E4:FD:45:BB:2F:01",
+          "hostname": "desktop-5J45QUP.local",
+          "service_name": "desktop-5J45QUP._dosvc._tcp.local",
+          "service_port": 7680
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:52.392605+00:00",
+          "first_observed_at": "2026-08-22T13:53:50.132294+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "172.16.1.17",
+          "mac_address": "E4:FD:45:BB:2F:01",
+          "service_type": "_dosvc._tcp.local",
+          "service_name": "desktop-5J45QUP._dosvc._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:52.173543+00:00",
+          "first_observed_at": "2026-08-22T13:52:29.235462+00:00",
+          "seen_count": 15,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.100",
+          "mac_address": "A4:9B:4F:C1:6A:CB",
+          "service_type": "D.F.6.E.B.6.3.7.6.8.1.5.B.E.8.5.0.0.0.0.0.0.0.0.0.0.0.0.0.8.E.F.ip6.arpa",
+          "service_name": "Android-3.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:52.173379+00:00",
+          "first_observed_at": "2026-08-22T13:52:29.235305+00:00",
+          "seen_count": 15,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.100",
+          "mac_address": "A4:9B:4F:C1:6A:CB",
+          "service_type": "100.0.16.172.in-addr.arpa",
+          "service_name": "Android-3.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:43.363914+00:00",
+          "first_observed_at": "2026-08-22T13:52:39.482404+00:00",
+          "seen_count": 4,
+          "observation_kind": "response",
+          "ip_address": "fe80::4ecc:4426:a8b3:1da8",
+          "mac_address": "60:AB:67:B8:FC:9C",
+          "hostname": "Android-4.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:43.363891+00:00",
+          "first_observed_at": "2026-08-22T13:52:39.482377+00:00",
+          "seen_count": 4,
+          "observation_kind": "response",
+          "ip_address": "172.16.1.232",
+          "mac_address": "60:AB:67:B8:FC:9C",
+          "hostname": "Android-4.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:43.363866+00:00",
+          "first_observed_at": "2026-08-22T13:52:39.485238+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "fe80::4ecc:4426:a8b3:1da8",
+          "mac_address": "60:AB:67:B8:FC:9C",
+          "service_type": "8.A.D.1.3.B.8.A.6.2.4.4.C.C.E.4.0.0.0.0.0.0.0.0.0.0.0.0.0.8.E.F.ip6.arpa",
+          "service_name": "Android-4.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:43.363841+00:00",
+          "first_observed_at": "2026-08-22T13:52:39.485211+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "fe80::4ecc:4426:a8b3:1da8",
+          "mac_address": "60:AB:67:B8:FC:9C",
+          "service_type": "232.1.16.172.in-addr.arpa",
+          "service_name": "Android-4.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:43.363815+00:00",
+          "first_observed_at": "2026-08-22T13:52:39.485182+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "fe80::4ecc:4426:a8b3:1da8",
+          "mac_address": "60:AB:67:B8:FC:9C",
+          "hostname": "Android-4.local",
+          "service_name": "SwcPageMapping._nsdswc._tcp.local",
+          "service_port": 62132
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:43.363788+00:00",
+          "first_observed_at": "2026-08-22T13:52:39.485152+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "fe80::4ecc:4426:a8b3:1da8",
+          "mac_address": "60:AB:67:B8:FC:9C",
+          "service_type": "_nsdswc._tcp.local",
+          "service_name": "SwcPageMapping._nsdswc._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:43.363752+00:00",
+          "first_observed_at": "2026-08-22T13:52:39.485115+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "fe80::4ecc:4426:a8b3:1da8",
+          "mac_address": "60:AB:67:B8:FC:9C",
+          "service_type": "_services._dns-sd._udp.local",
+          "service_name": "_nsdswc._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:43.363678+00:00",
+          "first_observed_at": "2026-08-22T13:52:39.485043+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "fe80::4ecc:4426:a8b3:1da8",
+          "mac_address": "60:AB:67:B8:FC:9C",
+          "service_name": "SwcPageMapping._nsdswc._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "swc": "e5Gkaj5zhA"
+            }
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:43.362021+00:00",
+          "first_observed_at": "2026-08-22T13:52:39.482349+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "172.16.1.232",
+          "mac_address": "60:AB:67:B8:FC:9C",
+          "service_type": "8.A.D.1.3.B.8.A.6.2.4.4.C.C.E.4.0.0.0.0.0.0.0.0.0.0.0.0.0.8.E.F.ip6.arpa",
+          "service_name": "Android-4.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:43.362007+00:00",
+          "first_observed_at": "2026-08-22T13:52:39.482316+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "172.16.1.232",
+          "mac_address": "60:AB:67:B8:FC:9C",
+          "service_type": "232.1.16.172.in-addr.arpa",
+          "service_name": "Android-4.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:43.361991+00:00",
+          "first_observed_at": "2026-08-22T13:52:39.482286+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "172.16.1.232",
+          "mac_address": "60:AB:67:B8:FC:9C",
+          "hostname": "Android-4.local",
+          "service_name": "SwcPageMapping._nsdswc._tcp.local",
+          "service_port": 62132
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:43.361974+00:00",
+          "first_observed_at": "2026-08-22T13:52:39.482253+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "172.16.1.232",
+          "mac_address": "60:AB:67:B8:FC:9C",
+          "service_type": "_nsdswc._tcp.local",
+          "service_name": "SwcPageMapping._nsdswc._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:43.361950+00:00",
+          "first_observed_at": "2026-08-22T13:52:39.482203+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "172.16.1.232",
+          "mac_address": "60:AB:67:B8:FC:9C",
+          "service_type": "_services._dns-sd._udp.local",
+          "service_name": "_nsdswc._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:43.361877+00:00",
+          "first_observed_at": "2026-08-22T13:52:39.482069+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "172.16.1.232",
+          "mac_address": "60:AB:67:B8:FC:9C",
+          "service_name": "SwcPageMapping._nsdswc._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "swc": "e5Gkaj5zhA"
+            }
+          }
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:53:35.166130+00:00",
+          "first_observed_at": "2026-08-22T13:53:32.308981+00:00",
+          "seen_count": 4,
+          "observation_kind": "search",
+          "ip_address": "172.16.1.238",
+          "mac_address": "B0:3C:DC:95:39:36",
+          "device_type": "urn:dial-multiscreen-org:service:dial:1",
+          "raw_fields": {
+            "host": "239.255.255.250:1900",
+            "man": "\"ssdp:discover\""
+          }
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:53:33.537387+00:00",
+          "first_observed_at": "2026-08-22T13:52:34.556110+00:00",
+          "seen_count": 5,
+          "observation_kind": "search",
+          "ip_address": "172.16.0.36",
+          "mac_address": "E4:FD:45:BB:18:45",
+          "device_type": "upnp:rootdevice",
+          "raw_fields": {
+            "host": "239.255.255.250:1900",
+            "man": "\"ssdp:discover\""
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:32.716884+00:00",
+          "first_observed_at": "2026-08-22T13:53:32.716884+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "fe80::c69:4eff:fe2e:ad7d",
+          "mac_address": "0E:69:4E:2E:AD:7D",
+          "service_name": "SwcPageMapping (2)._nsdswc._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "swc": "6F8PA5n4ZG"
+            }
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:32.716856+00:00",
+          "first_observed_at": "2026-08-22T13:53:32.716856+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "fe80::c69:4eff:fe2e:ad7d",
+          "mac_address": "0E:69:4E:2E:AD:7D",
+          "hostname": "Android_ID0ABQHJ.local",
+          "service_name": "SwcPageMapping (2)._nsdswc._tcp.local",
+          "service_port": 62132
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:32.716819+00:00",
+          "first_observed_at": "2026-08-22T13:53:32.715614+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "fe80::c69:4eff:fe2e:ad7d",
+          "mac_address": "0E:69:4E:2E:AD:7D",
+          "hostname": "Android_ID0ABQHJ.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:32.716772+00:00",
+          "first_observed_at": "2026-08-22T13:53:32.715595+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "172.16.2.233",
+          "mac_address": "0E:69:4E:2E:AD:7D",
+          "hostname": "Android_ID0ABQHJ.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:32.716723+00:00",
+          "first_observed_at": "2026-08-22T13:53:32.716723+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "fe80::c69:4eff:fe2e:ad7d",
+          "mac_address": "0E:69:4E:2E:AD:7D",
+          "service_type": "_nsdswc._tcp.local",
+          "service_name": "SwcPageMapping (2)._nsdswc._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:32.715674+00:00",
+          "first_observed_at": "2026-08-22T13:53:32.715674+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "172.16.2.233",
+          "mac_address": "0E:69:4E:2E:AD:7D",
+          "service_name": "SwcPageMapping (2)._nsdswc._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "swc": "6F8PA5n4ZG"
+            }
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:32.715657+00:00",
+          "first_observed_at": "2026-08-22T13:53:32.715657+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "172.16.2.233",
+          "mac_address": "0E:69:4E:2E:AD:7D",
+          "hostname": "Android_ID0ABQHJ.local",
+          "service_name": "SwcPageMapping (2)._nsdswc._tcp.local",
+          "service_port": 62132
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:32.715522+00:00",
+          "first_observed_at": "2026-08-22T13:53:32.715522+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "172.16.2.233",
+          "mac_address": "0E:69:4E:2E:AD:7D",
+          "service_type": "_nsdswc._tcp.local",
+          "service_name": "SwcPageMapping (2)._nsdswc._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:32.509493+00:00",
+          "first_observed_at": "2026-08-22T13:53:32.509493+00:00",
+          "seen_count": 1,
+          "observation_kind": "query",
+          "ip_address": "fe80::4ecc:4426:a8b3:1da8",
+          "mac_address": "60:AB:67:B8:FC:9C",
+          "hostname": "_nsdswc._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:32.505125+00:00",
+          "first_observed_at": "2026-08-22T13:53:32.505125+00:00",
+          "seen_count": 1,
+          "observation_kind": "query",
+          "ip_address": "172.16.1.232",
+          "mac_address": "60:AB:67:B8:FC:9C",
+          "hostname": "_nsdswc._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:26.791680+00:00",
+          "first_observed_at": "2026-08-22T13:52:22.891294+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "fe80::d4da:dbff:fea8:8776",
+          "mac_address": "D6:DA:DB:A8:87:76",
+          "service_type": "_services._dns-sd._udp.local",
+          "service_name": "_FC9F5ED42C8A._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:26.791638+00:00",
+          "first_observed_at": "2026-08-22T13:52:22.891253+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "fe80::d4da:dbff:fea8:8776",
+          "mac_address": "D6:DA:DB:A8:87:76",
+          "service_name": "IzdLSDP8n14AAA._FC9F5ED42C8A._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "f": "5540",
+              "n": "MkHVKx72Z63spLDNox-imkw",
+              "IPv4": "172.16.0.142"
+            }
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:26.791611+00:00",
+          "first_observed_at": "2026-08-22T13:52:22.891228+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "fe80::d4da:dbff:fea8:8776",
+          "mac_address": "D6:DA:DB:A8:87:76",
+          "hostname": "Android_RMBKKB9B.local",
+          "service_name": "IzdLSDP8n14AAA._FC9F5ED42C8A._tcp.local",
+          "service_port": 53601
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:26.791561+00:00",
+          "first_observed_at": "2026-08-22T13:52:22.889383+00:00",
+          "seen_count": 4,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.142",
+          "mac_address": "D6:DA:DB:A8:87:76",
+          "hostname": "Android_RMBKKB9B.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:26.791533+00:00",
+          "first_observed_at": "2026-08-22T13:52:22.891153+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "fe80::d4da:dbff:fea8:8776",
+          "mac_address": "D6:DA:DB:A8:87:76",
+          "service_type": "142.0.16.172.in-addr.arpa",
+          "service_name": "Android_RMBKKB9B.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:26.791500+00:00",
+          "first_observed_at": "2026-08-22T13:52:22.889313+00:00",
+          "seen_count": 4,
+          "observation_kind": "response",
+          "ip_address": "fe80::d4da:dbff:fea8:8776",
+          "mac_address": "D6:DA:DB:A8:87:76",
+          "hostname": "Android_RMBKKB9B.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:26.791446+00:00",
+          "first_observed_at": "2026-08-22T13:52:22.891067+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "fe80::d4da:dbff:fea8:8776",
+          "mac_address": "D6:DA:DB:A8:87:76",
+          "service_type": "6.7.7.8.8.A.E.F.F.F.B.D.A.D.4.D.0.0.0.0.0.0.0.0.0.0.0.0.0.8.E.F.ip6.arpa",
+          "service_name": "Android_RMBKKB9B.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:26.786874+00:00",
+          "first_observed_at": "2026-08-22T13:52:22.889456+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.142",
+          "mac_address": "D6:DA:DB:A8:87:76",
+          "service_type": "_services._dns-sd._udp.local",
+          "service_name": "_FC9F5ED42C8A._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:26.786799+00:00",
+          "first_observed_at": "2026-08-22T13:52:22.889423+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.142",
+          "mac_address": "D6:DA:DB:A8:87:76",
+          "service_name": "IzdLSDP8n14AAA._FC9F5ED42C8A._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "f": "5540",
+              "n": "MkHVKx72Z63spLDNox-imkw",
+              "IPv4": "172.16.0.142"
+            }
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:26.786766+00:00",
+          "first_observed_at": "2026-08-22T13:52:22.889410+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.142",
+          "mac_address": "D6:DA:DB:A8:87:76",
+          "hostname": "Android_RMBKKB9B.local",
+          "service_name": "IzdLSDP8n14AAA._FC9F5ED42C8A._tcp.local",
+          "service_port": 53601
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:26.786637+00:00",
+          "first_observed_at": "2026-08-22T13:52:22.889364+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.142",
+          "mac_address": "D6:DA:DB:A8:87:76",
+          "service_type": "142.0.16.172.in-addr.arpa",
+          "service_name": "Android_RMBKKB9B.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:26.786460+00:00",
+          "first_observed_at": "2026-08-22T13:52:22.889267+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.142",
+          "mac_address": "D6:DA:DB:A8:87:76",
+          "service_type": "6.7.7.8.8.A.E.F.F.F.B.D.A.D.4.D.0.0.0.0.0.0.0.0.0.0.0.0.0.8.E.F.ip6.arpa",
+          "service_name": "Android_RMBKKB9B.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:26.771322+00:00",
+          "first_observed_at": "2026-08-22T13:52:16.734270+00:00",
+          "seen_count": 11,
+          "observation_kind": "query",
+          "ip_address": "fe80::834:5b49:773a:b960",
+          "mac_address": "C6:E9:C8:43:E1:CF",
+          "hostname": "_rdlink._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:26.770853+00:00",
+          "first_observed_at": "2026-08-22T13:52:16.734014+00:00",
+          "seen_count": 12,
+          "observation_kind": "query",
+          "ip_address": "fe80::834:5b49:773a:b960",
+          "mac_address": "C6:E9:C8:43:E1:CF",
+          "hostname": "_companion-link._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:26.571458+00:00",
+          "first_observed_at": "2026-08-22T13:52:23.707926+00:00",
+          "seen_count": 9,
+          "observation_kind": "query",
+          "ip_address": "172.16.2.173",
+          "mac_address": "C6:E9:C8:43:E1:CF",
+          "hostname": "_rdlink._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:26.571279+00:00",
+          "first_observed_at": "2026-08-22T13:52:23.707752+00:00",
+          "seen_count": 10,
+          "observation_kind": "query",
+          "ip_address": "172.16.2.173",
+          "mac_address": "C6:E9:C8:43:E1:CF",
+          "hostname": "_companion-link._tcp.local"
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:53:24.517171+00:00",
+          "first_observed_at": "2026-08-22T13:53:21.658724+00:00",
+          "seen_count": 3,
+          "observation_kind": "search",
+          "ip_address": "172.16.1.12",
+          "mac_address": "38:D5:7A:36:77:91",
+          "device_type": "urn:dial-multiscreen-org:service:dial:1",
+          "raw_fields": {
+            "host": "239.255.255.250:1900",
+            "man": "\"ssdp:discover\""
+          }
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:53:17.145221+00:00",
+          "first_observed_at": "2026-08-22T13:53:11.206301+00:00",
+          "seen_count": 2,
+          "observation_kind": "search",
+          "ip_address": "172.16.2.247",
+          "mac_address": "E4:FD:45:BB:2E:F7",
+          "device_type": "urn:schemas-upnp-org:device:InternetGatewayDevice:1",
+          "raw_fields": {
+            "host": "239.255.255.250:1900",
+            "man": "\"ssdp:discover\""
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:06.502636+00:00",
+          "first_observed_at": "2026-08-22T13:53:04.667028+00:00",
+          "seen_count": 3,
+          "observation_kind": "query",
+          "ip_address": "fe80::430:86ff:fe7f:9bd",
+          "mac_address": "06:30:86:7F:09:BD",
+          "hostname": "_meshcop._udp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:06.501304+00:00",
+          "first_observed_at": "2026-08-22T13:53:04.668218+00:00",
+          "seen_count": 3,
+          "observation_kind": "query",
+          "ip_address": "172.16.0.193",
+          "mac_address": "06:30:86:7F:09:BD",
+          "hostname": "_meshcop._udp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:06.092649+00:00",
+          "first_observed_at": "2026-08-22T13:53:06.092649+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "fe80::a9a7:f34a:ea7e:589a",
+          "mac_address": "E4:FD:45:BB:2E:F7",
+          "service_name": "DESKTOP-GCO8PU9._dosvc._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "P": "256",
+              "SH00": "10qqHrpyRxpg2I0Q"
+            }
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:06.092533+00:00",
+          "first_observed_at": "2026-08-22T13:53:06.092533+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "fe80::a9a7:f34a:ea7e:589a",
+          "mac_address": "E4:FD:45:BB:2E:F7",
+          "hostname": "DESKTOP-GCO8PU9.local",
+          "service_name": "DESKTOP-GCO8PU9._dosvc._tcp.local",
+          "service_port": 7680
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:06.092331+00:00",
+          "first_observed_at": "2026-08-22T13:53:06.092331+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "fe80::a9a7:f34a:ea7e:589a",
+          "mac_address": "E4:FD:45:BB:2E:F7",
+          "service_type": "_dosvc._tcp.local",
+          "service_name": "DESKTOP-GCO8PU9._dosvc._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:06.089580+00:00",
+          "first_observed_at": "2026-08-22T13:53:06.089580+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "172.16.2.247",
+          "mac_address": "E4:FD:45:BB:2E:F7",
+          "service_name": "DESKTOP-GCO8PU9._dosvc._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "P": "256",
+              "SH00": "10qqHrpyRxpg2I0Q"
+            }
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:06.089498+00:00",
+          "first_observed_at": "2026-08-22T13:53:06.089498+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "172.16.2.247",
+          "mac_address": "E4:FD:45:BB:2E:F7",
+          "hostname": "DESKTOP-GCO8PU9.local",
+          "service_name": "DESKTOP-GCO8PU9._dosvc._tcp.local",
+          "service_port": 7680
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:06.089309+00:00",
+          "first_observed_at": "2026-08-22T13:53:06.089309+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "172.16.2.247",
+          "mac_address": "E4:FD:45:BB:2E:F7",
+          "service_type": "_dosvc._tcp.local",
+          "service_name": "DESKTOP-GCO8PU9._dosvc._tcp.local"
+        },
+        {
+          "protocol": "nbns",
+          "observed_at": "2026-08-22T13:53:03.630238+00:00",
+          "first_observed_at": "2026-08-22T13:53:02.004620+00:00",
+          "seen_count": 3,
+          "observation_kind": "query",
+          "ip_address": "172.16.2.247",
+          "mac_address": "E4:FD:45:BB:2E:F7",
+          "hostname": "WPAD"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:02.411862+00:00",
+          "first_observed_at": "2026-08-22T13:53:01.586000+00:00",
+          "seen_count": 12,
+          "observation_kind": "query",
+          "ip_address": "fe80::a9a7:f34a:ea7e:589a",
+          "mac_address": "E4:FD:45:BB:2E:F7",
+          "hostname": "wpad.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:02.411416+00:00",
+          "first_observed_at": "2026-08-22T13:53:01.585673+00:00",
+          "seen_count": 12,
+          "observation_kind": "query",
+          "ip_address": "172.16.2.247",
+          "mac_address": "E4:FD:45:BB:2E:F7",
+          "hostname": "wpad.local"
+        },
+        {
+          "protocol": "llmnr",
+          "observed_at": "2026-08-22T13:53:02.410248+00:00",
+          "first_observed_at": "2026-08-22T13:53:02.005158+00:00",
+          "seen_count": 4,
+          "observation_kind": "query",
+          "ip_address": "172.16.2.247",
+          "mac_address": "E4:FD:45:BB:2E:F7",
+          "hostname": "wpad"
+        },
+        {
+          "protocol": "llmnr",
+          "observed_at": "2026-08-22T13:53:02.409454+00:00",
+          "first_observed_at": "2026-08-22T13:53:02.005422+00:00",
+          "seen_count": 4,
+          "observation_kind": "query",
+          "ip_address": "fe80::a9a7:f34a:ea7e:589a",
+          "mac_address": "E4:FD:45:BB:2E:F7",
+          "hostname": "wpad"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:02.004293+00:00",
+          "first_observed_at": "2026-08-22T13:52:17.977879+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "fe80::491:2a41:1c71:fec4",
+          "mac_address": "86:55:0D:36:83:0F",
+          "hostname": "moncecs-MacBook-Air.local",
+          "service_name": "moncec’s MacBook Air._companion-link._tcp.local",
+          "service_port": 49388
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:02.004272+00:00",
+          "first_observed_at": "2026-08-22T13:52:17.975280+00:00",
+          "seen_count": 4,
+          "observation_kind": "response",
+          "ip_address": "172.16.3.79",
+          "mac_address": "86:55:0D:36:83:0F",
+          "hostname": "moncecs-MacBook-Air.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:02.004245+00:00",
+          "first_observed_at": "2026-08-22T13:52:17.975106+00:00",
+          "seen_count": 4,
+          "observation_kind": "response",
+          "ip_address": "fe80::491:2a41:1c71:fec4",
+          "mac_address": "86:55:0D:36:83:0F",
+          "hostname": "moncecs-MacBook-Air.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:02.004151+00:00",
+          "first_observed_at": "2026-08-22T13:52:17.977736+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "fe80::491:2a41:1c71:fec4",
+          "mac_address": "86:55:0D:36:83:0F",
+          "service_name": "moncec’s MacBook Air._device-info._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "model": "Mac14,2",
+              "osxvers": "24",
+              "icolor": "7"
+            }
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:02.004103+00:00",
+          "first_observed_at": "2026-08-22T13:52:17.977688+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "fe80::491:2a41:1c71:fec4",
+          "mac_address": "86:55:0D:36:83:0F",
+          "service_type": "_companion-link._tcp.local",
+          "service_name": "moncec’s MacBook Air._companion-link._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:02.002834+00:00",
+          "first_observed_at": "2026-08-22T13:52:17.975346+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "172.16.3.79",
+          "mac_address": "86:55:0D:36:83:0F",
+          "hostname": "moncecs-MacBook-Air.local",
+          "service_name": "moncec’s MacBook Air._companion-link._tcp.local",
+          "service_port": 49388
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:02.002698+00:00",
+          "first_observed_at": "2026-08-22T13:52:17.974817+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "172.16.3.79",
+          "mac_address": "86:55:0D:36:83:0F",
+          "service_name": "moncec’s MacBook Air._device-info._tcp.local",
+          "raw_fields": {
+            "txt": {
+              "model": "Mac14,2",
+              "osxvers": "24",
+              "icolor": "7"
+            }
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:02.002645+00:00",
+          "first_observed_at": "2026-08-22T13:52:17.974673+00:00",
+          "seen_count": 2,
+          "observation_kind": "response",
+          "ip_address": "172.16.3.79",
+          "mac_address": "86:55:0D:36:83:0F",
+          "service_type": "_companion-link._tcp.local",
+          "service_name": "moncec’s MacBook Air._companion-link._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:00.151333+00:00",
+          "first_observed_at": "2026-08-22T13:52:59.126067+00:00",
+          "seen_count": 2,
+          "observation_kind": "query",
+          "ip_address": "fe80::10d2:e2d3:734f:e6e4",
+          "mac_address": "9A:AF:AF:A8:55:C5",
+          "hostname": "_rdlink._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:00.151121+00:00",
+          "first_observed_at": "2026-08-22T13:52:59.125869+00:00",
+          "seen_count": 2,
+          "observation_kind": "query",
+          "ip_address": "fe80::10d2:e2d3:734f:e6e4",
+          "mac_address": "9A:AF:AF:A8:55:C5",
+          "hostname": "_companion-link._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:00.149080+00:00",
+          "first_observed_at": "2026-08-22T13:52:59.124555+00:00",
+          "seen_count": 2,
+          "observation_kind": "query",
+          "ip_address": "172.16.0.163",
+          "mac_address": "9A:AF:AF:A8:55:C5",
+          "hostname": "_rdlink._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:53:00.148893+00:00",
+          "first_observed_at": "2026-08-22T13:52:59.124375+00:00",
+          "seen_count": 2,
+          "observation_kind": "query",
+          "ip_address": "172.16.0.163",
+          "mac_address": "9A:AF:AF:A8:55:C5",
+          "hostname": "_companion-link._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:55.861680+00:00",
+          "first_observed_at": "2026-08-22T13:52:15.920935+00:00",
+          "seen_count": 6,
+          "observation_kind": "query",
+          "ip_address": "fe80::1440:e854:85e0:6657",
+          "mac_address": "02:DA:AC:CF:ED:B3",
+          "hostname": "lb._dns-sd._udp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:55.861532+00:00",
+          "first_observed_at": "2026-08-22T13:52:15.920857+00:00",
+          "seen_count": 6,
+          "observation_kind": "query",
+          "ip_address": "fe80::1440:e854:85e0:6657",
+          "mac_address": "02:DA:AC:CF:ED:B3",
+          "hostname": "_rdlink._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:55.861314+00:00",
+          "first_observed_at": "2026-08-22T13:52:15.920725+00:00",
+          "seen_count": 9,
+          "observation_kind": "query",
+          "ip_address": "fe80::1440:e854:85e0:6657",
+          "mac_address": "02:DA:AC:CF:ED:B3",
+          "hostname": "_companion-link._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:55.859177+00:00",
+          "first_observed_at": "2026-08-22T13:52:15.919717+00:00",
+          "seen_count": 6,
+          "observation_kind": "query",
+          "ip_address": "172.16.1.13",
+          "mac_address": "02:DA:AC:CF:ED:B3",
+          "hostname": "lb._dns-sd._udp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:55.859095+00:00",
+          "first_observed_at": "2026-08-22T13:52:15.919640+00:00",
+          "seen_count": 6,
+          "observation_kind": "query",
+          "ip_address": "172.16.1.13",
+          "mac_address": "02:DA:AC:CF:ED:B3",
+          "hostname": "_rdlink._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:55.858914+00:00",
+          "first_observed_at": "2026-08-22T13:52:15.919439+00:00",
+          "seen_count": 9,
+          "observation_kind": "query",
+          "ip_address": "172.16.1.13",
+          "mac_address": "02:DA:AC:CF:ED:B3",
+          "hostname": "_companion-link._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:55.243129+00:00",
+          "first_observed_at": "2026-08-22T13:52:53.192624+00:00",
+          "seen_count": 5,
+          "observation_kind": "query",
+          "ip_address": "172.16.0.193",
+          "mac_address": "06:30:86:7F:09:BD",
+          "hostname": "_233637DE._sub._googlecast._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:55.242644+00:00",
+          "first_observed_at": "2026-08-22T13:52:53.195980+00:00",
+          "seen_count": 5,
+          "observation_kind": "query",
+          "ip_address": "fe80::430:86ff:fe7f:9bd",
+          "mac_address": "06:30:86:7F:09:BD",
+          "hostname": "_233637DE._sub._googlecast._tcp.local"
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:52:52.583306+00:00",
+          "first_observed_at": "2026-08-22T13:52:52.583306+00:00",
+          "seen_count": 1,
+          "observation_kind": "search",
+          "ip_address": "172.16.0.193",
+          "mac_address": "06:30:86:7F:09:BD",
+          "device_type": "urn:dial-multiscreen-org:service:dial:1",
+          "raw_fields": {
+            "host": "239.255.255.250:1900",
+            "man": "\"ssdp:discover\""
+          }
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:52:48.079663+00:00",
+          "first_observed_at": "2026-08-22T13:52:42.131893+00:00",
+          "seen_count": 3,
+          "observation_kind": "advertisement",
+          "ip_address": "fe80::4c5d:3a80:9fed:6f7b",
+          "mac_address": "E4:FD:45:BA:8B:2D",
+          "device_type": "urn:schemas-upnp-org:device:MediaRenderer:1",
+          "server": "Microsoft-Windows/10.0 UPnP/1.0 UPnP-Device-Host/1.0",
+          "location": "http://[fe80::4c5d:3a80:9fed:6f7b]:2869/upnphost/udhisapi.dll?content=uuid:c79154f1-e6d5-46ad-ab31-4777d5b24cac",
+          "raw_fields": {
+            "usn": "uuid:c79154f1-e6d5-46ad-ab31-4777d5b24cac::urn:schemas-upnp-org:device:MediaRenderer:1",
+            "cache_control": "max-age=1800",
+            "host": "[FF02::C]:1900"
+          }
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:52:48.078384+00:00",
+          "first_observed_at": "2026-08-22T13:52:42.130546+00:00",
+          "seen_count": 3,
+          "observation_kind": "advertisement",
+          "ip_address": "172.16.0.111",
+          "mac_address": "E4:FD:45:BA:8B:2D",
+          "device_type": "urn:schemas-upnp-org:device:MediaRenderer:1",
+          "server": "Microsoft-Windows/10.0 UPnP/1.0 UPnP-Device-Host/1.0",
+          "location": "http://172.16.0.111:2869/upnphost/udhisapi.dll?content=uuid:c79154f1-e6d5-46ad-ab31-4777d5b24cac",
+          "raw_fields": {
+            "usn": "uuid:c79154f1-e6d5-46ad-ab31-4777d5b24cac::urn:schemas-upnp-org:device:MediaRenderer:1",
+            "cache_control": "max-age=1800",
+            "host": "239.255.255.250:1900"
+          }
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:52:46.838924+00:00",
+          "first_observed_at": "2026-08-22T13:52:40.709684+00:00",
+          "seen_count": 3,
+          "observation_kind": "advertisement",
+          "ip_address": "fe80::4c5d:3a80:9fed:6f7b",
+          "mac_address": "E4:FD:45:BA:8B:2D",
+          "device_type": "uuid:c79154f1-e6d5-46ad-ab31-4777d5b24cac",
+          "server": "Microsoft-Windows/10.0 UPnP/1.0 UPnP-Device-Host/1.0",
+          "location": "http://[fe80::4c5d:3a80:9fed:6f7b]:2869/upnphost/udhisapi.dll?content=uuid:c79154f1-e6d5-46ad-ab31-4777d5b24cac",
+          "raw_fields": {
+            "usn": "uuid:c79154f1-e6d5-46ad-ab31-4777d5b24cac",
+            "cache_control": "max-age=1800",
+            "host": "[FF02::C]:1900"
+          }
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:52:46.837635+00:00",
+          "first_observed_at": "2026-08-22T13:52:40.709426+00:00",
+          "seen_count": 3,
+          "observation_kind": "advertisement",
+          "ip_address": "172.16.0.111",
+          "mac_address": "E4:FD:45:BA:8B:2D",
+          "device_type": "uuid:c79154f1-e6d5-46ad-ab31-4777d5b24cac",
+          "server": "Microsoft-Windows/10.0 UPnP/1.0 UPnP-Device-Host/1.0",
+          "location": "http://172.16.0.111:2869/upnphost/udhisapi.dll?content=uuid:c79154f1-e6d5-46ad-ab31-4777d5b24cac",
+          "raw_fields": {
+            "usn": "uuid:c79154f1-e6d5-46ad-ab31-4777d5b24cac",
+            "cache_control": "max-age=1800",
+            "host": "239.255.255.250:1900"
+          }
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:52:46.229426+00:00",
+          "first_observed_at": "2026-08-22T13:52:40.297331+00:00",
+          "seen_count": 3,
+          "observation_kind": "advertisement",
+          "ip_address": "fe80::4c5d:3a80:9fed:6f7b",
+          "mac_address": "E4:FD:45:BA:8B:2D",
+          "device_type": "upnp:rootdevice",
+          "server": "Microsoft-Windows/10.0 UPnP/1.0 UPnP-Device-Host/1.0",
+          "location": "http://[fe80::4c5d:3a80:9fed:6f7b]:2869/upnphost/udhisapi.dll?content=uuid:c79154f1-e6d5-46ad-ab31-4777d5b24cac",
+          "raw_fields": {
+            "usn": "uuid:c79154f1-e6d5-46ad-ab31-4777d5b24cac::upnp:rootdevice",
+            "cache_control": "max-age=1800",
+            "host": "[FF02::C]:1900"
+          }
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:52:46.228323+00:00",
+          "first_observed_at": "2026-08-22T13:52:40.297075+00:00",
+          "seen_count": 3,
+          "observation_kind": "advertisement",
+          "ip_address": "172.16.0.111",
+          "mac_address": "E4:FD:45:BA:8B:2D",
+          "device_type": "upnp:rootdevice",
+          "server": "Microsoft-Windows/10.0 UPnP/1.0 UPnP-Device-Host/1.0",
+          "location": "http://172.16.0.111:2869/upnphost/udhisapi.dll?content=uuid:c79154f1-e6d5-46ad-ab31-4777d5b24cac",
+          "raw_fields": {
+            "usn": "uuid:c79154f1-e6d5-46ad-ab31-4777d5b24cac::upnp:rootdevice",
+            "cache_control": "max-age=1800",
+            "host": "239.255.255.250:1900"
+          }
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:52:46.028683+00:00",
+          "first_observed_at": "2026-08-22T13:52:40.090724+00:00",
+          "seen_count": 3,
+          "observation_kind": "advertisement",
+          "ip_address": "fe80::4c5d:3a80:9fed:6f7b",
+          "mac_address": "E4:FD:45:BA:8B:2D",
+          "device_type": "urn:schemas-upnp-org:service:AVTransport:1",
+          "server": "Microsoft-Windows/10.0 UPnP/1.0 UPnP-Device-Host/1.0",
+          "location": "http://[fe80::4c5d:3a80:9fed:6f7b]:2869/upnphost/udhisapi.dll?content=uuid:c79154f1-e6d5-46ad-ab31-4777d5b24cac",
+          "raw_fields": {
+            "usn": "uuid:c79154f1-e6d5-46ad-ab31-4777d5b24cac::urn:schemas-upnp-org:service:AVTransport:1",
+            "cache_control": "max-age=1800",
+            "host": "[FF02::C]:1900"
+          }
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:52:46.018035+00:00",
+          "first_observed_at": "2026-08-22T13:52:40.079847+00:00",
+          "seen_count": 3,
+          "observation_kind": "advertisement",
+          "ip_address": "172.16.0.111",
+          "mac_address": "E4:FD:45:BA:8B:2D",
+          "device_type": "urn:schemas-upnp-org:service:AVTransport:1",
+          "server": "Microsoft-Windows/10.0 UPnP/1.0 UPnP-Device-Host/1.0",
+          "location": "http://172.16.0.111:2869/upnphost/udhisapi.dll?content=uuid:c79154f1-e6d5-46ad-ab31-4777d5b24cac",
+          "raw_fields": {
+            "usn": "uuid:c79154f1-e6d5-46ad-ab31-4777d5b24cac::urn:schemas-upnp-org:service:AVTransport:1",
+            "cache_control": "max-age=1800",
+            "host": "239.255.255.250:1900"
+          }
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:52:45.816053+00:00",
+          "first_observed_at": "2026-08-22T13:52:39.882368+00:00",
+          "seen_count": 3,
+          "observation_kind": "advertisement",
+          "ip_address": "fe80::4c5d:3a80:9fed:6f7b",
+          "mac_address": "E4:FD:45:BA:8B:2D",
+          "device_type": "urn:schemas-upnp-org:service:RenderingControl:1",
+          "server": "Microsoft-Windows/10.0 UPnP/1.0 UPnP-Device-Host/1.0",
+          "location": "http://[fe80::4c5d:3a80:9fed:6f7b]:2869/upnphost/udhisapi.dll?content=uuid:c79154f1-e6d5-46ad-ab31-4777d5b24cac",
+          "raw_fields": {
+            "usn": "uuid:c79154f1-e6d5-46ad-ab31-4777d5b24cac::urn:schemas-upnp-org:service:RenderingControl:1",
+            "cache_control": "max-age=1800",
+            "host": "[FF02::C]:1900"
+          }
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:52:45.813631+00:00",
+          "first_observed_at": "2026-08-22T13:52:39.874809+00:00",
+          "seen_count": 3,
+          "observation_kind": "advertisement",
+          "ip_address": "172.16.0.111",
+          "mac_address": "E4:FD:45:BA:8B:2D",
+          "device_type": "urn:schemas-upnp-org:service:RenderingControl:1",
+          "server": "Microsoft-Windows/10.0 UPnP/1.0 UPnP-Device-Host/1.0",
+          "location": "http://172.16.0.111:2869/upnphost/udhisapi.dll?content=uuid:c79154f1-e6d5-46ad-ab31-4777d5b24cac",
+          "raw_fields": {
+            "usn": "uuid:c79154f1-e6d5-46ad-ab31-4777d5b24cac::urn:schemas-upnp-org:service:RenderingControl:1",
+            "cache_control": "max-age=1800",
+            "host": "239.255.255.250:1900"
+          }
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:52:45.612108+00:00",
+          "first_observed_at": "2026-08-22T13:52:39.672657+00:00",
+          "seen_count": 3,
+          "observation_kind": "advertisement",
+          "ip_address": "fe80::4c5d:3a80:9fed:6f7b",
+          "mac_address": "E4:FD:45:BA:8B:2D",
+          "device_type": "urn:schemas-upnp-org:service:ConnectionManager:1",
+          "server": "Microsoft-Windows/10.0 UPnP/1.0 UPnP-Device-Host/1.0",
+          "location": "http://[fe80::4c5d:3a80:9fed:6f7b]:2869/upnphost/udhisapi.dll?content=uuid:c79154f1-e6d5-46ad-ab31-4777d5b24cac",
+          "raw_fields": {
+            "usn": "uuid:c79154f1-e6d5-46ad-ab31-4777d5b24cac::urn:schemas-upnp-org:service:ConnectionManager:1",
+            "cache_control": "max-age=1800",
+            "host": "[FF02::C]:1900"
+          }
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:52:45.611828+00:00",
+          "first_observed_at": "2026-08-22T13:52:39.670167+00:00",
+          "seen_count": 3,
+          "observation_kind": "advertisement",
+          "ip_address": "172.16.0.111",
+          "mac_address": "E4:FD:45:BA:8B:2D",
+          "device_type": "urn:schemas-upnp-org:service:ConnectionManager:1",
+          "server": "Microsoft-Windows/10.0 UPnP/1.0 UPnP-Device-Host/1.0",
+          "location": "http://172.16.0.111:2869/upnphost/udhisapi.dll?content=uuid:c79154f1-e6d5-46ad-ab31-4777d5b24cac",
+          "raw_fields": {
+            "usn": "uuid:c79154f1-e6d5-46ad-ab31-4777d5b24cac::urn:schemas-upnp-org:service:ConnectionManager:1",
+            "cache_control": "max-age=1800",
+            "host": "239.255.255.250:1900"
+          }
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:52:38.034129+00:00",
+          "first_observed_at": "2026-08-22T13:52:31.906695+00:00",
+          "seen_count": 3,
+          "observation_kind": "advertisement",
+          "ip_address": "fe80::66b1:b1ea:80d3:bfe3",
+          "mac_address": "E4:FD:45:BB:39:38",
+          "device_type": "urn:schemas-upnp-org:service:ConnectionManager:1",
+          "server": "Microsoft-Windows/10.0 UPnP/1.0 UPnP-Device-Host/1.0",
+          "location": "http://[fe80::66b1:b1ea:80d3:bfe3]:2869/upnphost/udhisapi.dll?content=uuid:1de13d66-d0d9-4021-9e1f-da1f02f4fa99",
+          "raw_fields": {
+            "usn": "uuid:1de13d66-d0d9-4021-9e1f-da1f02f4fa99::urn:schemas-upnp-org:service:ConnectionManager:1",
+            "cache_control": "max-age=1800",
+            "host": "[FF02::C]:1900"
+          }
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:52:38.031369+00:00",
+          "first_observed_at": "2026-08-22T13:52:31.906970+00:00",
+          "seen_count": 3,
+          "observation_kind": "advertisement",
+          "ip_address": "172.16.0.67",
+          "mac_address": "E4:FD:45:BB:39:38",
+          "device_type": "urn:schemas-upnp-org:service:ConnectionManager:1",
+          "server": "Microsoft-Windows/10.0 UPnP/1.0 UPnP-Device-Host/1.0",
+          "location": "http://172.16.0.67:2869/upnphost/udhisapi.dll?content=uuid:1de13d66-d0d9-4021-9e1f-da1f02f4fa99",
+          "raw_fields": {
+            "usn": "uuid:1de13d66-d0d9-4021-9e1f-da1f02f4fa99::urn:schemas-upnp-org:service:ConnectionManager:1",
+            "cache_control": "max-age=1800",
+            "host": "239.255.255.250:1900"
+          }
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:52:37.838322+00:00",
+          "first_observed_at": "2026-08-22T13:52:31.904808+00:00",
+          "seen_count": 3,
+          "observation_kind": "advertisement",
+          "ip_address": "172.16.0.67",
+          "mac_address": "E4:FD:45:BB:39:38",
+          "device_type": "urn:schemas-upnp-org:service:AVTransport:1",
+          "server": "Microsoft-Windows/10.0 UPnP/1.0 UPnP-Device-Host/1.0",
+          "location": "http://172.16.0.67:2869/upnphost/udhisapi.dll?content=uuid:1de13d66-d0d9-4021-9e1f-da1f02f4fa99",
+          "raw_fields": {
+            "usn": "uuid:1de13d66-d0d9-4021-9e1f-da1f02f4fa99::urn:schemas-upnp-org:service:AVTransport:1",
+            "cache_control": "max-age=1800",
+            "host": "239.255.255.250:1900"
+          }
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:52:37.837223+00:00",
+          "first_observed_at": "2026-08-22T13:52:31.905825+00:00",
+          "seen_count": 3,
+          "observation_kind": "advertisement",
+          "ip_address": "fe80::66b1:b1ea:80d3:bfe3",
+          "mac_address": "E4:FD:45:BB:39:38",
+          "device_type": "urn:schemas-upnp-org:service:AVTransport:1",
+          "server": "Microsoft-Windows/10.0 UPnP/1.0 UPnP-Device-Host/1.0",
+          "location": "http://[fe80::66b1:b1ea:80d3:bfe3]:2869/upnphost/udhisapi.dll?content=uuid:1de13d66-d0d9-4021-9e1f-da1f02f4fa99",
+          "raw_fields": {
+            "usn": "uuid:1de13d66-d0d9-4021-9e1f-da1f02f4fa99::urn:schemas-upnp-org:service:AVTransport:1",
+            "cache_control": "max-age=1800",
+            "host": "[FF02::C]:1900"
+          }
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:52:37.836153+00:00",
+          "first_observed_at": "2026-08-22T13:52:31.903550+00:00",
+          "seen_count": 3,
+          "observation_kind": "advertisement",
+          "ip_address": "172.16.0.67",
+          "mac_address": "E4:FD:45:BB:39:38",
+          "device_type": "urn:schemas-upnp-org:service:RenderingControl:1",
+          "server": "Microsoft-Windows/10.0 UPnP/1.0 UPnP-Device-Host/1.0",
+          "location": "http://172.16.0.67:2869/upnphost/udhisapi.dll?content=uuid:1de13d66-d0d9-4021-9e1f-da1f02f4fa99",
+          "raw_fields": {
+            "usn": "uuid:1de13d66-d0d9-4021-9e1f-da1f02f4fa99::urn:schemas-upnp-org:service:RenderingControl:1",
+            "cache_control": "max-age=1800",
+            "host": "239.255.255.250:1900"
+          }
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:52:37.834970+00:00",
+          "first_observed_at": "2026-08-22T13:52:31.888307+00:00",
+          "seen_count": 3,
+          "observation_kind": "advertisement",
+          "ip_address": "fe80::66b1:b1ea:80d3:bfe3",
+          "mac_address": "E4:FD:45:BB:39:38",
+          "device_type": "urn:schemas-upnp-org:service:RenderingControl:1",
+          "server": "Microsoft-Windows/10.0 UPnP/1.0 UPnP-Device-Host/1.0",
+          "location": "http://[fe80::66b1:b1ea:80d3:bfe3]:2869/upnphost/udhisapi.dll?content=uuid:1de13d66-d0d9-4021-9e1f-da1f02f4fa99",
+          "raw_fields": {
+            "usn": "uuid:1de13d66-d0d9-4021-9e1f-da1f02f4fa99::urn:schemas-upnp-org:service:RenderingControl:1",
+            "cache_control": "max-age=1800",
+            "host": "[FF02::C]:1900"
+          }
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:52:37.833672+00:00",
+          "first_observed_at": "2026-08-22T13:52:31.701623+00:00",
+          "seen_count": 3,
+          "observation_kind": "advertisement",
+          "ip_address": "fe80::66b1:b1ea:80d3:bfe3",
+          "mac_address": "E4:FD:45:BB:39:38",
+          "device_type": "urn:schemas-upnp-org:device:MediaRenderer:1",
+          "server": "Microsoft-Windows/10.0 UPnP/1.0 UPnP-Device-Host/1.0",
+          "location": "http://[fe80::66b1:b1ea:80d3:bfe3]:2869/upnphost/udhisapi.dll?content=uuid:1de13d66-d0d9-4021-9e1f-da1f02f4fa99",
+          "raw_fields": {
+            "usn": "uuid:1de13d66-d0d9-4021-9e1f-da1f02f4fa99::urn:schemas-upnp-org:device:MediaRenderer:1",
+            "cache_control": "max-age=1800",
+            "host": "[FF02::C]:1900"
+          }
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:52:37.826731+00:00",
+          "first_observed_at": "2026-08-22T13:52:31.700875+00:00",
+          "seen_count": 3,
+          "observation_kind": "advertisement",
+          "ip_address": "172.16.0.67",
+          "mac_address": "E4:FD:45:BB:39:38",
+          "device_type": "urn:schemas-upnp-org:device:MediaRenderer:1",
+          "server": "Microsoft-Windows/10.0 UPnP/1.0 UPnP-Device-Host/1.0",
+          "location": "http://172.16.0.67:2869/upnphost/udhisapi.dll?content=uuid:1de13d66-d0d9-4021-9e1f-da1f02f4fa99",
+          "raw_fields": {
+            "usn": "uuid:1de13d66-d0d9-4021-9e1f-da1f02f4fa99::urn:schemas-upnp-org:device:MediaRenderer:1",
+            "cache_control": "max-age=1800",
+            "host": "239.255.255.250:1900"
+          }
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:52:37.626887+00:00",
+          "first_observed_at": "2026-08-22T13:52:31.698645+00:00",
+          "seen_count": 3,
+          "observation_kind": "advertisement",
+          "ip_address": "172.16.0.67",
+          "mac_address": "E4:FD:45:BB:39:38",
+          "device_type": "uuid:1de13d66-d0d9-4021-9e1f-da1f02f4fa99",
+          "server": "Microsoft-Windows/10.0 UPnP/1.0 UPnP-Device-Host/1.0",
+          "location": "http://172.16.0.67:2869/upnphost/udhisapi.dll?content=uuid:1de13d66-d0d9-4021-9e1f-da1f02f4fa99",
+          "raw_fields": {
+            "usn": "uuid:1de13d66-d0d9-4021-9e1f-da1f02f4fa99",
+            "cache_control": "max-age=1800",
+            "host": "239.255.255.250:1900"
+          }
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:52:37.625682+00:00",
+          "first_observed_at": "2026-08-22T13:52:31.699787+00:00",
+          "seen_count": 3,
+          "observation_kind": "advertisement",
+          "ip_address": "fe80::66b1:b1ea:80d3:bfe3",
+          "mac_address": "E4:FD:45:BB:39:38",
+          "device_type": "uuid:1de13d66-d0d9-4021-9e1f-da1f02f4fa99",
+          "server": "Microsoft-Windows/10.0 UPnP/1.0 UPnP-Device-Host/1.0",
+          "location": "http://[fe80::66b1:b1ea:80d3:bfe3]:2869/upnphost/udhisapi.dll?content=uuid:1de13d66-d0d9-4021-9e1f-da1f02f4fa99",
+          "raw_fields": {
+            "usn": "uuid:1de13d66-d0d9-4021-9e1f-da1f02f4fa99",
+            "cache_control": "max-age=1800",
+            "host": "[FF02::C]:1900"
+          }
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:52:37.624359+00:00",
+          "first_observed_at": "2026-08-22T13:52:31.697292+00:00",
+          "seen_count": 3,
+          "observation_kind": "advertisement",
+          "ip_address": "fe80::66b1:b1ea:80d3:bfe3",
+          "mac_address": "E4:FD:45:BB:39:38",
+          "device_type": "upnp:rootdevice",
+          "server": "Microsoft-Windows/10.0 UPnP/1.0 UPnP-Device-Host/1.0",
+          "location": "http://[fe80::66b1:b1ea:80d3:bfe3]:2869/upnphost/udhisapi.dll?content=uuid:1de13d66-d0d9-4021-9e1f-da1f02f4fa99",
+          "raw_fields": {
+            "usn": "uuid:1de13d66-d0d9-4021-9e1f-da1f02f4fa99::upnp:rootdevice",
+            "cache_control": "max-age=1800",
+            "host": "[FF02::C]:1900"
+          }
+        },
+        {
+          "protocol": "ssdp",
+          "observed_at": "2026-08-22T13:52:37.621934+00:00",
+          "first_observed_at": "2026-08-22T13:52:31.683250+00:00",
+          "seen_count": 3,
+          "observation_kind": "advertisement",
+          "ip_address": "172.16.0.67",
+          "mac_address": "E4:FD:45:BB:39:38",
+          "device_type": "upnp:rootdevice",
+          "server": "Microsoft-Windows/10.0 UPnP/1.0 UPnP-Device-Host/1.0",
+          "location": "http://172.16.0.67:2869/upnphost/udhisapi.dll?content=uuid:1de13d66-d0d9-4021-9e1f-da1f02f4fa99",
+          "raw_fields": {
+            "usn": "uuid:1de13d66-d0d9-4021-9e1f-da1f02f4fa99::upnp:rootdevice",
+            "cache_control": "max-age=1800",
+            "host": "239.255.255.250:1900"
+          }
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:36.600151+00:00",
+          "first_observed_at": "2026-08-22T13:52:36.600151+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.225",
+          "mac_address": "1E:62:0D:C2:5F:F0",
+          "hostname": "Android-5.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:36.599985+00:00",
+          "first_observed_at": "2026-08-22T13:52:36.599985+00:00",
+          "seen_count": 1,
+          "observation_kind": "response",
+          "ip_address": "172.16.0.225",
+          "mac_address": "1E:62:0D:C2:5F:F0",
+          "service_type": "225.0.16.172.in-addr.arpa",
+          "service_name": "Android-5.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:35.577596+00:00",
+          "first_observed_at": "2026-08-22T13:52:28.415131+00:00",
+          "seen_count": 4,
+          "observation_kind": "query",
+          "ip_address": "fe80::147c:522f:1fa2:10d",
+          "mac_address": "F2:F8:35:6E:62:DA",
+          "hostname": "_sleep-proxy._udp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:35.577536+00:00",
+          "first_observed_at": "2026-08-22T13:52:28.415087+00:00",
+          "seen_count": 4,
+          "observation_kind": "query",
+          "ip_address": "fe80::147c:522f:1fa2:10d",
+          "mac_address": "F2:F8:35:6E:62:DA",
+          "hostname": "_companion-link._tcp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:35.575557+00:00",
+          "first_observed_at": "2026-08-22T13:52:28.414809+00:00",
+          "seen_count": 4,
+          "observation_kind": "query",
+          "ip_address": "172.16.0.227",
+          "mac_address": "F2:F8:35:6E:62:DA",
+          "hostname": "_sleep-proxy._udp.local"
+        },
+        {
+          "protocol": "mdns",
+          "observed_at": "2026-08-22T13:52:35.575349+00:00",
+          "first_observed_at": "2026-08-22T13:52:28.414778+00:00",
+          "seen_count": 4,
+          "observation_kind": "query",
+          "ip_address": "172.16.0.227",
+          "mac_address": "F2:F8:35:6E:62:DA",
+          "hostname": "_companion-link._tcp.local"
+        }
+      ]
     }
   ]
 }
