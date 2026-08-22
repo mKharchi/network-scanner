@@ -6,7 +6,7 @@ import threading
 import types
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 
 CLIENT_DIRECTORY = Path(__file__).resolve().parents[1]
@@ -21,6 +21,17 @@ import neighbourhood as neighbourhood_module  # noqa: E402
 
 
 class ClientBackgroundScanTests(unittest.TestCase):
+    def test_process_monitor_alert_is_sent_as_a_protocol_frame(self):
+        alert = {"title": "Forbidden process terminated", "severity": "HIGH"}
+        with patch.object(client_module, "send_alerts") as send_alerts:
+            client_module.send_process_monitor_alert(object(), alert)
+
+        send_alerts.assert_called_once_with(
+            ANY,
+            [{"type": "ALERT", "alert": alert}],
+            "process-monitor",
+        )
+
     def test_active_scan_commands_return_disabled_result(self):
         result = client_module.disabled_active_network_scan_result("SCAN_NETWORK")
 

@@ -12,6 +12,8 @@ from client_lib import (
     get_mac,
 )
 from process_scanner import scan_for_forbidden_processes
+from process_monitor import ForbiddenProcessMonitor
+from quarantine_manager import NetworkQuarantineManager
 from network_neighbour_collector import NetworkNeighbourCollector
 from dhcp_listener import DHCPListener
 from passive_protocol_listener import PassiveProtocolListener
@@ -521,6 +523,12 @@ def send_alerts(client_socket, alerts, source):
                 return
 
 
+def send_process_monitor_alert(client_socket, alert):
+    """Frame a process-monitor alert for the client-server protocol."""
+    if isinstance(alert, dict):
+        send_alerts(client_socket, [{"type": "ALERT", "alert": alert}], "process-monitor")
+
+
 def background_scanner(client_socket, stop_event=None):
     if stop_event:
         if stop_event.wait(10):
@@ -561,6 +569,12 @@ def start_client(stop_event=None):
 
     _startup_log(f"Client starting with server target {SERVER_IP}:{SERVER_PORT}.")
 
+    quarantine_manager = NetworkQuarantineManager(
+        server_ip=SERVER_IP,
+        server_port=SERVER_PORT,
+        default_max_duration_minutes=int(os.getenv("QUARANTINE_MAX_DURATION_MINUTES", "60")),
+    )
+
     while not stop_event.is_set():
         client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         session_stop_event = threading.Event()
@@ -568,6 +582,46 @@ def start_client(stop_event=None):
         background_thread = None
         dhcp_listener = None
         passive_protocol_listener = None
+        process_monitor = None
+
+        def _on_process_alert(alert):
+            send_process_monitor_alert(client, alert)
+
+        def _on_quarantine_event(event):
+            send_alerts(
+                client,
+                [
+                    {
+                        "type": "ALERT",
+                        "alert": {
+                            "alert_type": "SECURITY_EVENT",
+                            "event_type": event.get("event_type"),
+                            "severity": (
+                                "CRITICAL"
+                                if "FAILED" in event.get("event_type", "")
+                                or "QUARANTINED" in event.get("event_type", "")
+                                else "INFO"
+                            ),
+                            "title": f"Network Quarantine Event: {event.get('event_type')}",
+                            "description": event.get("reason", "Quarantine event"),
+                            "detected_at": event.get("timestamp"),
+                            "activity_time": event.get("timestamp"),
+                            "command_id": event.get("command_id"),
+                        },
+                    }
+                ],
+                "quarantine-manager",
+            )
+
+        quarantine_manager.event_callback = _on_quarantine_event
+
+        process_monitor = ForbiddenProcessMonitor(
+            scan_interval_seconds=float(os.getenv("PROCESS_SCAN_INTERVAL_SECONDS", "10.0")),
+            escalation_threshold=int(os.getenv("PROCESS_ESCALATION_THRESHOLD", "3")),
+            escalation_window_seconds=int(os.getenv("PROCESS_ESCALATION_WINDOW_SECONDS", "120")),
+            alert_callback=_on_process_alert,
+            auto_terminate=True,
+        )
 
         try:
             try:
@@ -634,6 +688,10 @@ def start_client(stop_event=None):
                         _startup_log(
                             f"Received {len(forbidden_processes)} forbidden processes."
                         )
+
+                        # Update and start continuous process monitoring
+                        process_monitor.set_rules(forbidden_processes)
+                        process_monitor.start()
 
                         # Start background daily neighbour snapshot collection so it never blocks command execution
                         threading.Thread(
@@ -719,7 +777,11 @@ def start_client(stop_event=None):
                             passive_protocol_listener
                         )
                     else:
-                        result = handle_command(message)
+                        result = handle_command(
+                            message,
+                            quarantine_manager=quarantine_manager,
+                            process_monitor=process_monitor,
+                        )
 
                     # A server-requested activity log (including the standard 24-hour
                     # request) is another detection opportunity.  Send any resulting
@@ -754,6 +816,11 @@ def start_client(stop_event=None):
             stop_event.set()
         finally:
             session_stop_event.set()
+            if process_monitor is not None:
+                try:
+                    process_monitor.stop()
+                except Exception as error:
+                    print(f"[PROCESS MONITOR] Could not stop monitor: {error}")
             if dhcp_listener is not None:
                 try:
                     dhcp_listener.stop()

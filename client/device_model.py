@@ -156,6 +156,7 @@ class DeviceRecord:
         self.model_hint: str | None = None
         self.os_hint: str | None = None
         self.software_hint: str | None = None
+        self.software_hints: list[str] = []
 
         # Confidence attributes
         self.os_classification = EnrichedAttribute()
@@ -218,6 +219,16 @@ class DeviceRecord:
         """Record discovered service type."""
         if service_type and service_type not in self.services:
             self.services.append(service_type)
+
+    def add_software_hint(self, hint: str) -> None:
+        """Record discovered software hint."""
+        if not hint:
+            return
+        clean_hint = hint.strip()
+        if clean_hint and clean_hint not in self.software_hints:
+            self.software_hints.append(clean_hint)
+        if not self.software_hint:
+            self.software_hint = clean_hint
 
     def add_evidence(self, category: str, source: str) -> None:
         """Track source attribution for an attribute."""
@@ -293,6 +304,7 @@ class DeviceRecord:
             "model_hint": self.model_hint,
             "os_hint": self.os_hint,
             "software_hint": self.software_hint,
+            "software_hints": list(self.software_hints),
             "protocols_seen": list(self.protocols_seen),
             "services": list(self.services),
             "first_seen": self.first_seen,

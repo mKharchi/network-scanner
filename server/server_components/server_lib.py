@@ -1527,6 +1527,32 @@ def request_client_passive_neighbourhood(client_id, *, timeout=None):
     }
 
 
+def quarantine_client(client_id, reason="Administrator requested network quarantine", duration_minutes=60, timeout=10.0):
+    """Dispatch QUARANTINE_CLIENT command to a connected client."""
+    cmd_id = f"cmd-quarantine-{int(time.time())}"
+    args = {
+        "reason": reason,
+        "duration_minutes": duration_minutes,
+        "command_id": cmd_id,
+    }
+    return execute_client_command(client_id, "QUARANTINE_CLIENT", args=args, timeout=timeout)
+
+
+def release_client_quarantine(client_id, reason="Administrator released network quarantine", timeout=10.0):
+    """Dispatch RELEASE_CLIENT command to a connected client."""
+    cmd_id = f"cmd-release-{int(time.time())}"
+    args = {
+        "reason": reason,
+        "command_id": cmd_id,
+    }
+    return execute_client_command(client_id, "RELEASE_CLIENT", args=args, timeout=timeout)
+
+
+def get_client_quarantine_status(client_id, timeout=10.0):
+    """Dispatch GET_QUARANTINE_STATUS command to a connected client."""
+    return execute_client_command(client_id, "GET_QUARANTINE_STATUS", timeout=timeout)
+
+
 def send_command(client_id, command, args=None):
     res = execute_client_command(client_id, command, args, timeout=25.0)
     if res.get("status") == "ok":
