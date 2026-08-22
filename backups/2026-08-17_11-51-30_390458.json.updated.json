@@ -1,0 +1,1054 @@
+{
+  "completed_at": "2026-08-17T11:51:30.390458+00:00",
+  "network": {
+    "interface": "client-reported",
+    "local_ip": null,
+    "network": "client-reported",
+    "gateway": null
+  },
+  "devices_found": 27,
+  "devices": [
+    {
+      "ip_address": "172.16.0.1",
+      "mac_address": "C0:E5:DA:B3:FA:58",
+      "hostname": null,
+      "vendor": "Qingdao Intelligent&Precise Electronics Co.,Ltd.",
+      "os_name": null,
+      "os_family": null,
+      "os_confidence": null,
+      "observation_sources": [
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 11,
+          "source_client_id": "client-e4fd45ba8b96",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.0.1",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "Qingdao Intelligent&Precise Electronics Co.,Ltd.",
+          "observed_at": "2026-08-17T11:49:37+00:00"
+        },
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 6,
+          "source_client_id": "client-00e04c06df7a",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.0.1",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "Qingdao Intelligent&Precise Electronics Co.,Ltd.",
+          "observed_at": "2026-08-17T10:58:13+00:00"
+        }
+      ],
+      "classification": "UNMANAGED",
+      "is_managed": false,
+      "managed_client": null
+    },
+    {
+      "ip_address": "172.16.0.17",
+      "mac_address": "E4:FD:45:BB:18:3B",
+      "hostname": null,
+      "vendor": "Intel Corporate",
+      "os_name": null,
+      "os_family": null,
+      "os_confidence": null,
+      "observation_sources": [
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 11,
+          "source_client_id": "client-e4fd45ba8b96",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.0.17",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T11:49:37+00:00"
+        },
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 6,
+          "source_client_id": "client-00e04c06df7a",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.0.17",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T10:58:13+00:00"
+        }
+      ],
+      "classification": "UNMANAGED",
+      "is_managed": false,
+      "managed_client": null
+    },
+    {
+      "ip_address": "172.16.0.31",
+      "mac_address": "E4:FD:45:BB:25:C9",
+      "hostname": null,
+      "vendor": "Intel Corporate",
+      "os_name": null,
+      "os_family": null,
+      "os_confidence": null,
+      "observation_sources": [
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 11,
+          "source_client_id": "client-e4fd45ba8b96",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.0.31",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T11:49:37+00:00"
+        },
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 6,
+          "source_client_id": "client-00e04c06df7a",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.0.31",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T10:58:13+00:00"
+        }
+      ],
+      "classification": "UNMANAGED",
+      "is_managed": false,
+      "managed_client": null
+    },
+    {
+      "ip_address": "172.16.0.32",
+      "mac_address": "18:26:49:72:1D:02",
+      "hostname": "DESKTOP-BKFPODL",
+      "vendor": "Intel Corporate",
+      "os_name": null,
+      "os_family": null,
+      "os_confidence": null,
+      "observation_sources": [
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 11,
+          "source_client_id": "client-e4fd45ba8b96",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.0.32",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": "DESKTOP-BKFPODL",
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T11:49:37+00:00"
+        },
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 6,
+          "source_client_id": "client-00e04c06df7a",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.0.32",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": "DESKTOP-BKFPODL",
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T10:58:13+00:00"
+        }
+      ],
+      "classification": "UNMANAGED",
+      "is_managed": false,
+      "managed_client": null
+    },
+    {
+      "ip_address": "172.16.0.34",
+      "mac_address": "7E:17:99:F7:69:96",
+      "hostname": null,
+      "vendor": null,
+      "os_name": null,
+      "os_family": null,
+      "os_confidence": null,
+      "observation_sources": [
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 11,
+          "source_client_id": "client-e4fd45ba8b96",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.0.34",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": null,
+          "observed_at": "2026-08-17T11:49:37+00:00"
+        },
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 6,
+          "source_client_id": "client-00e04c06df7a",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.0.34",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": null,
+          "observed_at": "2026-08-17T10:58:13+00:00"
+        }
+      ],
+      "classification": "UNMANAGED",
+      "is_managed": false,
+      "managed_client": null
+    },
+    {
+      "ip_address": "172.16.0.67",
+      "mac_address": "E4:FD:45:BB:39:38",
+      "hostname": "DESKTOP-MJ8ITA4",
+      "vendor": "Intel Corporate",
+      "os_name": null,
+      "os_family": null,
+      "os_confidence": null,
+      "observation_sources": [
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 11,
+          "source_client_id": "client-e4fd45ba8b96",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.0.67",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": "DESKTOP-MJ8ITA4",
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T11:49:37+00:00"
+        },
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 6,
+          "source_client_id": "client-00e04c06df7a",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.0.67",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": "DESKTOP-MJ8ITA4",
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T10:58:13+00:00"
+        }
+      ],
+      "classification": "UNMANAGED",
+      "is_managed": false,
+      "managed_client": null
+    },
+    {
+      "ip_address": "172.16.0.70",
+      "mac_address": "E0:9D:31:DE:4B:AD",
+      "hostname": null,
+      "vendor": "Intel Corporate",
+      "os_name": null,
+      "os_family": null,
+      "os_confidence": null,
+      "observation_sources": [
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 11,
+          "source_client_id": "client-e4fd45ba8b96",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.0.70",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T11:49:37+00:00"
+        },
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 6,
+          "source_client_id": "client-00e04c06df7a",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.0.70",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T10:58:13+00:00"
+        }
+      ],
+      "classification": "UNMANAGED",
+      "is_managed": false,
+      "managed_client": null
+    },
+    {
+      "ip_address": "172.16.0.75",
+      "mac_address": "E4:FD:45:BB:36:81",
+      "hostname": null,
+      "vendor": "Intel Corporate",
+      "os_name": null,
+      "os_family": null,
+      "os_confidence": null,
+      "observation_sources": [
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 11,
+          "source_client_id": "client-e4fd45ba8b96",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.0.75",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T11:49:37+00:00"
+        },
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 6,
+          "source_client_id": "client-00e04c06df7a",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.0.75",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T10:58:13+00:00"
+        }
+      ],
+      "classification": "UNMANAGED",
+      "is_managed": false,
+      "managed_client": null
+    },
+    {
+      "ip_address": "172.16.0.111",
+      "mac_address": "E4:FD:45:BA:8B:2D",
+      "hostname": null,
+      "vendor": "Intel Corporate",
+      "os_name": null,
+      "os_family": null,
+      "os_confidence": null,
+      "observation_sources": [
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 11,
+          "source_client_id": "client-e4fd45ba8b96",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.0.111",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T11:49:37+00:00"
+        },
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 6,
+          "source_client_id": "client-00e04c06df7a",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.0.111",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T10:58:13+00:00"
+        }
+      ],
+      "classification": "UNMANAGED",
+      "is_managed": false,
+      "managed_client": null
+    },
+    {
+      "ip_address": "172.16.0.123",
+      "mac_address": "E4:FD:45:BA:86:05",
+      "hostname": null,
+      "vendor": "Intel Corporate",
+      "os_name": null,
+      "os_family": null,
+      "os_confidence": null,
+      "observation_sources": [
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 11,
+          "source_client_id": "client-e4fd45ba8b96",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.0.123",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T11:49:37+00:00"
+        },
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 6,
+          "source_client_id": "client-00e04c06df7a",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.0.123",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T10:58:13+00:00"
+        }
+      ],
+      "classification": "UNMANAGED",
+      "is_managed": false,
+      "managed_client": null
+    },
+    {
+      "ip_address": "172.16.0.147",
+      "mac_address": "00:93:37:C4:4D:A7",
+      "hostname": null,
+      "vendor": "Intel Corporate",
+      "os_name": null,
+      "os_family": null,
+      "os_confidence": null,
+      "observation_sources": [
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 11,
+          "source_client_id": "client-e4fd45ba8b96",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.0.147",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T11:49:37+00:00"
+        },
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 6,
+          "source_client_id": "client-00e04c06df7a",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.0.147",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T10:58:13+00:00"
+        }
+      ],
+      "classification": "UNMANAGED",
+      "is_managed": false,
+      "managed_client": null
+    },
+    {
+      "ip_address": "172.16.0.148",
+      "mac_address": "D8:6D:17:4B:4F:AC",
+      "hostname": null,
+      "vendor": "HUAWEI TECHNOLOGIES CO.,LTD",
+      "os_name": null,
+      "os_family": null,
+      "os_confidence": null,
+      "observation_sources": [
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 11,
+          "source_client_id": "client-e4fd45ba8b96",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.0.148",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "HUAWEI TECHNOLOGIES CO.,LTD",
+          "observed_at": "2026-08-17T11:49:37+00:00"
+        },
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 6,
+          "source_client_id": "client-00e04c06df7a",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.0.148",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "HUAWEI TECHNOLOGIES CO.,LTD",
+          "observed_at": "2026-08-17T10:58:13+00:00"
+        }
+      ],
+      "classification": "UNMANAGED",
+      "is_managed": false,
+      "managed_client": null
+    },
+    {
+      "ip_address": "172.16.1.68",
+      "mac_address": "C0:BF:BE:A0:6D:BA",
+      "hostname": null,
+      "vendor": "AzureWave Technology Inc.",
+      "os_name": null,
+      "os_family": null,
+      "os_confidence": null,
+      "observation_sources": [
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 11,
+          "source_client_id": "client-e4fd45ba8b96",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.1.68",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "AzureWave Technology Inc.",
+          "observed_at": "2026-08-17T11:49:37+00:00"
+        },
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 6,
+          "source_client_id": "client-00e04c06df7a",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.1.68",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "AzureWave Technology Inc.",
+          "observed_at": "2026-08-17T10:58:13+00:00"
+        }
+      ],
+      "classification": "UNMANAGED",
+      "is_managed": false,
+      "managed_client": null
+    },
+    {
+      "ip_address": "172.16.1.153",
+      "mac_address": "D4:D2:52:C6:17:E0",
+      "hostname": null,
+      "vendor": "Intel Corporate",
+      "os_name": null,
+      "os_family": null,
+      "os_confidence": null,
+      "observation_sources": [
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 11,
+          "source_client_id": "client-e4fd45ba8b96",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.1.153",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T11:49:37+00:00"
+        },
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 6,
+          "source_client_id": "client-00e04c06df7a",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.1.153",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T10:58:13+00:00"
+        }
+      ],
+      "classification": "UNMANAGED",
+      "is_managed": false,
+      "managed_client": null
+    },
+    {
+      "ip_address": "172.16.1.215",
+      "mac_address": "DC:46:28:EC:E1:E5",
+      "hostname": null,
+      "vendor": "Intel Corporate",
+      "os_name": null,
+      "os_family": null,
+      "os_confidence": null,
+      "observation_sources": [
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 11,
+          "source_client_id": "client-e4fd45ba8b96",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.1.215",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T11:49:37+00:00"
+        },
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 6,
+          "source_client_id": "client-00e04c06df7a",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.1.215",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T10:58:13+00:00"
+        }
+      ],
+      "classification": "UNMANAGED",
+      "is_managed": false,
+      "managed_client": null
+    },
+    {
+      "ip_address": "172.16.1.238",
+      "mac_address": "B0:3C:DC:95:39:36",
+      "hostname": "adonis-IdeaPad-5-15ITL05",
+      "vendor": "Intel Corporate",
+      "os_name": "Linux",
+      "os_family": "Linux",
+      "os_confidence": 1.0,
+      "observation_sources": [
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 11,
+          "source_client_id": "client-e4fd45ba8b96",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.1.238",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T11:49:37+00:00"
+        },
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 6,
+          "source_client_id": "client-00e04c06df7a",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.1.238",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T10:58:13+00:00"
+        }
+      ],
+      "classification": "MANAGED",
+      "is_managed": true,
+      "managed_client": {
+        "database_id": 1,
+        "client_id": "client-b03cdc953936",
+        "hostname": "adonis-IdeaPad-5-15ITL05",
+        "os_system": "Linux",
+        "os_release": "7.0.0-27-generic",
+        "os_version": "#27-Ubuntu SMP PREEMPT_DYNAMIC Thu Jun 18 19:13:49 UTC 2026",
+        "os_machine": "x86_64"
+      }
+    },
+    {
+      "ip_address": "172.16.1.239",
+      "mac_address": "D4:F3:2D:6A:4C:F8",
+      "hostname": null,
+      "vendor": "Intel Corporate",
+      "os_name": null,
+      "os_family": null,
+      "os_confidence": null,
+      "observation_sources": [
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 11,
+          "source_client_id": "client-e4fd45ba8b96",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.1.239",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T11:49:37+00:00"
+        },
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 6,
+          "source_client_id": "client-00e04c06df7a",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.1.239",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T10:58:13+00:00"
+        }
+      ],
+      "classification": "UNMANAGED",
+      "is_managed": false,
+      "managed_client": null
+    },
+    {
+      "ip_address": "172.16.2.40",
+      "mac_address": "84:1B:77:54:E7:F5",
+      "hostname": "LYNA18",
+      "vendor": "Intel Corporate",
+      "os_name": null,
+      "os_family": null,
+      "os_confidence": null,
+      "observation_sources": [
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 11,
+          "source_client_id": "client-e4fd45ba8b96",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.2.40",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": "LYNA18",
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T11:49:37+00:00"
+        },
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 1,
+          "source_client_id": "client-b03cdc953936",
+          "source_client_hostname": "adonis-IdeaPad-5-15ITL05",
+          "ip_address": "172.16.2.40",
+          "interface": "wlp0s20f3",
+          "entry_type": "dynamic",
+          "hostname": "LYNA18",
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T11:32:36+00:00"
+        },
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 6,
+          "source_client_id": "client-00e04c06df7a",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.2.40",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": "LYNA18",
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T10:58:13+00:00"
+        }
+      ],
+      "classification": "UNMANAGED",
+      "is_managed": false,
+      "managed_client": null
+    },
+    {
+      "ip_address": "172.16.2.121",
+      "mac_address": "C8:E2:65:9D:89:A1",
+      "hostname": null,
+      "vendor": "Intel Corporate",
+      "os_name": null,
+      "os_family": null,
+      "os_confidence": null,
+      "observation_sources": [
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 11,
+          "source_client_id": "client-e4fd45ba8b96",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.2.121",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T11:49:37+00:00"
+        },
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 6,
+          "source_client_id": "client-00e04c06df7a",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.2.121",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T10:58:13+00:00"
+        }
+      ],
+      "classification": "UNMANAGED",
+      "is_managed": false,
+      "managed_client": null
+    },
+    {
+      "ip_address": "172.16.3.17",
+      "mac_address": "C4:75:AB:D2:6A:C2",
+      "hostname": "DESKTOP-ILGIRV7",
+      "vendor": "Intel Corporate",
+      "os_name": null,
+      "os_family": null,
+      "os_confidence": null,
+      "observation_sources": [
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 11,
+          "source_client_id": "client-e4fd45ba8b96",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.3.17",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": "DESKTOP-ILGIRV7",
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T11:49:37+00:00"
+        },
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 6,
+          "source_client_id": "client-00e04c06df7a",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.3.17",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": "DESKTOP-ILGIRV7",
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T10:58:13+00:00"
+        }
+      ],
+      "classification": "UNMANAGED",
+      "is_managed": false,
+      "managed_client": null
+    },
+    {
+      "ip_address": "172.16.3.238",
+      "mac_address": "28:11:A8:89:45:D1",
+      "hostname": "RahimosPartner",
+      "vendor": "Intel Corporate",
+      "os_name": null,
+      "os_family": null,
+      "os_confidence": null,
+      "observation_sources": [
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 11,
+          "source_client_id": "client-e4fd45ba8b96",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.3.238",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": "RahimosPartner",
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T11:49:37+00:00"
+        },
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 6,
+          "source_client_id": "client-00e04c06df7a",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.3.238",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": "RahimosPartner",
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T10:58:13+00:00"
+        }
+      ],
+      "classification": "UNMANAGED",
+      "is_managed": false,
+      "managed_client": null
+    },
+    {
+      "ip_address": "172.16.4.48",
+      "mac_address": "80:45:DD:0B:1F:5D",
+      "hostname": null,
+      "vendor": "Intel Corporate",
+      "os_name": null,
+      "os_family": null,
+      "os_confidence": null,
+      "observation_sources": [
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 11,
+          "source_client_id": "client-e4fd45ba8b96",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.4.48",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T11:49:37+00:00"
+        },
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 6,
+          "source_client_id": "client-00e04c06df7a",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.4.48",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T10:58:13+00:00"
+        }
+      ],
+      "classification": "UNMANAGED",
+      "is_managed": false,
+      "managed_client": null
+    },
+    {
+      "ip_address": "172.16.255.254",
+      "mac_address": "AC:71:2E:FA:88:3F",
+      "hostname": "_gateway",
+      "vendor": "Fortinet, Inc.",
+      "os_name": null,
+      "os_family": null,
+      "os_confidence": null,
+      "observation_sources": [
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 11,
+          "source_client_id": "client-e4fd45ba8b96",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.255.254",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": "_gateway",
+          "vendor": "Fortinet, Inc.",
+          "observed_at": "2026-08-17T11:49:37+00:00"
+        },
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 1,
+          "source_client_id": "client-b03cdc953936",
+          "source_client_hostname": "adonis-IdeaPad-5-15ITL05",
+          "ip_address": "172.16.255.254",
+          "interface": "wlp0s20f3",
+          "entry_type": "dynamic",
+          "hostname": "_gateway",
+          "vendor": "Fortinet, Inc.",
+          "observed_at": "2026-08-17T11:32:36+00:00"
+        },
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 6,
+          "source_client_id": "client-00e04c06df7a",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.255.254",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": "_gateway",
+          "vendor": "Fortinet, Inc.",
+          "observed_at": "2026-08-17T10:58:13+00:00"
+        }
+      ],
+      "classification": "UNMANAGED",
+      "is_managed": false,
+      "managed_client": null
+    },
+    {
+      "ip_address": "172.16.0.102",
+      "mac_address": "E4:FD:45:BA:8B:96",
+      "hostname": "DESKTOP-DJP05CM",
+      "vendor": "Intel Corporate",
+      "os_name": "Windows",
+      "os_family": "Windows",
+      "os_confidence": 1.0,
+      "observation_sources": [
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 1,
+          "source_client_id": "client-b03cdc953936",
+          "source_client_hostname": "adonis-IdeaPad-5-15ITL05",
+          "ip_address": "172.16.0.102",
+          "interface": "wlp0s20f3",
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T11:32:36+00:00"
+        }
+      ],
+      "classification": "MANAGED",
+      "is_managed": true,
+      "managed_client": {
+        "database_id": 11,
+        "client_id": "client-e4fd45ba8b96",
+        "hostname": "DESKTOP-DJP05CM",
+        "os_system": "Windows",
+        "os_release": "11",
+        "os_version": "10.0.26200",
+        "os_machine": "AMD64"
+      }
+    },
+    {
+      "ip_address": "172.16.3.25",
+      "mac_address": "F8:9E:94:25:48:C4",
+      "hostname": null,
+      "vendor": "Intel Corporate",
+      "os_name": null,
+      "os_family": null,
+      "os_confidence": null,
+      "observation_sources": [
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 1,
+          "source_client_id": "client-b03cdc953936",
+          "source_client_hostname": "adonis-IdeaPad-5-15ITL05",
+          "ip_address": "172.16.3.25",
+          "interface": "wlp0s20f3",
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": "Intel Corporate",
+          "observed_at": "2026-08-17T11:32:36+00:00"
+        }
+      ],
+      "classification": "UNMANAGED",
+      "is_managed": false,
+      "managed_client": null
+    },
+    {
+      "ip_address": "172.16.2.36",
+      "mac_address": "D8:3B:BF:9B:CD:4B",
+      "hostname": null,
+      "vendor": "Intel Corporate",
+      "os_name": null,
+      "os_family": null,
+      "os_confidence": null,
+      "observation_sources": [
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 11,
+          "source_client_id": "client-e4fd45ba8b96",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.2.36",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": null,
+          "observed_at": "2026-08-17T11:14:42+00:00"
+        },
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 6,
+          "source_client_id": "client-00e04c06df7a",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.2.36",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": null,
+          "observed_at": "2026-08-17T10:58:13+00:00"
+        }
+      ],
+      "classification": "UNMANAGED",
+      "is_managed": false,
+      "managed_client": null
+    },
+    {
+      "ip_address": "172.16.3.54",
+      "mac_address": "2E:E7:9D:A9:C3:C5",
+      "hostname": null,
+      "vendor": null,
+      "os_name": null,
+      "os_family": null,
+      "os_confidence": null,
+      "observation_sources": [
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 11,
+          "source_client_id": "client-e4fd45ba8b96",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.3.54",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": null,
+          "observed_at": "2026-08-17T11:14:42+00:00"
+        },
+        {
+          "source_type": "CLIENT_ARP",
+          "source_client_database_id": 6,
+          "source_client_id": "client-00e04c06df7a",
+          "source_client_hostname": "DESKTOP-DJP05CM",
+          "ip_address": "172.16.3.54",
+          "interface": null,
+          "entry_type": "dynamic",
+          "hostname": null,
+          "vendor": null,
+          "observed_at": "2026-08-17T10:58:13+00:00"
+        }
+      ],
+      "classification": "UNMANAGED",
+      "is_managed": false,
+      "managed_client": null
+    }
+  ]
+}
