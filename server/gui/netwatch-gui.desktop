@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=NetWatch GUI
+Comment=Launch the NetWatch Tauri desktop app
+Exec=/usr/bin/env bash /home/adonis/network-scanner/server/gui/launch_gui.sh
+TryExec=/usr/bin/env
+Path=/home/adonis/network-scanner/server/gui
+Icon=/home/adonis/network-scanner/server/gui/src-tauri/icons/icon.png
+Terminal=false
+StartupNotify=true
+Categories=Network;Utility;Development;
