@@ -248,6 +248,15 @@ class PassiveProtocolListenerTests(unittest.TestCase):
         )
         self.assertEqual(observations[0]["raw_fields"]["usn"].split("::")[0], "uuid:device-2")
 
+    def test_scapy_callback_discards_the_internal_observation_count(self):
+        listener = PassiveProtocolListener()
+        packet = object()
+
+        with patch.object(listener, "process_packet", return_value=3) as process_packet:
+            self.assertIsNone(listener._handle_scapy_packet(packet))
+
+        process_packet.assert_called_once_with(packet)
+
     def test_listener_start_is_idempotent_and_stop_joins_worker(self):
         listener = PassiveProtocolListener()
         with patch.object(

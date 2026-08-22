@@ -989,7 +989,9 @@ def handle_network_neighbour_report(
         report_validator = validate_neighbour_report
 
     source = payload.get("observation_source") if isinstance(payload, dict) else None
-    global_scan_id = payload.get("global_scan_id") if isinstance(payload, dict) else None
+    global_scan_id = (
+        payload.get("global_scan_id") if isinstance(payload, dict) else None
+    )
     scan_status = payload.get("scan_status") if isinstance(payload, dict) else None
     reported_count = (
         len(payload.get("neighbours", []))
@@ -1109,7 +1111,9 @@ def handle_network_neighbour_report(
         if source == "ACTIVE_NEIGHBOUR_SCAN":
             global_scan_manager = None
             if global_scan_id:
-                from server_components.global_network_scan import global_network_scan_manager
+                from server_components.global_network_scan import (
+                    global_network_scan_manager,
+                )
 
                 global_scan_manager = global_network_scan_manager
                 if global_scan_manager.is_duplicate_report(
@@ -1346,7 +1350,9 @@ def execute_client_command(
                     devs = data.get("devices", [])
                     if devs:
                         try:
-                            print(f"Storing ARP_SCAN_NETWORK observations from {client['mac']} done in {int(datetime.now().timestamp())} .")
+                            print(
+                                f"Storing ARP_SCAN_NETWORK observations from {client['mac']} done in {int(datetime.now().timestamp())} ."
+                            )
                             from server_components.network_device_storage import (
                                 store_client_neighbour_observations,
                             )
@@ -1493,7 +1499,23 @@ def request_client_passive_neighbourhood(client_id, *, timeout=None):
             "client_id": client_id,
             "message": "Client returned an invalid passive neighbourhood response.",
         }
-
+    from .passive_neighbourhood_storage import (
+        append_passive_neighbourhood_snapshot,
+    )
+    try:
+        storage_path = append_passive_neighbourhood_snapshot(
+        client_id=client_id,
+        reporter=data["reporter"],
+        observed_at=data["observed_at"],
+        observations=observations,
+    )
+    except Exception:
+        return {
+                    "status": "storage_error",
+                    "client_id": client_id,
+                    "message": "Failed to store passive neighbourhood snapshot.",
+                }
+        storage_path = None
     return {
         "status": "completed",
         "client_id": client_id,

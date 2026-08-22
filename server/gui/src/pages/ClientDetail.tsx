@@ -550,6 +550,72 @@ export function ClientDetailPage() {
                 <DetailRow label="Snapshot received" value={formatDateTime(passiveNeighbourhood.observed_at)} />
                 <DetailRow label="Reporter" value={passiveNeighbourhood.reporter} mono />
               </div>
+              <div style={{ marginTop: 'var(--space-4)', overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-xs)' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
+                      <th style={{ padding: '8px' }}>Protocol</th>
+                      <th style={{ padding: '8px' }}>Observed device or service</th>
+                      <th style={{ padding: '8px' }}>Address</th>
+                      <th style={{ padding: '8px' }}>Advertisement details</th>
+                      <th style={{ padding: '8px' }}>Seen</th>
+                      <th style={{ padding: '8px' }}>Latest</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {passiveNeighbourhood.observations.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                          No passive protocol observations have been collected in this client session.
+                        </td>
+                      </tr>
+                    ) : (
+                      passiveNeighbourhood.observations.map((observation, index) => {
+                        const identity =`${observation.device_name}
+                           ${ observation.service_name}
+                           ${ observation.hostname}
+                           ${observation.device_type}
+                          ${observation.raw_fields?.usn}` 
+                        
+                          || 'Unidentified observation';
+                        const address = [observation.ip_address, observation.mac_address]
+                          .filter(Boolean)
+                          .join('\n');
+                        const details = [
+                          observation.observation_kind,
+                          observation.service_type,
+                          observation.service_port ? `port ${observation.service_port}` : null,
+                          observation.server,
+                          observation.location,
+                        ].filter(Boolean).join('\n');
+
+                        return (
+                          <tr key={`${observation.protocol}-${observation.observed_at ?? index}-${index}`} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                            <td style={{ padding: '8px', verticalAlign: 'top' }}>
+                              <Badge variant="info">{observation.protocol}</Badge>
+                            </td>
+                            <td style={{ padding: '8px', verticalAlign: 'top', fontWeight: 600, maxWidth: '260px', wordBreak: 'break-word' }}>
+                              {identity}
+                            </td>
+                            <td style={{ padding: '8px', verticalAlign: 'top', whiteSpace: 'pre-line', fontFamily: 'var(--font-mono)' }}>
+                              {address || '—'}
+                            </td>
+                            <td style={{ padding: '8px', verticalAlign: 'top', whiteSpace: 'pre-line', maxWidth: '360px', overflowWrap: 'anywhere', color: 'var(--text-muted)' }}>
+                              {details || '—'}
+                            </td>
+                            <td style={{ padding: '8px', verticalAlign: 'top', textAlign: 'right' }}>
+                              {observation.seen_count ?? 1}
+                            </td>
+                            <td style={{ padding: '8px', verticalAlign: 'top', whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>
+                              {observation.observed_at ? formatDateTime(observation.observed_at) : '—'}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </SectionCard>
           </div>
         );
