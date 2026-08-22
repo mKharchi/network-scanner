@@ -1485,7 +1485,7 @@ def request_client_passive_neighbourhood(client_id, *, timeout=None):
     observations = data.get("observations") if isinstance(data, dict) else None
     valid_observations = isinstance(observations, list) and all(
         isinstance(observation, dict)
-        and observation.get("protocol") in {"mdns", "llmnr", "nbns", "ssdp"}
+        and observation.get("protocol") in {"dhcp", "mdns", "llmnr", "nbns", "ssdp"}
         for observation in observations
     )
     if (

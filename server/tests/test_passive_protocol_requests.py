@@ -38,7 +38,10 @@ class PassiveNeighbourhoodRequestTests(unittest.TestCase):
             server_lib,
             "execute_client_command",
             return_value={"status": "ok", "data": response_data},
-        ) as execute:
+        ) as execute, patch(
+            "server_components.passive_neighbourhood_storage.append_passive_neighbourhood_snapshot",
+            return_value="/tmp/test.json",
+        ):
             result = server_lib.request_client_passive_neighbourhood(
                 "client-a", timeout=4.0
             )
@@ -65,6 +68,9 @@ class PassiveNeighbourhoodRequestTests(unittest.TestCase):
             server_lib,
             "execute_client_command",
             return_value={"status": "ok", "data": response_data},
+        ), patch(
+            "server_components.passive_neighbourhood_storage.append_passive_neighbourhood_snapshot",
+            return_value="/tmp/test.json",
         ), patch.object(
             server_lib, "handle_network_neighbour_report", side_effect=AssertionError
         ), patch.object(
