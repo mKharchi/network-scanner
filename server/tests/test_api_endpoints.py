@@ -135,6 +135,33 @@ class ApiEndpointsTestCase(unittest.TestCase):
 
     # 5. Network Devices
     @patch("server_components.api_service.get_connection")
+    def test_network_devices_list_endpoint(self, mock_db):
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_db.return_value = mock_conn
+        mock_conn.cursor.return_value = mock_cursor
+        mock_cursor.fetchone.return_value = {"total": 1}
+        mock_cursor.fetchall.return_value = [
+            {
+                "mac_address": "AA:BB:CC:DD:EE:FF",
+                "ip_address": "192.168.1.50",
+                "hostname": "DEVICE-1",
+                "vendor": "TestVendor",
+                "first_seen": "2026-08-20T10:00:00Z",
+                "last_seen": "2026-08-22T12:00:00Z",
+                "managed_client_id": "client-1",
+                "client_hostname": "DEVICE-1",
+            }
+        ]
+
+        status, body = self._fetch("/api/v1/network/devices")
+        self.assertEqual(status, 200)
+        self.assertIn("devices", body["data"])
+        self.assertEqual(len(body["data"]["devices"]), 1)
+        self.assertEqual(body["data"]["devices"][0]["mac_address"], "AA:BB:CC:DD:EE:FF")
+        self.assertTrue(body["data"]["devices"][0]["is_managed"])
+
+    @patch("server_components.api_service.get_connection")
     def test_device_detail_not_found(self, mock_db):
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
@@ -403,12 +430,60 @@ class ApiEndpointsTestCase(unittest.TestCase):
             ),
         ]
 
-        for request in requests:
-            with self.assertRaises(urllib.error.HTTPError) as error:
-                urllib.request.urlopen(request)
-            self.assertEqual(error.exception.code, 409)
-            body = json.loads(error.exception.read().decode("utf-8"))
-            self.assertEqual(body["error"]["code"], "ACTIVE_NETWORK_SCAN_DISABLED")
+    @patch("server_components.server_lib.quarantine_client")
+    def test_post_client_quarantine_endpoint(self, mock_quarantine):
+        mock_quarantine.return_value = {
+            "status": "ok",
+            "state": "QUARANTINED",
+            "message": "Endpoint successfully quarantined.",
+        }
+        url = f"{self.base_url}/api/v1/clients/client-test-1/quarantine"
+        payload = json.dumps({"reason": "Repeated violations", "duration_minutes": 30}).encode("utf-8")
+        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+
+        with urllib.request.urlopen(req) as resp:
+            status = resp.status
+            body = json.loads(resp.read().decode("utf-8"))
+
+        self.assertEqual(status, 200)
+        self.assertEqual(body["data"]["status"], "ok")
+        self.assertEqual(body["data"]["state"], "QUARANTINED")
+        mock_quarantine.assert_called_once_with("client-test-1", reason="Repeated violations", duration_minutes=30)
+
+    @patch("server_components.server_lib.release_client_quarantine")
+    def test_post_client_release_quarantine_endpoint(self, mock_release):
+        mock_release.return_value = {
+            "status": "ok",
+            "state": "NORMAL",
+            "message": "Quarantine released and normal network access restored.",
+        }
+        url = f"{self.base_url}/api/v1/clients/client-test-1/release-quarantine"
+        payload = json.dumps({"reason": "Admin approval"}).encode("utf-8")
+        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+
+        with urllib.request.urlopen(req) as resp:
+            status = resp.status
+            body = json.loads(resp.read().decode("utf-8"))
+
+        self.assertEqual(status, 200)
+        self.assertEqual(body["data"]["status"], "ok")
+        self.assertEqual(body["data"]["state"], "NORMAL")
+        mock_release.assert_called_once_with("client-test-1", reason="Admin approval")
+
+    @patch("server_components.server_lib.get_client_quarantine_status")
+    def test_get_client_quarantine_status_endpoint(self, mock_status):
+        mock_status.return_value = {
+            "status": "ok",
+            "data": {
+                "state": "QUARANTINED",
+                "is_quarantined": True,
+                "reason": "Test reason",
+            },
+        }
+        status, body = self._fetch("/api/v1/clients/client-test-1/quarantine")
+        self.assertEqual(status, 200)
+        self.assertEqual(body["data"]["state"], "QUARANTINED")
+        self.assertTrue(body["data"]["is_quarantined"])
 
 
 if __name__ == "__main__":

@@ -72,6 +72,7 @@ export function ClientDetailPage() {
   const [neighbourhoodLoading, setNeighbourhoodLoading] = useState(false);
   const [passiveNeighbourhoodLoading, setPassiveNeighbourhoodLoading] = useState(false);
   const [passiveNeighbourhood, setPassiveNeighbourhood] = useState<ClientPassiveNeighbourhood | null>(null);
+  const [quarantineLoading, setQuarantineLoading] = useState(false);
 
   // Process management states
   const [processList, setProcessList] = useState<ProcessItem[] | null>(null);
@@ -199,6 +200,58 @@ export function ClientDetailPage() {
       });
     } finally {
       setPassiveNeighbourhoodLoading(false);
+    }
+  };
+
+  const handleQuarantine = async () => {
+    if (!clientId) return;
+    const reason = window.prompt(
+      'Enter reason for network quarantine (e.g. repeated malware policy violations):',
+      'Administrator requested network quarantine',
+    );
+    if (reason === null) return;
+    setQuarantineLoading(true);
+    try {
+      await api.quarantineClient(clientId, { reason: reason || undefined });
+      addToast({
+        title: 'Quarantine applied',
+        message: `${c.hostname} has been isolated on the network.`,
+        severity: 'HIGH',
+      });
+      refetch();
+    } catch (err: any) {
+      addToast({
+        title: 'Quarantine failed',
+        message: err?.message || 'Failed to apply network quarantine.',
+        severity: 'CRITICAL',
+      });
+    } finally {
+      setQuarantineLoading(false);
+    }
+  };
+
+  const handleReleaseQuarantine = async () => {
+    if (!clientId) return;
+    if (!window.confirm(`Are you sure you want to release ${c.hostname} from network quarantine?`)) {
+      return;
+    }
+    setQuarantineLoading(true);
+    try {
+      await api.releaseClientQuarantine(clientId);
+      addToast({
+        title: 'Quarantine released',
+        message: `${c.hostname} network access has been restored.`,
+        severity: 'SUCCESS',
+      });
+      refetch();
+    } catch (err: any) {
+      addToast({
+        title: 'Release failed',
+        message: err?.message || 'Failed to release network quarantine.',
+        severity: 'CRITICAL',
+      });
+    } finally {
+      setQuarantineLoading(false);
     }
   };
 
@@ -446,6 +499,24 @@ export function ClientDetailPage() {
             onClick={() => setShowStartModal(true)}
           >
             🚀 Start Process
+          </Button>
+
+          <Button
+            variant="danger"
+            size="sm"
+            disabled={!isOnline || commandLoading || quarantineLoading}
+            onClick={handleQuarantine}
+          >
+            🚨 {quarantineLoading ? 'Quarantining…' : 'Isolate / Quarantine'}
+          </Button>
+
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={!isOnline || commandLoading || quarantineLoading}
+            onClick={handleReleaseQuarantine}
+          >
+            🔓 Release Quarantine
           </Button>
 
           <Button

@@ -8,9 +8,9 @@ import { DashboardPage } from './pages/Dashboard';
 import { ClientsPage } from './pages/Clients';
 import { ClientDetailPage } from './pages/ClientDetail';
 import { LatestScanPage } from './pages/LatestScan';
+import { AllDevicesPage } from './pages/AllDevices';
 import { ScanHistoryPage } from './pages/ScanHistory';
 import { DeviceDetailPage } from './pages/DeviceDetail';
-import { DhcpActivityPage } from './pages/DhcpActivity';
 import { AlertsPage } from './pages/Alerts';
 import { ActivityLogsPage } from './pages/ActivityLogs';
 import { SettingsPage } from './pages/Settings';
@@ -28,11 +28,11 @@ function AppContent() {
         <Route path="/clients/:clientId" element={<ClientDetailPage />} />
 
         {/* Network */}
-        <Route path="/network" element={<Navigate to="/network/latest" replace />} />
+        <Route path="/network" element={<Navigate to="/network/devices" replace />} />
+        <Route path="/network/devices" element={<AllDevicesPage />} />
         <Route path="/network/latest" element={<LatestScanPage />} />
         <Route path="/network/history" element={<ScanHistoryPage />} />
         <Route path="/network/devices/:mac" element={<DeviceDetailPage />} />
-        <Route path="/network/dhcp" element={<DhcpActivityPage />} />
 
         {/* Alerts */}
         <Route path="/alerts" element={<AlertsPage />} />

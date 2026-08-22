@@ -167,13 +167,14 @@ def classify_mdns_evidence(
     txt_records: Mapping[str, str] | None = None,
     hostname: str | None = None,
 ) -> dict[str, Any]:
-    """Extract OS, Model, and Service hints from mDNS announcements."""
+    """Extract OS, Model, Service, and Software hints from mDNS announcements."""
     result: dict[str, Any] = {
         "os_hint": None,
         "device_type": None,
         "model_hint": None,
         "confidence": 0.0,
         "evidence": [],
+        "software_hints": [],
     }
     txt = txt_records or {}
 
@@ -213,8 +214,10 @@ def classify_mdns_evidence(
             result["device_type"] = result["device_type"] or "Workstation"
             result["confidence"] = max(result["confidence"], 0.90)
             result["evidence"].append("mdns.service.dosvc")
+            result["software_hints"].append("Windows Delivery Optimization")
         elif "_airplay._tcp" in st or "_raop._tcp" in st:
             result["evidence"].append("mdns.service.airplay")
+            result["software_hints"].append("AirPlay")
             if not result["os_hint"]:
                 result["os_hint"] = "Apple OS"
                 result["confidence"] = max(result["confidence"], 0.85)
@@ -222,17 +225,27 @@ def classify_mdns_evidence(
             result["device_type"] = "Cast Device"
             result["evidence"].append("mdns.service.googlecast")
             result["confidence"] = max(result["confidence"], 0.88)
+            result["software_hints"].append("Google Cast")
         elif "_ipp._tcp" in st or "_printer._tcp" in st or "_pdl-datastream._tcp" in st:
             result["device_type"] = "Printer"
             result["evidence"].append("mdns.service.printer")
             result["confidence"] = max(result["confidence"], 0.92)
+            result["software_hints"].append("IPP / Network Print Service")
         elif "_adb._tcp" in st:
             result["os_hint"] = "Android"
             result["device_type"] = "Android Device"
             result["evidence"].append("mdns.service.adb")
             result["confidence"] = max(result["confidence"], 0.95)
+            result["software_hints"].append("Android Debug Bridge (ADB)")
         elif "_spotify-connect._tcp" in st:
             result["evidence"].append("mdns.service.spotify_connect")
+            result["software_hints"].append("Spotify Connect")
+        elif "_smb._tcp" in st:
+            result["software_hints"].append("SMB File Sharing")
+        elif "_ssh._tcp" in st:
+            result["software_hints"].append("SSH Server")
+        elif "_http._tcp" in st or "_https._tcp" in st:
+            result["software_hints"].append("Web Server")
 
     return result
 
@@ -242,17 +255,19 @@ def classify_ssdp_evidence(
     device_type_urn: str | None = None,
     location: str | None = None,
 ) -> dict[str, Any]:
-    """Extract OS and Device Type hints from SSDP/UPnP advertisements."""
+    """Extract OS, Device Type, and Software hints from SSDP/UPnP advertisements."""
     result: dict[str, Any] = {
         "os_hint": None,
         "device_type": None,
         "model_hint": None,
         "confidence": 0.0,
         "evidence": [],
+        "software_hints": [],
     }
 
     if server_header:
         srv = server_header.strip()
+        srv_lower = srv.lower()
         result["evidence"].append(f"ssdp.server:{srv}")
 
         if "Windows" in srv or "Microsoft" in srv:
@@ -271,10 +286,21 @@ def classify_ssdp_evidence(
             result["device_type"] = "Roku Streaming Device"
             result["confidence"] = 0.95
             result["evidence"].append("ssdp.server.roku")
+            result["software_hints"].append("Roku OS")
         elif "Sonos" in srv:
             result["device_type"] = "Sonos Speaker"
             result["confidence"] = 0.95
             result["evidence"].append("ssdp.server.sonos")
+            result["software_hints"].append("Sonos")
+
+        if "utorrent" in srv_lower:
+            result["software_hints"].append("uTorrent")
+        elif "bittorrent" in srv_lower:
+            result["software_hints"].append("BitTorrent")
+        elif "plex" in srv_lower:
+            result["software_hints"].append("Plex Media Server")
+        elif "kodi" in srv_lower:
+            result["software_hints"].append("Kodi")
 
     if device_type_urn:
         urn = device_type_urn.lower()

@@ -737,6 +737,8 @@ class PassiveProtocolListener:
                 device.model_hint = device.model_classification.value
                 for ev in mdns_eval.get("evidence", []):
                     device.add_evidence("model_hint", ev)
+            for hint in mdns_eval.get("software_hints", []):
+                device.add_software_hint(hint)
 
         elif protocol in {"llmnr", "nbns"}:
             hostname = obs.get("hostname")
@@ -765,6 +767,8 @@ class PassiveProtocolListener:
                 device.device_type = device.device_type_classification.value
                 for ev in ssdp_eval.get("evidence", []):
                     device.add_evidence("device_type", ev)
+            for hint in ssdp_eval.get("software_hints", []):
+                device.add_software_hint(hint)
 
         # Apply multi-source synergistic classification
         apply_classification_to_device(device, self._vendors_db)

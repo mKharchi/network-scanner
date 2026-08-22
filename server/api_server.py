@@ -162,6 +162,17 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 self.send_data(detail)
                 return
 
+            # Client quarantine status GET
+            m = re.match(r"^/api/v1/clients/([^/]+)/quarantine$", path)
+            if m:
+                client_id = urllib.parse.unquote(m.group(1))
+                status_res = server_lib.get_client_quarantine_status(client_id)
+                if status_res.get("status") == "ok":
+                    self.send_data(status_res.get("data", status_res))
+                else:
+                    self.send_error_response(400, "COMMAND_FAILED", status_res.get("message", "Failed to retrieve quarantine status."))
+                return
+
             # 5. Network Scans
             if path == "/api/v1/network/scans/latest":
                 scan_data = api_service.get_latest_scan()
@@ -253,7 +264,16 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 self.send_data(scan_data)
                 return
 
-            # 6. Network Devices
+            # 6a. Network Devices — list all
+            if path == "/api/v1/network/devices":
+                search = get_param("search")
+                limit = get_int_param("limit", 500)
+                offset = get_int_param("offset", 0)
+                devices_data = api_service.list_network_devices(search=search, limit=limit, offset=offset)
+                self.send_data(devices_data)
+                return
+
+            # 6b. Network Device — single device by MAC
             m = re.match(r"^/api/v1/network/devices/([^/]+)$", path)
             if m:
                 mac_addr = urllib.parse.unquote(m.group(1))
@@ -404,6 +424,43 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     self.send_data(res, status_code=200)
                 else:
                     self.send_error_response(400, "COMMAND_FAILED", res.get("message", "Command execution failed."))
+                return
+
+            # Client Quarantine (POST /api/v1/clients/{client_id}/quarantine)
+            m = re.match(r"^/api/v1/clients/([^/]+)/quarantine$", path)
+            if m:
+                client_id = urllib.parse.unquote(m.group(1))
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                    body = self.rfile.read(length).decode("utf-8") if length else "{}"
+                    payload = json.loads(body) if body else {}
+                except Exception:
+                    payload = {}
+                reason = payload.get("reason", "Administrator requested network quarantine")
+                duration = payload.get("duration_minutes", 60)
+                res = server_lib.quarantine_client(client_id, reason=reason, duration_minutes=duration)
+                if res.get("status") == "ok":
+                    self.send_data(res, status_code=200)
+                else:
+                    self.send_error_response(400, "QUARANTINE_FAILED", res.get("message", "Failed to quarantine client."))
+                return
+
+            # Client Release Quarantine (POST /api/v1/clients/{client_id}/release-quarantine)
+            m = re.match(r"^/api/v1/clients/([^/]+)/release-quarantine$", path)
+            if m:
+                client_id = urllib.parse.unquote(m.group(1))
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                    body = self.rfile.read(length).decode("utf-8") if length else "{}"
+                    payload = json.loads(body) if body else {}
+                except Exception:
+                    payload = {}
+                reason = payload.get("reason", "Administrator released network quarantine")
+                res = server_lib.release_client_quarantine(client_id, reason=reason)
+                if res.get("status") == "ok":
+                    self.send_data(res, status_code=200)
+                else:
+                    self.send_error_response(400, "RELEASE_FAILED", res.get("message", "Failed to release client quarantine."))
                 return
 
             # Manual Network Scan Trigger / Report Merge (POST /api/v1/network/scans)
