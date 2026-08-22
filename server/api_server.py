@@ -338,6 +338,21 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
         path = parsed_url.path.rstrip("/")
 
         try:
+            # Request bounded passive-protocol observations from one connected client.
+            m = re.match(r"^/api/v1/clients/([^/]+)/passive-neighbourhood$", path)
+            if m:
+                client_id = urllib.parse.unquote(m.group(1))
+                result = server_lib.request_client_passive_neighbourhood(client_id)
+                if result["status"] == "completed":
+                    self.send_data(result, status_code=200)
+                elif result["status"] == "client_timeout":
+                    self.send_error_response(504, "CLIENT_TIMEOUT", result["message"])
+                elif result["status"] == "client_unavailable":
+                    self.send_error_response(409, "CLIENT_UNAVAILABLE", result["message"])
+                else:
+                    self.send_error_response(502, "CLIENT_REQUEST_FAILED", result["message"])
+                return
+
             # Direct passive neighbourhood collection from one connected client.
             m = re.match(r"^/api/v1/clients/([^/]+)/network-neighbourhood$", path)
             if m:

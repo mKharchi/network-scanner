@@ -95,6 +95,37 @@ export interface ClientConnection {
   last_disconnected_at: string | null;
 }
 
+export interface PassiveProtocolObservation {
+  protocol: "mdns" | "llmnr" | "nbns" | "ssdp";
+  observed_at?: string;
+  first_observed_at?: string;
+  seen_count?: number;
+  ip_address?: string;
+  mac_address?: string;
+  hostname?: string;
+  device_name?: string;
+  service_type?: string;
+  service_name?: string;
+  device_type?: string;
+  vendor?: string;
+  model?: string;
+  raw_fields?: {
+    usn?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+export interface ClientPassiveNeighbourhood {
+  status: "completed";
+  client_id: string;
+  timeout_seconds: number;
+  observed_at: string;
+  reporter: string;
+  observations: PassiveProtocolObservation[];
+  observation_count: number;
+}
+
 export interface ManagedClientSummary {
   id: string;
   database_id: number;
@@ -447,6 +478,27 @@ export const api = {
         observations_sent: number;
         timeout_seconds: number;
       };
+    })(),
+
+  requestClientPassiveNeighbourhood: (clientId: string) =>
+    (async () => {
+      const baseWithApi = API_ORIGIN.replace(/\/+$/, "") + BASE;
+      const resp = await fetch(
+        baseWithApi + `/clients/${encodeURIComponent(clientId)}/passive-neighbourhood`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+        },
+      );
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => null);
+        throw new ApiError(
+          body?.error?.code ?? "UNKNOWN_ERROR",
+          body?.error?.message ?? `HTTP ${resp.status}`,
+          resp.status,
+        );
+      }
+      return (await resp.json()).data as ClientPassiveNeighbourhood;
     })(),
 
   triggerManualScan: () =>

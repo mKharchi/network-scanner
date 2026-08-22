@@ -6,7 +6,7 @@ import threading
 import types
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 
 CLIENT_DIRECTORY = Path(__file__).resolve().parents[1]
@@ -262,6 +262,44 @@ class ClientBackgroundScanTests(unittest.TestCase):
         self.assertEqual(sent[0]["data"]["observation_source"], "REQUESTED_NEIGHBOURHOOD")
         self.assertEqual(sent[0]["data"]["neighbours"], neighbours)
 
+    def test_passive_neighbourhood_request_reads_only_listener_snapshot(self):
+        observations = [{
+            "protocol": "ssdp",
+            "observed_at": "2026-08-22T10:00:00+00:00",
+            "ip_address": "172.16.0.30",
+        }]
+        listener = MagicMock()
+        listener.snapshot.return_value = observations
+
+        with patch.object(
+            client_module, "_snapshot_client_mac", return_value="AA:BB:CC:DD:EE:FF"
+        ):
+            result = client_module.get_requested_passive_neighbourhood(listener)
+
+        self.assertEqual(result["reporter"], "AA:BB:CC:DD:EE:FF")
+        self.assertEqual(result["observations"], observations)
+        self.assertIn("observed_at", result)
+        listener.snapshot.assert_called_once_with()
+        with patch.object(client_module, "_snapshot_client_mac", return_value=None):
+            empty_result = client_module.get_requested_passive_neighbourhood(None)
+        self.assertEqual(empty_result["reporter"], "unknown")
+        self.assertEqual(empty_result["observations"], [])
+        self.assertIn("observed_at", empty_result)
+
+    def test_passive_neighbourhood_request_does_not_use_daily_neighbourhood_paths(self):
+        listener = MagicMock()
+        listener.snapshot.return_value = [{"protocol": "mdns", "hostname": "printer.local"}]
+        with patch.object(client_module, "_snapshot_client_mac", return_value="AA:BB:CC:DD:EE:FF"), patch.object(
+            client_module, "load_daily_neighbourhood", side_effect=AssertionError
+        ), patch.object(
+            client_module, "update_daily_neighbourhood", side_effect=AssertionError
+        ), patch.object(
+            client_module, "send_message", side_effect=AssertionError
+        ):
+            result = client_module.get_requested_passive_neighbourhood(listener)
+
+        self.assertEqual(result["observations"], listener.snapshot.return_value)
+
     def test_requested_neighbourhood_command_runs_in_a_background_worker(self):
         entered = threading.Event()
         release = threading.Event()
@@ -294,6 +332,120 @@ class ClientBackgroundScanTests(unittest.TestCase):
             "command": "GET_NETWORK_NEIGHBOURHOOD",
             "data": {"status": "ok", "observations_sent": 2},
         }])
+
+    def test_session_starts_and_stops_passive_protocol_listener_with_dhcp(self):
+        class FakeSocket:
+            def settimeout(self, _timeout):
+                pass
+
+            def connect(self, _address):
+                pass
+
+            def getsockname(self):
+                return ("172.16.0.10", 50001)
+
+            def close(self):
+                pass
+
+        stop_event = threading.Event()
+        messages = iter([
+            {"type": "REGISTERED"},
+            {"type": "FORBIDDEN_PROCESSES", "data": []},
+            None,
+        ])
+
+        def receive(_socket, **_kwargs):
+            message = next(messages)
+            if message is None:
+                stop_event.set()
+            return message
+
+        with patch.object(client_module.socket, "socket", return_value=FakeSocket()), patch.object(
+            client_module, "receive_message", side_effect=receive
+        ), patch.object(
+            client_module, "_startup_log"
+        ), patch.object(
+            client_module, "create_registration_message", return_value={"type": "REGISTER", "data": {}}
+        ), patch.object(client_module, "send_message"), patch.object(
+            client_module, "send_stored_daily_neighbourhood"
+        ), patch.object(client_module, "collect_daily_network_neighbours"), patch.object(
+            client_module, "background_scanner"
+        ), patch("network_neighbour_collector.get_local_network", return_value={"interface": "Ethernet 2"}), patch.object(
+            client_module, "DHCPListener"
+        ) as dhcp_listener, patch.object(
+            client_module, "PassiveProtocolListener"
+        ) as passive_listener:
+            client_module.start_client(stop_event)
+
+        dhcp_listener.assert_called_once()
+        self.assertEqual(dhcp_listener.call_args.kwargs["interface"], "Ethernet 2")
+        dhcp_listener.return_value.start.assert_called_once_with()
+        dhcp_listener.return_value.stop.assert_called_once_with()
+        passive_listener.assert_called_once()
+        self.assertEqual(passive_listener.call_args.kwargs["interface"], "Ethernet 2")
+        self.assertTrue(callable(passive_listener.call_args.kwargs["status_callback"]))
+        passive_listener.return_value.start.assert_called_once_with()
+        passive_listener.return_value.stop.assert_called_once_with()
+
+    def test_session_returns_passive_neighbourhood_response_from_listener_snapshot(self):
+        class FakeSocket:
+            def settimeout(self, _timeout):
+                pass
+
+            def connect(self, _address):
+                pass
+
+            def getsockname(self):
+                return ("172.16.0.10", 50001)
+
+            def close(self):
+                pass
+
+        stop_event = threading.Event()
+        messages = iter([
+            {"type": "REGISTERED"},
+            {"type": "FORBIDDEN_PROCESSES", "data": []},
+            {"type": "COMMAND", "command": "GET_PASSIVE_NEIGHBOURHOOD"},
+            None,
+        ])
+        sent = []
+
+        def receive(_socket, **_kwargs):
+            message = next(messages)
+            if message is None:
+                stop_event.set()
+            return message
+
+        observations = [{"protocol": "mdns", "hostname": "printer.local"}]
+        with patch.object(client_module.socket, "socket", return_value=FakeSocket()), patch.object(
+            client_module, "receive_message", side_effect=receive
+        ), patch.object(
+            client_module, "_startup_log"
+        ), patch.object(
+            client_module, "_snapshot_client_mac", return_value="AA:BB:CC:DD:EE:FF"
+        ), patch.object(
+            client_module, "create_registration_message", return_value={"type": "REGISTER", "data": {}}
+        ), patch.object(
+            client_module, "send_message", side_effect=lambda _socket, message: sent.append(message)
+        ), patch.object(
+            client_module, "send_stored_daily_neighbourhood"
+        ), patch.object(
+            client_module, "collect_daily_network_neighbours"
+        ), patch.object(
+            client_module, "background_scanner"
+        ), patch("network_neighbour_collector.get_local_network", return_value={"interface": "Ethernet 2"}), patch.object(
+            client_module, "DHCPListener"
+        ), patch.object(
+            client_module, "PassiveProtocolListener"
+        ) as passive_listener:
+            passive_listener.return_value.snapshot.return_value = observations
+            client_module.start_client(stop_event)
+
+        response = next(message for message in sent if message.get("command") == "GET_PASSIVE_NEIGHBOURHOOD")
+        self.assertEqual(response["type"], "RESPONSE")
+        self.assertEqual(response["data"]["reporter"], "AA:BB:CC:DD:EE:FF")
+        self.assertEqual(response["data"]["observations"], observations)
+        passive_listener.return_value.snapshot.assert_called_once_with()
 
     def test_active_scan_reports_results_as_an_async_neighbour_message(self):
         neighbours = [
