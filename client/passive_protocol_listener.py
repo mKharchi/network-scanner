@@ -1,8 +1,8 @@
-"""Passive protocol observation for the Windows client.
+"""Unified Passive Protocol Discovery Scanner for the Windows Client.
 
-This module captures only packets already visible on the selected interface. It
-does not send discovery traffic, follow advertised URLs, persist observations,
-or interact with the existing neighbourhood/DHCP data paths.
+Captures traffic passively visible on the selected interface across DHCP,
+mDNS, SSDP, LLMNR, and NBNS. Unifies observations into a single device
+enrichment engine with evidence tracking, temporal metrics, and classification.
 """
 
 from __future__ import annotations
@@ -18,27 +18,40 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any, Callable
 
+from device_model import (
+    DeviceCorrelator,
+    DeviceRecord,
+    normalise_ip_address,
+    normalise_mac_address,
+    normalise_timestamp,
+    utc_now,
+)
+from fingerprinting import (
+    apply_classification_to_device,
+    classify_dhcp_evidence,
+    classify_mdns_evidence,
+    classify_ssdp_evidence,
+    evaluate_hostname_heuristics,
+)
+from dhcp_listener import parse_dhcp_packet
 
 LOG = logging.getLogger("passive_protocol_listener")
 
-SUPPORTED_PROTOCOLS = frozenset({"mdns", "llmnr", "nbns", "ssdp"})
+SUPPORTED_PROTOCOLS = frozenset({"dhcp", "mdns", "llmnr", "nbns", "ssdp"})
 PROTOCOL_LABELS = {
+    "dhcp": "DHCP",
     "mdns": "mDNS",
     "llmnr": "LLMNR",
     "nbns": "NBNS",
     "ssdp": "SSDP",
 }
-PASSIVE_PROTOCOL_BPF_FILTER = "udp and (port 137 or port 1900 or port 5353 or port 5355)"
+PASSIVE_PROTOCOL_BPF_FILTER = "udp and (port 67 or port 68 or port 137 or port 1900 or port 5353 or port 5355)"
 MAX_OBSERVATIONS = 512
 MAX_RAW_FIELDS = 16
 MAX_RAW_FIELD_SIZE = 512
 MAX_RAW_SERIALIZED_SIZE = 4096
 MAX_TEXT_SIZE = 255
 MAC_ADDRESS_PATTERN = re.compile(r"^[0-9A-F]{2}(?::[0-9A-F]{2}){5}$")
-
-
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def _normalise_text(value: Any, *, limit: int = MAX_TEXT_SIZE) -> str | None:
@@ -50,34 +63,6 @@ def _normalise_text(value: Any, *, limit: int = MAX_TEXT_SIZE) -> str | None:
     return value
 
 
-def _normalise_ip_address(value: Any) -> str | None:
-    if value is None:
-        return None
-    try:
-        address = ipaddress.ip_address(str(value).strip())
-    except ValueError:
-        return None
-    if (
-        address.is_unspecified
-        or address.is_loopback
-        or address.is_multicast
-        or address.is_reserved
-    ):
-        return None
-    return str(address)
-
-
-def _normalise_mac_address(value: Any) -> str | None:
-    if not isinstance(value, str):
-        return None
-    mac_address = value.strip().replace("-", ":").upper()
-    if not MAC_ADDRESS_PATTERN.fullmatch(mac_address):
-        return None
-    if mac_address == "FF:FF:FF:FF:FF:FF" or int(mac_address[:2], 16) & 1:
-        return None
-    return mac_address
-
-
 def _normalise_port(value: Any) -> int | None:
     if isinstance(value, bool):
         return None
@@ -86,20 +71,6 @@ def _normalise_port(value: Any) -> int | None:
     except (TypeError, ValueError):
         return None
     return port if 1 <= port <= 65535 else None
-
-
-def _normalise_timestamp(value: Any, *, default: str | None = None) -> str | None:
-    if value is None:
-        return default
-    if not isinstance(value, str):
-        return None
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        return None
-    return parsed.astimezone(timezone.utc).isoformat()
 
 
 def _normalise_raw_fields(value: Any) -> dict[str, Any]:
@@ -126,10 +97,17 @@ def _normalise_raw_fields(value: Any) -> dict[str, Any]:
                     nested[clean_nested_key] = clean_nested_value
             if nested:
                 result[clean_key] = nested
+        elif isinstance(item, list):
+            clean_list = [
+                _normalise_text(str(elem), limit=MAX_RAW_FIELD_SIZE)
+                if isinstance(elem, str) else elem
+                for elem in item[:MAX_RAW_FIELDS]
+            ]
+            result[clean_key] = clean_list
         else:
-            clean_value = _normalise_text(item, limit=MAX_RAW_FIELD_SIZE)
+            clean_value = _normalise_text(str(item), limit=MAX_RAW_FIELD_SIZE)
             if clean_value is not None:
-                result[clean_key] = clean_value
+                result[clean_key] = item if isinstance(item, (int, float, bool)) else clean_value
 
     while result:
         try:
@@ -152,17 +130,17 @@ def normalise_passive_observation(
     if protocol not in SUPPORTED_PROTOCOLS:
         return None
 
-    timestamp = _normalise_timestamp(
-        observed_at or observation.get("observed_at"), default=_utc_now()
+    timestamp = normalise_timestamp(
+        observed_at or observation.get("observed_at"), default=utc_now()
     )
-    first_observed_at = _normalise_timestamp(
+    first_observed_at = normalise_timestamp(
         observation.get("first_observed_at"), default=timestamp
     )
     if timestamp is None or first_observed_at is None:
         return None
 
     kind = observation.get("observation_kind")
-    if kind not in {None, "query", "response", "announcement", "search", "advertisement"}:
+    if kind not in {None, "query", "response", "announcement", "search", "advertisement", "request", "discover", "ack"}:
         return None
 
     normalized: dict[str, Any] = {
@@ -173,8 +151,8 @@ def normalise_passive_observation(
     }
     optional_fields = {
         "observation_kind": _normalise_text(kind, limit=32),
-        "ip_address": _normalise_ip_address(observation.get("ip_address")),
-        "mac_address": _normalise_mac_address(observation.get("mac_address")),
+        "ip_address": normalise_ip_address(observation.get("ip_address")),
+        "mac_address": normalise_mac_address(observation.get("mac_address")),
         "hostname": _normalise_text(observation.get("hostname")),
         "device_name": _normalise_text(observation.get("device_name")),
         "service_type": _normalise_text(observation.get("service_type")),
@@ -196,16 +174,23 @@ def normalise_passive_observation(
 
     if not any(
         normalized.get(field)
-        for field in ("hostname", "service_name", "device_type", "ip_address")
+        for field in ("hostname", "service_name", "device_type", "ip_address", "mac_address")
     ) and not raw_fields.get("usn"):
         return None
     return normalized
 
 
 def passive_observation_key(observation: Mapping[str, Any]) -> tuple[Any, ...] | None:
-    """Return the documented protocol-specific key for a normalized observation."""
+    """Return the protocol-specific key for a normalized observation."""
     protocol = observation.get("protocol")
     raw_fields = observation.get("raw_fields") or {}
+    if protocol == "dhcp":
+        return (
+            protocol,
+            observation.get("mac_address") or "",
+            observation.get("ip_address") or "",
+            observation.get("hostname") or "",
+        )
     if protocol == "mdns":
         return (
             protocol,
@@ -439,7 +424,6 @@ def _decode_nbns_name(data: bytes, offset: int) -> tuple[str, int]:
         for index in range(0, 32, 2)
     )
     name = decoded[:15].decode("ascii", errors="replace").rstrip()
-    suffix = decoded[15]
     cursor = offset + 33
     while cursor < len(data):
         length = data[cursor]
@@ -556,7 +540,7 @@ def parse_ssdp_payload(payload: bytes, source: Mapping[str, Any]) -> list[dict[s
 
 
 class PassiveProtocolListener:
-    """Capture supported passive UDP protocols with one controlled worker."""
+    """Unified passive discovery scanner across DHCP, mDNS, SSDP, LLMNR, and NBNS."""
 
     def __init__(
         self,
@@ -564,15 +548,19 @@ class PassiveProtocolListener:
         *,
         max_observations: int = MAX_OBSERVATIONS,
         status_callback: Callable[[str], None] | None = None,
+        dhcp_callback: Callable[[dict[str, Any]], None] | None = None,
     ):
         self.interface = interface
         self.observations = PassiveObservationBuffer(max_observations)
+        self.correlator = DeviceCorrelator(max_devices=max_observations)
         self._status_callback = status_callback
+        self._dhcp_callback = dhcp_callback
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._status_lock = threading.RLock()
         self._protocol_status = {protocol: "UNAVAILABLE" for protocol in PROTOCOL_LABELS}
         self._capture_error: str | None = None
+        self._vendors_db: Any = None
 
     @property
     def running(self) -> bool:
@@ -628,19 +616,27 @@ class PassiveProtocolListener:
             return False
         self._stop.clear()
         self._capture_error = None
+
+        # Preload OUI vendor database
+        try:
+            import oui
+            self._vendors_db = oui.load_oui_database()
+        except Exception:
+            self._vendors_db = None
+
         with self._status_lock:
             for protocol in self._protocol_status:
                 self._protocol_status[protocol] = "AVAILABLE"
-        self._emit_status("[PASSIVE LISTENER] Starting...")
+        self._emit_status("[PASSIVE LISTENER] Starting unified discovery scanner...")
         for protocol, label in PROTOCOL_LABELS.items():
-            self._emit_status(f"[PASSIVE LISTENER] {label} listener started")
+            self._emit_status(f"[PASSIVE LISTENER] {label} listener active")
         self._thread = threading.Thread(
             target=self._run,
             daemon=True,
             name="passive-protocol-listener",
         )
         self._thread.start()
-        self._emit_status(f"[PASSIVE LISTENER] Listener ready ({self.availability})")
+        self._emit_status(f"[PASSIVE LISTENER] Unified listener ready ({self.availability})")
         return True
 
     def stop(self) -> None:
@@ -649,10 +645,132 @@ class PassiveProtocolListener:
             self._thread.join(timeout=2)
 
     def snapshot(self) -> list[dict[str, Any]]:
+        """Return raw observation buffer snapshot."""
         return self.observations.snapshot()
 
+    def snapshot_devices(self) -> list[dict[str, Any]]:
+        """Return unified, enriched device records."""
+        return self.correlator.snapshot()
+
+    def _correlate_observation(self, obs: dict[str, Any]) -> None:
+        """Enrich and correlate one observation into the DeviceCorrelator."""
+        protocol = obs.get("protocol")
+        mac = obs.get("mac_address")
+        ip = obs.get("ip_address")
+
+        if not mac and not ip:
+            return
+
+        device = self.correlator.get_or_create_device(mac, ip, observed_at=obs.get("observed_at"))
+        device.record_activity(obs.get("observed_at"), protocol)
+
+        if mac and not device.mac_address:
+            device.mac_address = mac
+        if ip:
+            device.add_ip_address(ip, source=protocol)
+
+        # Merge protocol-specific details
+        if protocol == "dhcp":
+            raw_fields = obs.get("raw_fields") or {}
+            hostname = obs.get("hostname")
+            vendor_class = obs.get("vendor_class")
+            prl = obs.get("parameter_request_list")
+
+            if hostname:
+                device.set_hostname(hostname, source="dhcp", priority=40)
+            if raw_fields:
+                device.raw_fields.setdefault("dhcp", {}).update(raw_fields)
+
+            if vendor_class:
+                device.add_evidence("os_hint", "dhcp.vendor_class")
+            if prl:
+                device.add_evidence("os_hint", "dhcp.parameter_request_list")
+
+            dhcp_eval = classify_dhcp_evidence(
+                vendor_class=vendor_class,
+                parameter_request_list=prl,
+                hostname=hostname,
+                client_id=obs.get("client_id"),
+            )
+            if dhcp_eval.get("os_hint"):
+                device.os_classification.update_if_better(dhcp_eval["os_hint"], dhcp_eval["confidence"], "dhcp.vendor_class")
+                device.os_hint = device.os_classification.value
+                for ev in dhcp_eval.get("evidence", []):
+                    device.add_evidence("os_hint", ev)
+            if dhcp_eval.get("device_type"):
+                device.device_type_classification.update_if_better(dhcp_eval["device_type"], dhcp_eval["confidence"], "dhcp.device_type")
+                device.device_type = device.device_type_classification.value
+                for ev in dhcp_eval.get("evidence", []):
+                    device.add_evidence("device_type", ev)
+
+        elif protocol == "mdns":
+            service_type = obs.get("service_type")
+            service_name = obs.get("service_name")
+            hostname = obs.get("hostname")
+            txt_dict = (obs.get("raw_fields") or {}).get("txt") if isinstance(obs.get("raw_fields"), dict) else None
+
+            if service_type:
+                device.add_service(service_type)
+            if hostname:
+                device.set_hostname(hostname, source="mdns", priority=30)
+            if txt_dict:
+                device.raw_fields.setdefault("mdns_txt", {}).update(txt_dict)
+
+            mdns_eval = classify_mdns_evidence(
+                service_type=service_type,
+                service_name=service_name,
+                txt_records=txt_dict,
+                hostname=hostname,
+            )
+            if mdns_eval.get("os_hint"):
+                device.os_classification.update_if_better(mdns_eval["os_hint"], mdns_eval["confidence"], "mdns")
+                device.os_hint = device.os_classification.value
+                for ev in mdns_eval.get("evidence", []):
+                    device.add_evidence("os_hint", ev)
+            if mdns_eval.get("device_type"):
+                device.device_type_classification.update_if_better(mdns_eval["device_type"], mdns_eval["confidence"], "mdns")
+                device.device_type = device.device_type_classification.value
+                for ev in mdns_eval.get("evidence", []):
+                    device.add_evidence("device_type", ev)
+            if mdns_eval.get("model_hint"):
+                device.model_classification.update_if_better(mdns_eval["model_hint"], mdns_eval["confidence"], "mdns.txt.model")
+                device.model_hint = device.model_classification.value
+                for ev in mdns_eval.get("evidence", []):
+                    device.add_evidence("model_hint", ev)
+
+        elif protocol in {"llmnr", "nbns"}:
+            hostname = obs.get("hostname")
+            if hostname:
+                priority = 20 if protocol == "llmnr" else 10
+                device.set_hostname(hostname, source=protocol, priority=priority)
+            if protocol == "nbns":
+                device.add_evidence("os_hint", "nbns")
+            elif protocol == "llmnr":
+                device.add_evidence("os_hint", "llmnr")
+
+        elif protocol == "ssdp":
+            server_header = obs.get("server")
+            dev_type = obs.get("device_type")
+            loc = obs.get("location")
+            if server_header:
+                device.software_hint = server_header
+            ssdp_eval = classify_ssdp_evidence(server_header, dev_type, loc)
+            if ssdp_eval.get("os_hint"):
+                device.os_classification.update_if_better(ssdp_eval["os_hint"], ssdp_eval["confidence"], "ssdp.server")
+                device.os_hint = device.os_classification.value
+                for ev in ssdp_eval.get("evidence", []):
+                    device.add_evidence("os_hint", ev)
+            if ssdp_eval.get("device_type"):
+                device.device_type_classification.update_if_better(ssdp_eval["device_type"], ssdp_eval["confidence"], "ssdp.device_type")
+                device.device_type = device.device_type_classification.value
+                for ev in ssdp_eval.get("evidence", []):
+                    device.add_evidence("device_type", ev)
+
+        # Apply multi-source synergistic classification
+        apply_classification_to_device(device, self._vendors_db)
+
     def process_packet(self, packet: Any) -> int:
-        """Parse one Scapy packet synchronously; intended for the capture worker/tests."""
+        """Parse one Scapy packet synchronously; intended for capture worker/tests."""
         try:
             from scapy.layers.inet import IP, UDP  # type: ignore
             from scapy.layers.inet6 import IPv6  # type: ignore
@@ -661,10 +779,11 @@ class PassiveProtocolListener:
             if not packet.haslayer(UDP):
                 return 0
             udp = packet[UDP]
-            port = udp.sport if udp.sport in {137, 1900, 5353, 5355} else udp.dport
-            if port not in {137, 1900, 5353, 5355}:
+            port = udp.sport if udp.sport in {67, 68, 137, 1900, 5353, 5355} else udp.dport
+            if port not in {67, 68, 137, 1900, 5353, 5355}:
                 return 0
-            source = {}
+
+            source: dict[str, Any] = {}
             if packet.haslayer(IP):
                 source["ip_address"] = packet[IP].src
             elif packet.haslayer(IPv6):
@@ -673,7 +792,18 @@ class PassiveProtocolListener:
                 source["mac_address"] = packet[Ether].src
             payload = bytes(udp.payload)
 
-            if port == 5353:
+            parsed: list[dict[str, Any]] = []
+
+            if port in {67, 68}:
+                dhcp_parsed = parse_dhcp_packet(payload)
+                if dhcp_parsed and dhcp_parsed.get("mac_address"):
+                    parsed = [dhcp_parsed]
+                    if self._dhcp_callback:
+                        try:
+                            self._dhcp_callback(dhcp_parsed)
+                        except Exception:
+                            LOG.exception("[PASSIVE LISTENER] DHCP callback failed")
+            elif port == 5353:
                 parsed = _dns_observations("mdns", payload, source)
             elif port == 5355:
                 parsed = _dns_observations("llmnr", payload, source)
@@ -681,7 +811,14 @@ class PassiveProtocolListener:
                 parsed = parse_nbns_payload(payload, source)
             else:
                 parsed = parse_ssdp_payload(payload, source)
-            return sum(self.observations.add(item) for item in parsed)
+
+            added_count = 0
+            for item in parsed:
+                if self.observations.add(item):
+                    added_count += 1
+                self._correlate_observation(item)
+
+            return added_count
         except Exception:
             LOG.exception("[PASSIVE LISTENER] Packet parser failed")
             return 0
@@ -696,8 +833,8 @@ class PassiveProtocolListener:
             from scapy.layers.inet import UDP  # type: ignore
 
             return packet.haslayer(UDP) and (
-                packet[UDP].sport in {137, 1900, 5353, 5355}
-                or packet[UDP].dport in {137, 1900, 5353, 5355}
+                packet[UDP].sport in {67, 68, 137, 1900, 5353, 5355}
+                or packet[UDP].dport in {67, 68, 137, 1900, 5353, 5355}
             )
         except Exception:
             return False

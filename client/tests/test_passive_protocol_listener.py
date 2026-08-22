@@ -284,12 +284,13 @@ class PassiveProtocolListenerTests(unittest.TestCase):
             self.assertEqual(listener.availability, "PARTIALLY_AVAILABLE")
             listener.stop()
 
-        self.assertIn("[PASSIVE LISTENER] Starting...", messages)
-        self.assertIn("[PASSIVE LISTENER] mDNS listener started", messages)
-        self.assertIn("[PASSIVE LISTENER] LLMNR listener started", messages)
-        self.assertIn("[PASSIVE LISTENER] NBNS listener started", messages)
-        self.assertIn("[PASSIVE LISTENER] SSDP listener started", messages)
-        self.assertIn("[PASSIVE LISTENER] Listener ready (AVAILABLE)", messages)
+        self.assertIn("[PASSIVE LISTENER] Starting unified discovery scanner...", messages)
+        self.assertIn("[PASSIVE LISTENER] DHCP listener active", messages)
+        self.assertIn("[PASSIVE LISTENER] mDNS listener active", messages)
+        self.assertIn("[PASSIVE LISTENER] LLMNR listener active", messages)
+        self.assertIn("[PASSIVE LISTENER] NBNS listener active", messages)
+        self.assertIn("[PASSIVE LISTENER] SSDP listener active", messages)
+        self.assertIn("[PASSIVE LISTENER] Unified listener ready (AVAILABLE)", messages)
         self.assertIn(
             "[PASSIVE LISTENER] SSDP unavailable: test capture failure", messages
         )
@@ -307,6 +308,41 @@ class PassiveProtocolListenerTests(unittest.TestCase):
         self.assertEqual(listener.availability, "UNAVAILABLE")
         self.assertIn("[PASSIVE LISTENER] Listener unavailable (UNAVAILABLE)", messages)
         self.assertIn("[PASSIVE LISTENER] Capture worker stopped", messages)
+
+    def test_unified_listener_correlates_dhcp_and_mdns_into_one_device_record(self):
+        listener = PassiveProtocolListener()
+        
+        # Simulate DHCP observation
+        dhcp_obs = {
+            "protocol": "dhcp",
+            "mac_address": "E4:FD:45:BA:8B:96",
+            "ip_address": "172.16.2.50",
+            "hostname": "DESKTOP-ABC",
+            "vendor_class": "MSFT 5.0",
+            "parameter_request_list": [1, 3, 6, 15, 31, 33, 43, 44, 46, 47],
+        }
+        listener._correlate_observation(dhcp_obs)
+
+        # Simulate mDNS observation on same MAC
+        mdns_obs = {
+            "protocol": "mdns",
+            "mac_address": "E4:FD:45:BA:8B:96",
+            "ip_address": "172.16.2.50",
+            "hostname": "DESKTOP-ABC.local",
+            "service_type": "_dosvc._tcp.local",
+        }
+        listener._correlate_observation(mdns_obs)
+
+        devices = listener.snapshot_devices()
+        self.assertEqual(len(devices), 1)
+        device = devices[0]
+        self.assertEqual(device["mac_address"], "E4:FD:45:BA:8B:96")
+        self.assertEqual(device["hostname"], "DESKTOP-ABC")
+        self.assertEqual(device["os_hint"], "Windows")
+        self.assertIn("dhcp", device["protocols_seen"])
+        self.assertIn("mdns", device["protocols_seen"])
+        self.assertIn("_dosvc._tcp.local", device["services"])
+        self.assertIn("dhcp.vendor_class", device["evidence"]["os_hint"])
 
 
 if __name__ == "__main__":
