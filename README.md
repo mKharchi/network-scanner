@@ -84,6 +84,10 @@ Open `http://127.0.0.1:8080` in a browser. Set `GUI_HOST` and `GUI_PORT` to
 change the local bind address or port. Do not expose it beyond a trusted local
 environment until operator authentication and TLS are implemented.
 
+For a one-click Windows launcher, use [`server/launch_gui.bat`](/home/adonis/network-scanner/server/launch_gui.bat).
+You can create a normal Windows shortcut to that file, or pin the shortcut to
+Start/Taskbar and assign `server/gui/src-tauri/icons/icon.ico` as the icon.
+
 ### Manual LAN Discovery Aggregation
 
 Network discovery is performed entirely on the monitoring clients. Each
