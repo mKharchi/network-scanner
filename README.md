@@ -191,7 +191,16 @@ Set-Service NetworkClient -StartupType Disabled
 ```
 
 To remove the logon task later, run `./uninstall_user_logon_task.ps1` from the
-same account.
+same account. The script stops an active task instance before removing it, so
+the client cannot remain connected after its task is removed.
+
+If an older task was already removed while its client process was running, use
+the following from an elevated PowerShell in the `client` folder. It stops the
+task, the legacy service, and any client process launched from that folder:
+
+```powershell
+.\stop_windows_client.ps1
+```
 
 ---
 
