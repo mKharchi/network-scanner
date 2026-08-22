@@ -1,0 +1,65 @@
+/* ============================================================
+   Badge component
+   ============================================================ */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  font-size: var(--font-xs);
+  font-weight: 500;
+  line-height: var(--lh-xs);
+  border-radius: 9999px;
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* Variants */
+.badge--success {
+  color: var(--success);
+  background: var(--success-bg);
+}
+.badge--warning {
+  color: var(--warning);
+  background: var(--warning-bg);
+}
+.badge--danger {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+.badge--info {
+  color: var(--info);
+  background: var(--info-bg);
+}
+.badge--muted {
+  color: var(--text-muted);
+  background: var(--surface-muted);
+}
+.badge--primary {
+  color: var(--primary);
+  background: #EFF6FF;
+}
+
+/* Critical variant: stronger surface treatment */
+.badge--critical {
+  color: var(--danger);
+  background: var(--danger-bg);
+  font-weight: 600;
+  box-shadow: 0 0 0 1px var(--danger);
+}
+
+/* Status dot */
+.badge__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+.badge--success .badge__dot  { background: var(--success); }
+.badge--warning .badge__dot  { background: var(--warning); }
+.badge--danger .badge__dot   { background: var(--danger); }
+.badge--info .badge__dot     { background: var(--info); }
+.badge--muted .badge__dot    { background: var(--text-faint); }
+.badge--primary .badge__dot  { background: var(--primary); }
+.badge--critical .badge__dot { background: var(--danger); }
