@@ -1436,6 +1436,75 @@ def request_client_network_neighbourhood(client_id, *, timeout=None):
     }
 
 
+def request_client_passive_neighbourhood(client_id, *, timeout=None):
+    """Request one connected client's bounded passive-protocol snapshot.
+
+    Passive observations stay separate from the existing neighbourhood/device
+    pipeline. This helper only dispatches the client command and validates the
+    response contract for the REST layer added in the next phase.
+    """
+    if timeout is None:
+        try:
+            timeout = max(
+                0.1,
+                float(os.getenv("PASSIVE_NEIGHBOURHOOD_REQUEST_TIMEOUT", "10")),
+            )
+        except ValueError:
+            timeout = 10.0
+
+    result = execute_client_command(
+        client_id,
+        "GET_PASSIVE_NEIGHBOURHOOD",
+        timeout=timeout,
+        process_network_scan=False,
+    )
+    if result.get("status") != "ok":
+        message = result.get("message", "Client passive neighbourhood request failed.")
+        if "timed out" in message.lower():
+            return {
+                "status": "client_timeout",
+                "client_id": client_id,
+                "timeout_seconds": timeout,
+                "message": message,
+            }
+        if "not connected" in message.lower():
+            return {
+                "status": "client_unavailable",
+                "client_id": client_id,
+                "message": message,
+            }
+        return {"status": "client_error", "client_id": client_id, "message": message}
+
+    data = result.get("data")
+    observations = data.get("observations") if isinstance(data, dict) else None
+    valid_observations = isinstance(observations, list) and all(
+        isinstance(observation, dict)
+        and observation.get("protocol") in {"mdns", "llmnr", "nbns", "ssdp"}
+        for observation in observations
+    )
+    if (
+        not isinstance(data, dict)
+        or not isinstance(data.get("observed_at"), str)
+        or not isinstance(data.get("reporter"), str)
+        or not valid_observations
+    ):
+        return {
+            "status": "client_error",
+            "client_id": client_id,
+            "message": "Client returned an invalid passive neighbourhood response.",
+        }
+
+    return {
+        "status": "completed",
+        "client_id": client_id,
+        "timeout_seconds": timeout,
+        "observed_at": data["observed_at"],
+        "reporter": data["reporter"],
+        "observations": observations,
+        "observation_count": len(observations),
+    }
+
+
 def send_command(client_id, command, args=None):
     res = execute_client_command(client_id, command, args, timeout=25.0)
     if res.get("status") == "ok":

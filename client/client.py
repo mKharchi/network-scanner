@@ -14,6 +14,7 @@ from client_lib import (
 from process_scanner import scan_for_forbidden_processes
 from network_neighbour_collector import NetworkNeighbourCollector
 from dhcp_listener import DHCPListener
+from passive_protocol_listener import PassiveProtocolListener
 from neighbourhood import (
     get_daily_neighbourhood_path,
     load_daily_neighbourhood,
@@ -53,6 +54,7 @@ network_scan_lock = threading.Lock()
 network_scan_state_lock = threading.Lock()
 active_network_scan_global_id = None
 forbidden_processes = []
+PASSIVE_NEIGHBOURHOOD_COMMAND = "GET_PASSIVE_NEIGHBOURHOOD"
 
 
 class _StopEventProxy:
@@ -323,6 +325,30 @@ def start_requested_neighbourhood_command(client_socket):
     return worker
 
 
+def get_requested_passive_neighbourhood(listener):
+    """Return the passive listener's bounded snapshot in its response contract.
+
+    This is intentionally separate from the daily ARP/DHCP neighbourhood
+    request and does not trigger collection, persistence, or network traffic.
+    """
+    observations = []
+    if listener is None:
+        return {
+            "observed_at": datetime.now().astimezone().isoformat(),
+            "reporter": _snapshot_client_mac() or "unknown",
+            "observations": observations,
+        }
+    try:
+        observations = listener.snapshot()
+    except Exception as error:
+        print(f"[PASSIVE LISTENER] Could not read observation snapshot: {error}")
+    return {
+        "observed_at": datetime.now().astimezone().isoformat(),
+        "reporter": _snapshot_client_mac() or "unknown",
+        "observations": observations if isinstance(observations, list) else [],
+    }
+
+
 def _lookup_dhcp_vendor(mac_address):
     if not mac_address:
         return None
@@ -541,6 +567,7 @@ def start_client(stop_event=None):
         stop_proxy = _StopEventProxy(stop_event, session_stop_event)
         background_thread = None
         dhcp_listener = None
+        passive_protocol_listener = None
 
         try:
             try:
@@ -624,6 +651,18 @@ def start_client(stop_event=None):
                             )
                             background_thread.start()
 
+                        # Select one interface for passive capture services in this session.
+                        detected_iface = None
+                        try:
+                            from network_neighbour_collector import get_local_network
+
+                            local_net = get_local_network()
+                            if local_net:
+                                detected_iface = local_net.get("interface")
+                        except Exception:
+                            pass
+                        listen_iface = os.getenv("DHCP_LISTEN_INTERFACE") or detected_iface
+
                         # Start passive DHCP listener (idempotent per session)
                         try:
                             if dhcp_listener is None:
@@ -631,20 +670,6 @@ def start_client(stop_event=None):
                                 def _on_dhcp_obs(obs):
                                     store_dhcp_neighbourhood_observation(obs)
 
-                                # Auto-detect active network interface for sniffing
-                                detected_iface = None
-                                try:
-                                    from network_neighbour_collector import get_local_network
-
-                                    local_net = get_local_network()
-                                    if local_net:
-                                        detected_iface = local_net.get("interface")
-                                except Exception:
-                                    pass
-
-                                listen_iface = (
-                                    os.getenv("DHCP_LISTEN_INTERFACE") or detected_iface
-                                )
                                 dhcp_listener = DHCPListener(
                                     _on_dhcp_obs,
                                     interface=listen_iface,
@@ -652,6 +677,20 @@ def start_client(stop_event=None):
                                 dhcp_listener.start()
                         except Exception as e:
                             print(f"[DHCP] Could not start listener: {e}")
+
+                        # Passive protocol capture is independent from DHCP and
+                        # the daily neighbourhood store, but uses the same NIC.
+                        try:
+                            if passive_protocol_listener is None:
+                                passive_protocol_listener = PassiveProtocolListener(
+                                    interface=listen_iface,
+                                    status_callback=_startup_log,
+                                )
+                                passive_protocol_listener.start()
+                        except Exception as error:
+                            print(
+                                f"[PASSIVE LISTENER] Could not start listener: {error}"
+                            )
                         continue
 
                     if msg_type != "COMMAND":
@@ -672,6 +711,10 @@ def start_client(stop_event=None):
                     elif command == "GET_NETWORK_NEIGHBOURHOOD":
                         start_requested_neighbourhood_command(client)
                         continue
+                    elif command == PASSIVE_NEIGHBOURHOOD_COMMAND:
+                        result = get_requested_passive_neighbourhood(
+                            passive_protocol_listener
+                        )
                     else:
                         result = handle_command(message)
 
@@ -713,6 +756,11 @@ def start_client(stop_event=None):
                     dhcp_listener.stop()
                 except Exception as error:
                     print(f"[DHCP] Could not stop listener cleanly: {error}")
+            if passive_protocol_listener is not None:
+                try:
+                    passive_protocol_listener.stop()
+                except Exception as error:
+                    print(f"[PASSIVE LISTENER] Could not stop listener cleanly: {error}")
             if background_thread is not None and background_thread.is_alive():
                 background_thread.join(timeout=2)
             try:

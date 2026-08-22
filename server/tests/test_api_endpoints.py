@@ -297,6 +297,49 @@ class ApiEndpointsTestCase(unittest.TestCase):
         body = json.loads(error.exception.read().decode("utf-8"))
         self.assertEqual(body["error"]["code"], "CLIENT_TIMEOUT")
 
+    @patch("server_components.server_lib.request_client_passive_neighbourhood")
+    def test_post_client_passive_neighbourhood_request(self, request_passive_neighbourhood):
+        request_passive_neighbourhood.return_value = {
+            "status": "completed",
+            "client_id": "client-123",
+            "timeout_seconds": 10.0,
+            "observed_at": "2026-08-22T10:10:00+00:00",
+            "reporter": "AA:BB:CC:DD:EE:FF",
+            "observations": [{"protocol": "mdns", "hostname": "printer.local"}],
+            "observation_count": 1,
+        }
+        req = urllib.request.Request(
+            f"{self.base_url}/api/v1/clients/client-123/passive-neighbourhood",
+            data=b"{}",
+            method="POST",
+        )
+        with urllib.request.urlopen(req) as resp:
+            self.assertEqual(resp.status, 200)
+            body = json.loads(resp.read().decode("utf-8"))
+
+        self.assertEqual(body["data"]["observation_count"], 1)
+        self.assertEqual(body["data"]["observations"][0]["protocol"], "mdns")
+        request_passive_neighbourhood.assert_called_once_with("client-123")
+
+    @patch("server_components.server_lib.request_client_passive_neighbourhood")
+    def test_post_client_passive_neighbourhood_request_returns_controlled_errors(self, request_passive_neighbourhood):
+        request_passive_neighbourhood.return_value = {
+            "status": "client_unavailable",
+            "client_id": "client-123",
+            "message": "Client 'client-123' is not connected.",
+        }
+        req = urllib.request.Request(
+            f"{self.base_url}/api/v1/clients/client-123/passive-neighbourhood",
+            data=b"{}",
+            method="POST",
+        )
+        with self.assertRaises(urllib.error.HTTPError) as error:
+            urllib.request.urlopen(req)
+
+        self.assertEqual(error.exception.code, 409)
+        body = json.loads(error.exception.read().decode("utf-8"))
+        self.assertEqual(body["error"]["code"], "CLIENT_UNAVAILABLE")
+
     @patch("server_components.network_discovery.run_global_neighbourhood_collection")
     def test_global_neighbourhood_collection_endpoints(self, start_collection):
         collection = {
