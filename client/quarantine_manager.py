@@ -1,7 +1,8 @@
-"""Network Quarantine Manager for Endpoint Isolation.
+"""Network Quarantine Manager for endpoint isolation.
 
-Implements network quarantine enforcement via Windows Firewall (or mock/iptables on Linux)
-while keeping the management channel with the central server open for telemetry and recovery.
+Windows Firewall explicit block rules override conflicting allow rules. Quarantine
+therefore uses the active profile's default outbound policy with a narrowly
+scoped server allow rule, never a broad ``Action=Block`` rule.
 """
 
 from __future__ import annotations
@@ -17,9 +18,7 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 LOG = logging.getLogger("quarantine_manager")
 
-# Standardized rule names
-RULE_INBOUND = "AgentQuarantine-Inbound"
-RULE_OUTBOUND = "AgentQuarantine-Outbound"
+# Standardized allow-rule names. Broad block rules are deliberately not used.
 RULE_ALLOW_SERVER_OUT = "AgentQuarantine-Server-Allow-Out"
 RULE_ALLOW_SERVER_IN = "AgentQuarantine-Server-Allow-In"
 RULE_ALLOW_LOOPBACK_IN = "AgentQuarantine-Loopback-In"
@@ -30,9 +29,8 @@ ALL_QUARANTINE_RULES = (
     RULE_ALLOW_SERVER_IN,
     RULE_ALLOW_LOOPBACK_IN,
     RULE_ALLOW_LOOPBACK_OUT,
-    RULE_INBOUND,
-    RULE_OUTBOUND,
 )
+LEGACY_BLOCK_RULES = ("AgentQuarantine-Inbound", "AgentQuarantine-Outbound")
 
 
 class QuarantineState:
@@ -66,6 +64,7 @@ class NetworkQuarantineManager:
         self._quarantined_at: Optional[datetime] = None
         self._expires_at: Optional[datetime] = None
         self._command_id: Optional[str] = None
+        self._windows_profile_policy: Optional[Tuple[str, str, str]] = None
 
         self._lock = threading.RLock()
         self._timer_thread: Optional[threading.Thread] = None
@@ -85,7 +84,7 @@ class NetworkQuarantineManager:
     def _enforcement_method() -> str:
         """Describe whether this runtime is applying real firewall controls."""
         if platform.system() == "Windows":
-            return "WINDOWS_FIREWALL"
+            return "WINDOWS_FIREWALL_PROFILE_POLICY"
         return "SIMULATED_NO_FIREWALL"
 
     def get_status(self) -> Dict[str, Any]:
@@ -120,10 +119,89 @@ class NetworkQuarantineManager:
         except Exception as err:
             return -1, str(err)
 
+    @staticmethod
+    def _firewall_policy_argument(inbound: str, outbound: str) -> Optional[str]:
+        actions = {"ALLOW", "BLOCK"}
+        inbound = inbound.upper()
+        outbound = outbound.upper()
+        if inbound not in actions or outbound not in actions:
+            return None
+        return f"{inbound.lower()}inbound,{outbound.lower()}outbound"
+
+    def _get_active_windows_profile_policy(self) -> Tuple[Optional[Tuple[str, str, str]], str]:
+        """Return the active profile and its effective inbound/outbound policy."""
+        command = (
+            "$profile = Get-NetConnectionProfile | Select-Object -First 1 "
+            "-ExpandProperty NetworkCategory; "
+            "$firewall = Get-NetFirewallProfile -Name $profile; "
+            'Write-Output "$profile|$($firewall.DefaultInboundAction)|'
+            '$($firewall.DefaultOutboundAction)"'
+        )
+        code, output = self._run_cmd(
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command]
+        )
+        if code != 0:
+            return None, output
+        try:
+            profile, inbound, outbound = output.strip().splitlines()[-1].split("|")
+        except ValueError:
+            return None, f"Unexpected firewall policy response: {output}"
+        if profile not in {"Domain", "Private", "Public"}:
+            return None, f"Unsupported active firewall profile: {profile}"
+        if self._firewall_policy_argument(inbound, outbound) is None:
+            return None, f"Unsupported active firewall policy: {inbound}|{outbound}"
+        return (profile, inbound.upper(), outbound.upper()), ""
+
+    def _set_windows_profile_policy(
+        self, profile: str, inbound: str, outbound: str
+    ) -> Tuple[bool, str]:
+        policy = self._firewall_policy_argument(inbound, outbound)
+        if profile not in {"Domain", "Private", "Public"} or policy is None:
+            return False, "Invalid Windows Firewall profile policy."
+        code, output = self._run_cmd(
+            [
+                "netsh",
+                "advfirewall",
+                "set",
+                f"{profile.lower()}profile",
+                "firewallpolicy",
+                policy,
+            ]
+        )
+        return code == 0, output
+
+    def _delete_windows_firewall_rules(self, rule_names) -> Tuple[bool, str]:
+        """Remove only this agent's named rules, tolerating absent rules."""
+        errors = []
+        for rule_name in rule_names:
+            code, output = self._run_cmd(
+                [
+                    "netsh",
+                    "advfirewall",
+                    "firewall",
+                    "delete",
+                    "rule",
+                    f"name={rule_name}",
+                ]
+            )
+            if code != 0 and "No rules match" not in output and "0 rule(s) deleted" not in output:
+                errors.append(f"{rule_name}: {output}")
+        return (not errors, "; ".join(errors) if errors else "")
+
     def _apply_windows_firewall_rules(self) -> Tuple[bool, str]:
-        """Create Windows Firewall rules: whitelist central server & loopback, block all else."""
-        # 1. First remove any existing quarantine rules for idempotency
-        self._remove_windows_firewall_rules()
+        """Default-deny the active profile while explicitly preserving management."""
+        # Remove old rules from the previous unsafe implementation before adding
+        # the allow rules that work with a profile-level default deny.
+        cleaned, cleanup_error = self._delete_windows_firewall_rules(
+            ALL_QUARANTINE_RULES + LEGACY_BLOCK_RULES
+        )
+        if not cleaned:
+            return False, f"Could not remove previous quarantine rules: {cleanup_error}"
+
+        profile_policy, policy_error = self._get_active_windows_profile_policy()
+        if profile_policy is None:
+            return False, f"Could not read active firewall policy: {policy_error}"
+        profile, inbound, outbound = profile_policy
 
         server_target = self.server_ip if self.server_ip not in ("0.0.0.0", "127.0.0.1", "localhost") else None
 
@@ -148,53 +226,53 @@ class NetworkQuarantineManager:
                 "protocol=TCP", "enable=yes",
             ])
             if code != 0:
+                self._delete_windows_firewall_rules(ALL_QUARANTINE_RULES)
                 return False, f"Failed adding server in rule: {out}"
 
         # Loopback whitelist
-        self._run_cmd([
+        code, out = self._run_cmd([
             "netsh", "advfirewall", "firewall", "add", "rule",
             f"name={RULE_ALLOW_LOOPBACK_IN}",
             "dir=in", "action=allow", "remoteip=127.0.0.1", "enable=yes",
         ])
-        self._run_cmd([
+        if code != 0:
+            self._delete_windows_firewall_rules(ALL_QUARANTINE_RULES)
+            return False, f"Failed adding loopback in rule: {out}"
+        code, out = self._run_cmd([
             "netsh", "advfirewall", "firewall", "add", "rule",
             f"name={RULE_ALLOW_LOOPBACK_OUT}",
             "dir=out", "action=allow", "remoteip=127.0.0.1", "enable=yes",
         ])
-
-        # 3. Add block rules for everything else
-        code, out = self._run_cmd([
-            "netsh", "advfirewall", "firewall", "add", "rule",
-            f"name={RULE_OUTBOUND}",
-            "dir=out", "action=block", "enable=yes",
-        ])
         if code != 0:
-            return False, f"Failed adding outbound block rule: {out}"
+            self._delete_windows_firewall_rules(ALL_QUARANTINE_RULES)
+            return False, f"Failed adding loopback out rule: {out}"
 
-        code, out = self._run_cmd([
-            "netsh", "advfirewall", "firewall", "add", "rule",
-            f"name={RULE_INBOUND}",
-            "dir=in", "action=block", "enable=yes",
-        ])
-        if code != 0:
-            return False, f"Failed adding inbound block rule: {out}"
+        # Default policy blocking does not override explicit allow rules, unlike
+        # the broad explicit block rules used by the earlier implementation.
+        changed, change_error = self._set_windows_profile_policy(profile, "BLOCK", "BLOCK")
+        if not changed:
+            self._delete_windows_firewall_rules(ALL_QUARANTINE_RULES)
+            return False, f"Failed enabling default-deny quarantine policy: {change_error}"
+        self._windows_profile_policy = (profile, inbound, outbound)
 
-        return True, "Firewall rules applied successfully."
+        return True, f"Firewall quarantine enabled for the {profile} profile."
 
     def _remove_windows_firewall_rules(self) -> Tuple[bool, str]:
-        """Delete only AgentQuarantine-* rules, leaving general firewall intact."""
-        errors = []
-        for rule_name in ALL_QUARANTINE_RULES:
-            code, out = self._run_cmd([
-                "netsh", "advfirewall", "firewall", "delete", "rule",
-                f"name={rule_name}",
-            ])
-            # code != 0 with 'No rules match' is normal during cleanups
-            if code != 0 and "No rules match" not in out and "0 rule(s) deleted" not in out:
-                errors.append(f"{rule_name}: {out}")
+        """Restore profile policy before removing the server allow rules."""
+        if self._windows_profile_policy is not None:
+            profile, inbound, outbound = self._windows_profile_policy
+            restored, restore_error = self._set_windows_profile_policy(
+                profile, inbound, outbound
+            )
+            if not restored:
+                return False, f"Could not restore firewall policy: {restore_error}"
+            self._windows_profile_policy = None
 
-        if errors:
-            return False, "; ".join(errors)
+        removed, remove_error = self._delete_windows_firewall_rules(
+            ALL_QUARANTINE_RULES + LEGACY_BLOCK_RULES
+        )
+        if not removed:
+            return False, remove_error
         return True, "Quarantine rules removed."
 
     def _apply_rules(self) -> Tuple[bool, str]:
