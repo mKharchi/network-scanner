@@ -183,6 +183,16 @@ export function DeviceDetailPage() {
           </h1>
           <div
             style={{
+              fontSize: 'var(--font-sm)',
+              color: 'var(--text-muted)',
+              marginBottom: 'var(--space-2)',
+              fontWeight: 500,
+            }}
+          >
+            Last seen: {formatDateTime(dev.last_observed_at)} ({formatRelative(dev.last_observed_at)})
+          </div>
+          <div
+            style={{
               display: 'flex',
               gap: 'var(--space-2)',
               alignItems: 'center',
@@ -195,9 +205,6 @@ export function DeviceDetailPage() {
                 {dev.vendor}
               </span>
             )}
-            <span style={{ fontSize: 'var(--font-xs)', color: 'var(--text-muted)' }}>
-              · Last seen {formatRelative(dev.last_observed_at)}
-            </span>
           </div>
         </div>
       </div>
@@ -217,6 +224,10 @@ export function DeviceDetailPage() {
             <DetailRow label="IP Address" value={dev.ip_address} mono />
             <DetailRow label="Hostname" value={dev.hostname} />
             <DetailRow label="Vendor / OUI" value={dev.vendor} />
+            <DetailRow
+              label="Last Seen"
+              value={`${formatDateTime(dev.last_observed_at)} (${formatRelative(dev.last_observed_at)})`}
+            />
             <DetailRow
               label="Classification"
               value={<ClassificationBadge managed={dev.is_managed} />}
@@ -292,7 +303,8 @@ function DeviceDetailSkeleton() {
       >
         <Skeleton style={{ width: 48, height: 48, borderRadius: 'var(--radius)' }} />
         <div style={{ flex: 1 }}>
-          <Skeleton variant="title" style={{ marginBottom: 'var(--space-2)' }} />
+          <Skeleton variant="title" style={{ marginBottom: 'var(--space-1)' }} />
+          <Skeleton variant="text-sm" width="14rem" style={{ marginBottom: 'var(--space-2)' }} />
           <Skeleton variant="badge" />
         </div>
       </div>

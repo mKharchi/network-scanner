@@ -354,3 +354,16 @@ This path does not use `NETWORK_NEIGHBOURS`, daily local files, `network_devices
 ## Next Step
 
 Phase 15: expand protocol, lifecycle, command/API, and GUI validation coverage, then prepare for real-network testing.
+
+## Completed — Unified Passive Network Discovery Scanner
+
+- Implemented the full **Unified Passive Network Discovery Scanner** according to [next-step-plan.md](/home/adonis/network-scanner/docs/passive%20protocol%20listener/next-step-plan.md).
+- Created [unified-passive-discovery-implementation.md](/home/adonis/network-scanner/docs/passive%20protocol%20listener/unified-passive-discovery-implementation.md) containing the full architectural and implementation report.
+- Modules added/enhanced:
+  - [client/device_model.py](/home/adonis/network-scanner/client/device_model.py): `DeviceRecord`, `DeviceCorrelator`, `EnrichedAttribute`, presence states (`PASSIVELY_ACTIVE`, `PASSIVELY_IDLE`, `PASSIVELY_STALE`, `NOT_RECENTLY_OBSERVED`).
+  - [client/fingerprinting.py](/home/adonis/network-scanner/client/fingerprinting.py): Multi-protocol classification (DHCP PRL / Vendor Class, mDNS TXT/Services, SSDP Server headers, Hostname heuristics, and cross-protocol confidence scoring).
+  - [client/dhcp_listener.py](/home/adonis/network-scanner/client/dhcp_listener.py): Generic option parsing and Option 55 PRL extraction.
+  - [client/passive_protocol_listener.py](/home/adonis/network-scanner/client/passive_protocol_listener.py): Unified capture worker covering UDP 67, 68, 137, 1900, 5353, 5355 with integrated device correlation.
+  - [server/server_components/server_lib.py](/home/adonis/network-scanner/server/server_components/server_lib.py): Extended protocol validation set to include `dhcp`.
+  - [client/tests/test_device_model.py](/home/adonis/network-scanner/client/tests/test_device_model.py) & [client/tests/test_fingerprinting.py](/home/adonis/network-scanner/client/tests/test_fingerprinting.py): New unit tests covering correlation and classification.
+- Full test pass across both client (65/65) and server (80/80) suites (145/145 total unit tests passing).

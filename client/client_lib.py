@@ -817,7 +817,7 @@ def get_activity_log(period="1d"):
 # ============================================================
 
 
-def handle_command(message):
+def handle_command(message, *, quarantine_manager=None, process_monitor=None):
     if not isinstance(message, dict):
         return {"error": "Invalid message format"}
 
@@ -856,6 +856,35 @@ def handle_command(message):
     elif command == "GET_ACTIVITY_LOG":
         period = message.get("args", "1d")
         return get_activity_log(period)
+
+    elif command == "QUARANTINE_CLIENT":
+        args = message.get("args") or {}
+        reason = args.get("reason", "Administrator requested network isolation") if isinstance(args, dict) else str(args)
+        duration = args.get("duration_minutes") if isinstance(args, dict) else None
+        cmd_id = args.get("command_id") if isinstance(args, dict) else None
+        if quarantine_manager:
+            return quarantine_manager.quarantine_endpoint(reason=reason, duration_minutes=duration, command_id=cmd_id)
+        return {"status": "error", "message": "Quarantine manager is not initialized"}
+
+    elif command == "RELEASE_CLIENT":
+        args = message.get("args") or {}
+        reason = args.get("reason", "Administrator released network isolation") if isinstance(args, dict) else str(args)
+        cmd_id = args.get("command_id") if isinstance(args, dict) else None
+        if quarantine_manager:
+            return quarantine_manager.release_quarantine(reason=reason, command_id=cmd_id)
+        return {"status": "error", "message": "Quarantine manager is not initialized"}
+
+    elif command == "GET_QUARANTINE_STATUS":
+        if quarantine_manager:
+            return quarantine_manager.get_status()
+        return {"status": "error", "message": "Quarantine manager is not initialized"}
+
+    elif command == "UPDATE_FORBIDDEN_PROCESS_POLICY":
+        rules = message.get("args", [])
+        if process_monitor and isinstance(rules, list):
+            process_monitor.set_rules(rules)
+            return {"status": "ok", "rules_loaded": len(rules)}
+        return {"status": "error", "message": "Process monitor not initialized or invalid rules format"}
 
     elif command == "PING":
         return {"status": "ok"}

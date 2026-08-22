@@ -23,12 +23,16 @@ except ImportError:
 from server_components.server_lib import clients as memory_clients, clients_lock, get_working_hours_status
 
 
-def _iso_utc(dt: Optional[datetime]) -> Optional[str]:
+def _iso_utc(dt: Optional[Any]) -> Optional[str]:
     if dt is None:
         return None
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.isoformat()
+    if isinstance(dt, str):
+        return dt
+    if hasattr(dt, "tzinfo"):
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+    return str(dt)
 
 
 def _format_mac(mac: Optional[str]) -> Optional[str]:
@@ -485,10 +489,60 @@ def _parse_scan_file(file_path: Path) -> Optional[Dict[str, Any]]:
         # Enrich/classify devices if not already classified
         classified = classify_devices(devices)
 
+        mac_list = [
+            _format_mac(d.get("mac_address"))
+            for d in classified
+            if d.get("mac_address")
+        ]
+        db_device_map = {}
+        if mac_list:
+            try:
+                conn = get_connection()
+                if conn:
+                    cursor = conn.cursor(dictionary=True)
+                    placeholders = ", ".join(["%s"] * len(mac_list))
+                    cursor.execute(
+                        f"SELECT mac_address, last_seen, first_seen FROM network_devices WHERE mac_address IN ({placeholders})",
+                        mac_list,
+                    )
+                    for row in cursor.fetchall():
+                        db_device_map[_format_mac(row["mac_address"])] = row
+                    cursor.close()
+                    if conn.is_connected():
+                        conn.close()
+            except Exception:
+                pass
+
         formatted_devices = []
         for d in classified:
+            norm_mac = _format_mac(d.get("mac_address"))
+            db_row = db_device_map.get(norm_mac, {})
+
+            # Resolve actual last seen timestamp from database or observation sources
+            actual_last_seen = None
+            if db_row and db_row.get("last_seen"):
+                actual_last_seen = _iso_utc(db_row["last_seen"])
+
+            if not actual_last_seen:
+                obs_sources = d.get("observation_sources") or []
+                obs_timestamps = [
+                    s.get("observed_at")
+                    for s in obs_sources
+                    if isinstance(s, dict) and s.get("observed_at")
+                ]
+                if obs_timestamps:
+                    actual_last_seen = max(obs_timestamps)
+
+            if not actual_last_seen:
+                actual_last_seen = (
+                    d.get("last_seen")
+                    or d.get("last_observed_at")
+                    or d.get("observed_at")
+                    or data.get("completed_at")
+                )
+
             formatted_devices.append({
-                "mac_address": _format_mac(d.get("mac_address")),
+                "mac_address": norm_mac,
                 "ip_address": d.get("ip_address"),
                 "hostname": d.get("hostname"),
                 "vendor": d.get("vendor"),
@@ -500,7 +554,7 @@ def _parse_scan_file(file_path: Path) -> Optional[Dict[str, Any]]:
                 "classification": d.get("classification", "UNMANAGED"),
                 "is_managed": bool(d.get("is_managed", False)),
                 "managed_client_id": d.get("managed_client", {}).get("client_id") if d.get("is_managed") else None,
-                "last_observed_at": d.get("observed_at") or data.get("completed_at"),
+                "last_observed_at": actual_last_seen,
                 "sources": d.get("sources", ["SERVER_SCAN"]),
             })
 
@@ -523,6 +577,71 @@ def _parse_scan_file(file_path: Path) -> Optional[Dict[str, Any]]:
         }
     except Exception:
         return None
+
+
+def list_network_devices(
+    search: Optional[str] = None,
+    limit: int = 500,
+    offset: int = 0,
+) -> Dict[str, Any]:
+    """Return a paginated list of all known network devices from the database."""
+    conn = get_connection()
+    if not conn:
+        return {"devices": [], "total": 0}
+
+    try:
+        cursor = conn.cursor(dictionary=True)
+
+        where_clause = ""
+        params: list = []
+        if search:
+            like = f"%{search}%"
+            where_clause = "WHERE (nd.mac_address LIKE %s OR nd.ip_address LIKE %s OR nd.hostname LIKE %s OR nd.vendor LIKE %s OR c.hostname LIKE %s)"
+            params = [like, like, like, like, like]
+
+        count_sql = f"""
+            SELECT COUNT(*) AS total
+            FROM network_devices nd
+            LEFT JOIN clients c ON c.mac = nd.mac_address
+            {where_clause}
+        """
+        cursor.execute(count_sql, params)
+        total = (cursor.fetchone() or {}).get("total", 0)
+
+        data_sql = f"""
+            SELECT nd.mac_address, nd.ip_address, nd.hostname, nd.vendor,
+                   nd.first_seen, nd.last_seen,
+                   c.client_id AS managed_client_id,
+                   c.hostname AS client_hostname
+            FROM network_devices nd
+            LEFT JOIN clients c ON c.mac = nd.mac_address
+            {where_clause}
+            ORDER BY nd.last_seen DESC
+            LIMIT %s OFFSET %s
+        """
+        cursor.execute(data_sql, params + [limit, offset])
+        rows = cursor.fetchall()
+
+        devices = []
+        for row in rows:
+            is_managed = row.get("managed_client_id") is not None
+            hostname = (row.get("client_hostname") if (is_managed and row.get("client_hostname")) else row.get("hostname"))
+            devices.append({
+                "mac_address": _format_mac(row["mac_address"]),
+                "ip_address": row["ip_address"],
+                "hostname": hostname,
+                "vendor": row["vendor"],
+                "classification": "MANAGED" if is_managed else "UNMANAGED",
+                "is_managed": is_managed,
+                "managed_client_id": row["managed_client_id"],
+                "first_seen": _iso_utc(row["first_seen"]),
+                "last_seen": _iso_utc(row["last_seen"]),
+            })
+
+        return {"devices": devices, "total": total, "limit": limit, "offset": offset}
+    finally:
+        conn.close()
+
 
 
 def get_network_device_detail(mac_address: str) -> Optional[Dict[str, Any]]:
