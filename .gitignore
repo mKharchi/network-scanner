@@ -38,8 +38,12 @@ ENV/
 
 # Stored activity log files (preserve directory via .gitkeep)
 server/storage/logs/
+server/storage/network_scans/
+client/storage/network_neighborhood/
+
 *.db
 
 # Client-side generated monitoring state
 client/hourly_log.json
 client/reported_alerts.json
+client/neighbour_snapshot_state.json

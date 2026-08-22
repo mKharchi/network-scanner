@@ -11,6 +11,8 @@ import sys
 import types
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 
 SERVER_DIRECTORY = Path(__file__).resolve().parents[1]
@@ -38,6 +40,7 @@ class FakeConnection:
 class DisconnectAlertTests(unittest.TestCase):
     def setUp(self):
         self.original_ping = server_lib.ping_client
+        self.original_arp_neighbour = server_lib.has_arp_neighbour
         self.original_disconnect_alert = server_lib.create_disconnect_alert
         self.original_agent_alert = server_lib.create_agent_stopped_alert
         self.original_log_connection = server_lib.log_connection
@@ -48,6 +51,7 @@ class DisconnectAlertTests(unittest.TestCase):
 
     def tearDown(self):
         server_lib.ping_client = self.original_ping
+        server_lib.has_arp_neighbour = self.original_arp_neighbour
         server_lib.create_disconnect_alert = self.original_disconnect_alert
         server_lib.create_agent_stopped_alert = self.original_agent_alert
         server_lib.log_connection = self.original_log_connection
@@ -71,6 +75,7 @@ class DisconnectAlertTests(unittest.TestCase):
         token = object()
         server_lib.pending_disconnect_checks[client["mac"]] = token
         server_lib.ping_client = lambda ip: True
+        server_lib.has_arp_neighbour = lambda ip: self.fail("ARP fallback should not run")
         agent_alerts = []
         server_lib.create_agent_stopped_alert = lambda snapshot: (
             agent_alerts.append(snapshot) or True
@@ -86,6 +91,7 @@ class DisconnectAlertTests(unittest.TestCase):
         token = object()
         server_lib.pending_disconnect_checks[client["mac"]] = token
         server_lib.ping_client = lambda ip: False
+        server_lib.has_arp_neighbour = lambda ip: False
         agent_alerts = []
         server_lib.create_agent_stopped_alert = lambda snapshot: agent_alerts.append(snapshot)
 
@@ -93,6 +99,21 @@ class DisconnectAlertTests(unittest.TestCase):
 
         self.assertEqual(agent_alerts, [])
         self.assertNotIn(client["mac"], server_lib.pending_disconnect_checks)
+
+    def test_arp_neighbour_fallback_creates_agent_stopped_alert_when_ping_is_blocked(self):
+        client = self.client()
+        token = object()
+        server_lib.pending_disconnect_checks[client["mac"]] = token
+        server_lib.ping_client = lambda ip: False
+        server_lib.has_arp_neighbour = lambda ip: True
+        agent_alerts = []
+        server_lib.create_agent_stopped_alert = lambda snapshot: (
+            agent_alerts.append(snapshot) or True
+        )
+
+        server_lib.verify_client_disconnect(client["mac"], client, token)
+
+        self.assertEqual(agent_alerts, [client])
 
     def test_reconnect_during_grace_period_cancels_verification(self):
         client = self.client()
@@ -121,6 +142,20 @@ class DisconnectAlertTests(unittest.TestCase):
         self.assertTrue(client["connection"].closed)
         self.assertEqual(disconnect_alerts, [(client, True)])
         self.assertNotIn(client["mac"], server_lib.pending_disconnect_checks)
+
+    def test_reachability_ping_sends_exactly_two_packets(self):
+        with patch.object(server_lib.platform, "system", return_value="Linux"), patch.object(
+            server_lib.subprocess,
+            "run",
+            return_value=SimpleNamespace(returncode=0),
+        ) as run:
+            self.assertTrue(server_lib.ping_client("172.16.1.10"))
+
+        self.assertEqual(run.call_args.args[0][:3], ["ping", "-c", "2"])
+        self.assertEqual(
+            run.call_args.kwargs["timeout"],
+            (server_lib.DISCONNECT_PING_TIMEOUT_SECONDS * 2) + 1,
+        )
 
 
 if __name__ == "__main__":

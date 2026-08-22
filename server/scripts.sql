@@ -89,6 +89,48 @@ CREATE TABLE IF NOT EXISTS working_hours (
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
     UNIQUE(day_of_week)
 );
+
+CREATE TABLE IF NOT EXISTS network_devices (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    mac_address VARCHAR(17) NOT NULL UNIQUE,
+    ip_address VARCHAR(45) NULL,
+    hostname VARCHAR(255) NULL,
+    vendor VARCHAR(255) NULL,
+    first_seen DATETIME NOT NULL,
+    last_seen DATETIME NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_network_devices_last_seen (last_seen)
+);
+
+CREATE TABLE IF NOT EXISTS network_device_observations (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    device_id BIGINT NOT NULL,
+    source_type VARCHAR(32) NOT NULL,
+    source_client_id INT NULL,
+    ip_address VARCHAR(45) NOT NULL,
+    interface_name VARCHAR(255) NULL,
+    entry_type VARCHAR(16) NOT NULL,
+    observed_at DATETIME NOT NULL,
+    received_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (device_id)
+        REFERENCES network_devices(id)
+        ON DELETE CASCADE,
+    FOREIGN KEY (source_client_id)
+        REFERENCES clients(id)
+        ON DELETE SET NULL,
+    INDEX idx_network_device_observations_device_time (device_id, observed_at),
+    INDEX idx_network_device_observations_source_client (source_client_id)
+);
+
+CREATE TABLE IF NOT EXISTS daily_network_scan_files (
+    scan_date DATE NOT NULL PRIMARY KEY,
+    file_path VARCHAR(512) NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP
+);
 INSERT IGNORE INTO forbidden_processes (process_name, severity, enabled, description) VALUES ('discord', 'HIGH', TRUE, 'Social media/gaming communication platform - not authorized for work use');
 
 -- day_of_week uses Python's datetime.weekday(): Monday=0 through Sunday=6.
