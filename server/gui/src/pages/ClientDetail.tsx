@@ -1,12 +1,16 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { api, type ClientPassiveNeighbourhood } from '../api/client';
+import {
+  api,
+  type ClientPassiveNeighbourhood,
+  type ClientScreenshot,
+} from '../api/client';
 import { useFetch } from '../hooks/useFetch';
 import { useToast } from '../hooks/useToast';
 import { ClientStatusBadge, Badge } from '../components/Badge';
 import { Button } from '../components/Button';
 import { SectionCard, MetricCard } from '../components/Card';
-import { Skeleton, ErrorState, Notice } from '../components/States';
+import { Skeleton, ErrorState, Notice, EmptyState } from '../components/States';
 import { formatDateTime, formatRelative } from '../utils/format';
 
 function DetailRow({
@@ -51,6 +55,23 @@ function DetailRow({
   );
 }
 
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return '0 B';
+  }
+
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let size = bytes;
+  let unitIndex = 0;
+
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+
+  return `${size >= 10 || unitIndex === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[unitIndex]}`;
+}
+
 interface ProcessItem {
   pid?: number;
   name?: string;
@@ -72,6 +93,7 @@ export function ClientDetailPage() {
   const [neighbourhoodLoading, setNeighbourhoodLoading] = useState(false);
   const [passiveNeighbourhoodLoading, setPassiveNeighbourhoodLoading] = useState(false);
   const [passiveNeighbourhood, setPassiveNeighbourhood] = useState<ClientPassiveNeighbourhood | null>(null);
+  const [screenshotLoading, setScreenshotLoading] = useState(false);
   const [quarantineLoading, setQuarantineLoading] = useState(false);
 
   // Process management states
@@ -88,6 +110,15 @@ export function ClientDetailPage() {
 
   const { state, refetch } = useFetch(
     clientId ? () => api.getClient(clientId) : null,
+    [clientId],
+    ['app:client_status'],
+  );
+
+  const {
+    state: screenshotState,
+    refetch: refetchScreenshots,
+  } = useFetch(
+    clientId ? () => api.getClientScreenshots(clientId, { limit: 8 }) : null,
     [clientId],
     ['app:client_status'],
   );
@@ -203,6 +234,34 @@ export function ClientDetailPage() {
     }
   };
 
+  const requestScreenshot = async () => {
+    if (!clientId) return;
+    setScreenshotLoading(true);
+    try {
+      const result = await api.requestClientScreenshot(clientId);
+      setCommandResult(result);
+      setActiveCommand('REQUEST_SCREENSHOT');
+
+      addToast({
+        title: 'Screenshot captured',
+        message: result.filename
+          ? `${result.filename} saved ${result.captured_at ? `at ${formatDateTime(result.captured_at)}` : 'successfully'}.`
+          : `Screenshot captured successfully for ${c.hostname}.`,
+        severity: 'SUCCESS',
+      });
+
+      refetchScreenshots();
+    } catch (err: any) {
+      addToast({
+        title: 'Screenshot request failed',
+        message: err?.message || 'The client did not return a screenshot.',
+        severity: 'CRITICAL',
+      });
+    } finally {
+      setScreenshotLoading(false);
+    }
+  };
+
   const handleQuarantine = async () => {
     if (!clientId) return;
     const reason = window.prompt(
@@ -283,6 +342,15 @@ export function ClientDetailPage() {
       (p.username && p.username.toLowerCase().includes(term))
     );
   });
+
+  const screenshotItems: ClientScreenshot[] =
+    screenshotState.status === 'success'
+      ? screenshotState.data.items
+      : screenshotState.status === 'error' && screenshotState.staleData
+        ? screenshotState.staleData.items
+        : [];
+  const screenshotLoadingState =
+    screenshotState.status === 'idle' || screenshotState.status === 'loading';
 
   return (
     <div>
@@ -506,6 +574,15 @@ export function ClientDetailPage() {
             {passiveNeighbourhoodLoading ? 'Requesting Passive Info…' : 'Get Passive Network Information'}
           </Button>
 
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={!isOnline || screenshotLoading}
+            onClick={requestScreenshot}
+          >
+            {screenshotLoading ? 'Capturing Screenshot…' : 'Capture Screenshot'}
+          </Button>
+
           {/* Activity Log dropdown & button */}
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
             <select
@@ -619,6 +696,143 @@ export function ClientDetailPage() {
           </div>
         )}
       </SectionCard>
+
+      <div style={{ marginTop: 'var(--space-6)' }}>
+        <SectionCard
+          title="Screenshot History"
+          headerAction={
+            <Button
+              variant="quiet"
+              size="sm"
+              onClick={refetchScreenshots}
+              disabled={screenshotLoadingState}
+            >
+              Refresh
+            </Button>
+          }
+        >
+          {screenshotState.status === 'error' && !screenshotState.staleData && (
+            <Notice variant="warning" title="Unable to load screenshots">
+              {screenshotState.error.message}
+            </Notice>
+          )}
+
+          {screenshotState.status === 'error' && screenshotState.staleData && (
+            <div style={{ marginBottom: 'var(--space-4)' }}>
+              <Notice variant="warning" title="Stale screenshot history shown">
+                {screenshotState.error.message}
+              </Notice>
+            </div>
+          )}
+
+          {screenshotLoadingState ? (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                gap: 'var(--space-4)',
+              }}
+            >
+              {Array.from({ length: 4 }).map((_, index) => (
+                <div
+                  key={index}
+                  style={{
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius)',
+                    overflow: 'hidden',
+                    background: 'var(--surface-muted)',
+                  }}
+                >
+                  <Skeleton variant="icon" width="100%" height="160px" />
+                  <div style={{ padding: 'var(--space-3)', display: 'grid', gap: 'var(--space-2)' }}>
+                    <Skeleton variant="text-sm" width="80%" />
+                    <Skeleton variant="text" width="60%" />
+                    <Skeleton variant="text" width="40%" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : screenshotItems.length === 0 ? (
+            <EmptyState
+              icon="🖼️"
+              title="No screenshots yet"
+              body="Request a screenshot from an online interactive client to start building a history."
+            />
+          ) : (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                gap: 'var(--space-4)',
+              }}
+            >
+              {screenshotItems.map((shot) => {
+                const fileUrl = api.getScreenshotFileUrl(shot.id);
+                return (
+                  <div
+                    key={shot.id}
+                    style={{
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius)',
+                      overflow: 'hidden',
+                      background: 'var(--surface)',
+                      boxShadow: 'var(--shadow-sm)',
+                    }}
+                  >
+                    <a
+                      href={fileUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{
+                        display: 'block',
+                        aspectRatio: '16 / 9',
+                        background: 'var(--surface-muted)',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <img
+                        src={fileUrl}
+                        alt={`Screenshot captured ${shot.captured_at ? formatDateTime(shot.captured_at) : 'recently'}`}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          display: 'block',
+                        }}
+                      />
+                    </a>
+                    <div style={{ padding: 'var(--space-3)', display: 'grid', gap: 'var(--space-2)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-2)' }}>
+                        <strong style={{ fontSize: 'var(--font-sm)' }}>{shot.filename}</strong>
+                        <Badge variant={shot.status === 'FAILED' ? 'danger' : 'success'}>
+                          {shot.status.toLowerCase()}
+                        </Badge>
+                      </div>
+                      <div style={{ fontSize: 'var(--font-xs)', color: 'var(--text-muted)' }}>
+                        {shot.captured_at ? formatRelative(shot.captured_at) : 'Capture time unavailable'}
+                      </div>
+                      <div style={{ fontSize: 'var(--font-xs)' }}>
+                        <DetailRow label="Captured" value={shot.captured_at ? formatDateTime(shot.captured_at) : null} />
+                        <DetailRow label="Size" value={formatBytes(shot.file_size)} />
+                        <DetailRow label="Requested by" value={shot.requested_by || 'local-network-operator'} mono />
+                      </div>
+                      <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => window.open(fileUrl, '_blank', 'noopener,noreferrer')}
+                        >
+                          Open full size
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </SectionCard>
+      </div>
 
       {passiveNeighbourhood && (() => {
         const protocols = [...new Set(
