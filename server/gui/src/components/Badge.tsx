@@ -30,6 +30,16 @@ export function OfflineBadge() {
   return <Badge variant="muted" dot>Offline</Badge>;
 }
 
+export function IsolatedBadge() {
+  return <Badge variant="danger" dot>Isolated</Badge>;
+}
+
+export function ClientStatusBadge({ state }: { state: string }) {
+  if (state === "ISOLATED") return <IsolatedBadge />;
+  if (state === "ONLINE") return <OnlineBadge />;
+  return <OfflineBadge />;
+}
+
 export function StaleBadge() {
   return <Badge variant="warning" dot>Stale</Badge>;
 }

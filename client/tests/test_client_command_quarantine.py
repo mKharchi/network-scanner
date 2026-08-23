@@ -16,6 +16,7 @@ class ClientCommandQuarantineTests(unittest.TestCase):
     def setUp(self):
         self.quarantine_manager = MagicMock()
         self.process_monitor = MagicMock()
+        self.network_state_manager = MagicMock()
 
     def test_quarantine_command_routes_reason_duration_and_command_id(self):
         self.quarantine_manager.quarantine_endpoint.return_value = {"status": "ok"}
@@ -78,6 +79,34 @@ class ClientCommandQuarantineTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "error")
         self.assertIn("not initialized", result["message"])
+
+    def test_device_isolation_routes_to_the_separate_network_state_manager(self):
+        self.network_state_manager.isolate_static_ip.return_value = {
+            "status": "ok",
+            "state": "ISOLATED",
+        }
+        self.network_state_manager.get_lifecycle_state.return_value = {"state": "ISOLATED"}
+
+        isolate = handle_command(
+            {"command": "ISOLATE_DEVICE", "args": {"reason": "Security response"}},
+            network_state_manager=self.network_state_manager,
+        )
+        status = handle_command(
+            {"command": "GET_DEVICE_ISOLATION_STATUS"},
+            network_state_manager=self.network_state_manager,
+        )
+
+        self.assertEqual(isolate["state"], "ISOLATED")
+        self.assertEqual(status, {"status": "ok", "data": {"state": "ISOLATED"}})
+        self.network_state_manager.isolate_static_ip.assert_called_once_with(
+            reason="Security response", enabled=True
+        )
+
+    def test_device_isolation_fails_cleanly_without_a_manager(self):
+        result = handle_command({"command": "ISOLATE_DEVICE"})
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("Network state manager", result["message"])
 
 
 if __name__ == "__main__":

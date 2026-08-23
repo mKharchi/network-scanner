@@ -147,6 +147,7 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     {"command": "PING", "label": "Ping"},
                     {"command": "KILL_PROCESS", "label": "Kill process"},
                     {"command": "START_PROCESS", "label": "Start process"},
+                    {"command": "ISOLATE_DEVICE", "label": "Isolate device (static IP)"},
                     {"command": "DISCONNECT", "label": "Disconnect client"},
                 ]
                 self.send_data({"items": commands})
@@ -171,6 +172,15 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     self.send_data(status_res.get("data", status_res))
                 else:
                     self.send_error_response(400, "COMMAND_FAILED", status_res.get("message", "Failed to retrieve quarantine status."))
+                return
+
+            # Device-isolation dispatch status is server-side because the
+            # client intentionally disconnects after its active route is removed.
+            m = re.match(r"^/api/v1/clients/([^/]+)/isolation$", path)
+            if m:
+                client_id = urllib.parse.unquote(m.group(1))
+                status_res = server_lib.get_device_isolation_status(client_id)
+                self.send_data(status_res.get("data", status_res))
                 return
 
             # 5. Network Scans
@@ -414,6 +424,18 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     )
                     return
 
+                if command == "ISOLATE_DEVICE":
+                    reason = args.get("reason") if isinstance(args, dict) else None
+                    res = server_lib.isolate_client(
+                        client_id,
+                        reason=reason or "Administrator requested static device isolation",
+                    )
+                    if res.get("status") == "ok":
+                        self.send_data(res, status_code=200)
+                    else:
+                        self.send_error_response(400, "ISOLATION_FAILED", res.get("message", "Failed to isolate client."))
+                    return
+
                 res = server_lib.execute_client_command(
                     client_id,
                     command,
@@ -443,6 +465,24 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     self.send_data(res, status_code=200)
                 else:
                     self.send_error_response(400, "QUARANTINE_FAILED", res.get("message", "Failed to quarantine client."))
+                return
+
+            # Device isolation (POST /api/v1/clients/{client_id}/isolation).
+            m = re.match(r"^/api/v1/clients/([^/]+)/isolation$", path)
+            if m:
+                client_id = urllib.parse.unquote(m.group(1))
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                    body = self.rfile.read(length).decode("utf-8") if length else "{}"
+                    payload = json.loads(body) if body else {}
+                except Exception:
+                    payload = {}
+                reason = payload.get("reason", "Administrator requested static device isolation")
+                res = server_lib.isolate_client(client_id, reason=reason)
+                if res.get("status") == "ok":
+                    self.send_data(res, status_code=200)
+                else:
+                    self.send_error_response(400, "ISOLATION_FAILED", res.get("message", "Failed to isolate client."))
                 return
 
             # Client Release Quarantine (POST /api/v1/clients/{client_id}/release-quarantine)

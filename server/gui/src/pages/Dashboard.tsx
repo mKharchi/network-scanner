@@ -4,8 +4,7 @@ import { MetricCard } from "../components/Card";
 import {
   SeverityBadge,
   StatusBadge,
-  OnlineBadge,
-  OfflineBadge,
+  ClientStatusBadge,
 } from "../components/Badge";
 import { Button } from "../components/Button";
 import { Skeleton, ErrorState, EmptyState, Notice } from "../components/States";
@@ -99,11 +98,7 @@ function ClientRow({
           {client.ip_address ?? "—"}
         </div>
       </div>
-      {client.connection.state === "ONLINE" ? (
-        <OnlineBadge />
-      ) : (
-        <OfflineBadge />
-      )}
+      <ClientStatusBadge state={client.connection.state} />
     </div>
   );
 }
@@ -177,6 +172,14 @@ export function DashboardPage() {
           valueVariant="success"
           context={`of ${data.clients.total} registered`}
         />
+        {(data.clients.isolated ?? 0) > 0 && (
+          <MetricCard
+            label="Clients isolated"
+            value={data.clients.isolated!}
+            valueVariant="danger"
+            context="device isolation active"
+          />
+        )}
         <MetricCard
           label="Clients offline"
           value={data.clients.offline}

@@ -109,9 +109,14 @@ export interface ClientOS {
 }
 
 export interface ClientConnection {
-  state: "ONLINE" | "OFFLINE";
+  state: "ONLINE" | "OFFLINE" | "ISOLATED";
   last_connected_at: string | null;
   last_disconnected_at: string | null;
+  isolation?: {
+    status?: string;
+    reason?: string;
+    isolated_at?: string;
+  };
 }
 
 export interface PassiveProtocolObservation {
@@ -258,7 +263,7 @@ export interface ActivityLogRecord {
 
 export interface DashboardData {
   generated_at: string;
-  clients: { online: number; offline: number; total: number };
+  clients: { online: number; isolated?: number; offline: number; total: number };
   alerts: { new: number; critical: number };
   latest_scan: {
     completed_at: string;
@@ -648,4 +653,10 @@ export const api = {
 
   getClientQuarantineStatus: (clientId: string) =>
     get<any>(`/clients/${encodeURIComponent(clientId)}/quarantine`),
+
+  isolateClient: (clientId: string, payload?: { reason?: string }) =>
+    post<any>(`/clients/${encodeURIComponent(clientId)}/isolation`, payload ?? {}),
+
+  getClientIsolationStatus: (clientId: string) =>
+    get<any>(`/clients/${encodeURIComponent(clientId)}/isolation`),
 };
