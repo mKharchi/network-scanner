@@ -259,28 +259,28 @@ class NetworkQuarantineManager:
         if not changed:
             self._delete_windows_firewall_rules(ALL_QUARANTINE_RULES)
             return False, f"Failed enabling default-deny quarantine policy: {change_error}"
-        self._windows_profile_policy = (profile, inbound, outbound)
+        self._windows_profile_policy = (profile, inbound, "ALLOW")
 
         return True, "Firewall quarantine enabled across all firewall profiles."
 
     def _remove_windows_firewall_rules(self) -> Tuple[bool, str]:
-        """Restore profile policy before removing the server allow rules."""
-        if self._windows_profile_policy is not None:
-            profile, inbound, outbound = self._windows_profile_policy
-            # Restore allprofiles to default allowoutbound, or original profile policy
-            restored, restore_error = self._set_windows_profile_policy(
-                "allprofiles", inbound, outbound
-            )
-            if not restored:
-                return False, f"Could not restore firewall policy: {restore_error}"
-            self._windows_profile_policy = None
+        """Restore all firewall profiles to default outbound allow before deleting allow rules."""
+        inbound = self._windows_profile_policy[1] if self._windows_profile_policy else "BLOCK"
+        
+        # Unconditionally restore outbound access across all profiles first
+        restored, restore_error = self._set_windows_profile_policy(
+            "allprofiles", inbound, "ALLOW"
+        )
+        if not restored:
+            return False, f"Could not restore firewall policy: {restore_error}"
+        self._windows_profile_policy = None
 
         removed, remove_error = self._delete_windows_firewall_rules(
             ALL_QUARANTINE_RULES + LEGACY_BLOCK_RULES
         )
         if not removed:
             return False, remove_error
-        return True, "Quarantine rules removed."
+        return True, "Quarantine rules removed and outbound firewall access restored."
 
     def _apply_rules(self) -> Tuple[bool, str]:
         """Apply firewall rules according to OS."""

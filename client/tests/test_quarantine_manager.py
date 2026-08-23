@@ -113,7 +113,7 @@ class NetworkQuarantineManagerTestCase(unittest.TestCase):
         self.assertIn(("Public", "BLOCK", "ALLOW"), [manager._windows_profile_policy])
         self.assertIn(
             [
-                "netsh", "advfirewall", "set", "publicprofile",
+                "netsh", "advfirewall", "set", "allprofiles",
                 "firewallpolicy", "blockinbound,blockoutbound",
             ],
             commands,
@@ -140,8 +140,35 @@ class NetworkQuarantineManagerTestCase(unittest.TestCase):
         self.assertTrue(success)
         self.assertIn(
             [
-                "netsh", "advfirewall", "set", "publicprofile",
+                "netsh", "advfirewall", "set", "allprofiles",
                 "firewallpolicy", "blockinbound,allowoutbound",
+            ],
+            commands,
+        )
+
+    @patch("quarantine_manager.platform.system", return_value="Windows")
+    def test_windows_quarantine_handles_not_configured_profile(self, _system):
+        manager = NetworkQuarantineManager(
+            server_ip="192.168.1.100", server_port=5000, dry_run=False
+        )
+        commands = []
+
+        def run_command(command):
+            commands.append(command)
+            if command[0] == "powershell.exe":
+                return 0, "NotConfigured|NotConfigured|NotConfigured"
+            return 0, "Ok"
+
+        with patch.object(manager, "_run_cmd", side_effect=run_command):
+            success, _message = manager._apply_windows_firewall_rules()
+
+        self.assertTrue(success)
+        # Should fallback to Public profile and BlockInbound/AllowOutbound defaults
+        self.assertEqual(manager._windows_profile_policy, ("Public", "BLOCK", "ALLOW"))
+        self.assertIn(
+            [
+                "netsh", "advfirewall", "set", "allprofiles",
+                "firewallpolicy", "blockinbound,blockoutbound",
             ],
             commands,
         )
