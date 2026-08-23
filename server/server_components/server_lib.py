@@ -20,6 +20,10 @@ from server_components.log_storage import store_log_file
 # ============================================================
 
 clients = {}
+# Interactive user-session agents use the same device identity as the Windows
+# service, so retain their live connection separately instead of replacing the
+# service connection in the legacy registry above.
+interactive_clients = {}
 clients_lock = threading.Lock()
 pending_disconnect_checks = {}
 device_isolation_status = {}
@@ -930,6 +934,23 @@ def register_client(client_info, conn):
     client_info = dict(client_info)
     client_info["mac"] = mac
     client_id = _client_id_for_mac(mac)
+    agent_role = client_info.get("agent_role", "service")
+
+    with clients_lock:
+        if agent_role == "interactive":
+            interactive_clients[mac] = {
+                "client_id": client_id,
+                "hostname": client_info["hostname"],
+                "ip": client_info["ip"],
+                "mac": mac,
+                "os": client_info["os"],
+                "connection": conn,
+                "responses": queue.Queue(),
+                "send_lock": threading.Lock(),
+                "agent_role": "interactive",
+            }
+            print(f"Interactive user-session agent connected: {client_id}")
+            return client_id
 
     with clients_lock:
         # A registration during the grace period cancels the pending agent
@@ -1003,18 +1024,31 @@ def get_client(client_id):
     return None
 
 
-def get_client_by_mac(mac):
+def get_client_by_mac(mac, *, agent_role="service"):
     with clients_lock:
-        return clients.get(mac)
+        registry = interactive_clients if agent_role == "interactive" else clients
+        return registry.get(mac)
 
 
-def remove_client(mac, connection=None):
+def get_interactive_client(client_id):
+    """Return the live interactive user-session agent for a managed device."""
     with clients_lock:
-        client = clients.get(mac)
+        for client in interactive_clients.values():
+            if client["client_id"] == client_id:
+                return client
+    return None
+
+
+def remove_client(mac, connection=None, *, agent_role="service"):
+    expected_disconnect = False
+    check_token = None
+    with clients_lock:
+        registry = interactive_clients if agent_role == "interactive" else clients
+        client = registry.get(mac)
         if connection is not None and client and client["connection"] is not connection:
             return
-        client = clients.pop(mac, None)
-        if client:
+        client = registry.pop(mac, None)
+        if client and agent_role != "interactive":
             expected_disconnect = client.get("disconnect_expected", False)
             disconnect_reason = client.get("disconnect_reason")
             if disconnect_reason == "DEVICE_ISOLATION":
@@ -1038,9 +1072,10 @@ def remove_client(mac, connection=None):
         except OSError:
             pass
 
-        print(f"Removed {client['client_id']}")
-        log_connection(mac, "disconnected")
-        create_disconnect_alert(client, expected_disconnect)
+        print(f"Removed {client['client_id']} ({agent_role})")
+        if agent_role != "interactive":
+            log_connection(mac, "disconnected")
+            create_disconnect_alert(client, expected_disconnect)
 
         if check_token is not None:
             threading.Thread(
@@ -1261,7 +1296,7 @@ def handle_network_neighbour_report(
     return False
 
 
-def receive_client_messages(mac, conn):
+def receive_client_messages(mac, conn, *, agent_role="service"):
     """Continuously consume one client's frames after registration.
 
     A TCP connection can receive alerts at any time.  This is deliberately the
@@ -1284,7 +1319,7 @@ def receive_client_messages(mac, conn):
             elif message_type == "NETWORK_NEIGHBOURS":
                 handle_network_neighbour_report(mac, message.get("data"))
             elif message_type == "RESPONSE":
-                client = get_client_by_mac(mac)
+                client = get_client_by_mac(mac, agent_role=agent_role)
                 if client and client["connection"] is conn:
                     client["responses"].put(message)
             else:
@@ -1297,7 +1332,7 @@ def receive_client_messages(mac, conn):
     ) as error:
         print(f"Connection with client {mac} lost: {error}")
     finally:
-        remove_client(mac, conn)
+        remove_client(mac, conn, agent_role=agent_role)
 
 
 # ============================================================
@@ -1351,10 +1386,20 @@ def print_response(client_id, command, response):
 
 
 def execute_client_command(
-    client_id, command, args=None, timeout=10.0, *, process_network_scan=True
+    client_id,
+    command,
+    args=None,
+    timeout=10.0,
+    *,
+    process_network_scan=True,
+    agent_role="service",
 ):
     """Send a command to a connected client and return the structured response payload."""
-    client = get_client(client_id)
+    client = (
+        get_interactive_client(client_id)
+        if agent_role == "interactive"
+        else get_client(client_id)
+    )
     if not client:
         return {"status": "error", "message": f"Client '{client_id}' is not connected."}
 
@@ -1466,8 +1511,102 @@ def execute_client_command(
 
         return {"status": "error", "message": f"Command '{command}' timed out."}
     except (ConnectionResetError, BrokenPipeError, OSError) as e:
-        remove_client(client["mac"], conn)
+        remove_client(client["mac"], conn, agent_role=agent_role)
         return {"status": "error", "message": f"Connection lost: {e}"}
+
+
+def _persist_screenshot_metadata(client_id, metadata, requested_by=None):
+    """Persist one stored screenshot record against the managed client."""
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM clients WHERE client_id = %s", (client_id,))
+        row = cursor.fetchone()
+        if not row:
+            raise ValueError(f"Client '{client_id}' is not registered in the database.")
+        cursor.execute(
+            """
+            INSERT INTO screenshots (
+                client_id, command_id, requested_by, filename, storage_path, mime_type,
+                file_size, device_name, captured_at, status
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'UPLOADED')
+            """,
+            (
+                row[0],
+                metadata.get("command_id"),
+                requested_by,
+                metadata["filename"],
+                metadata["storage_path"],
+                metadata["mime_type"],
+                metadata["file_size"],
+                metadata.get("device_name"),
+                metadata.get("captured_at"),
+            ),
+        )
+        conn.commit()
+        metadata["id"] = cursor.lastrowid
+    except Exception:
+        if conn:
+            conn.rollback()
+        raise
+    finally:
+        if cursor:
+            cursor.close()
+        if conn and conn.is_connected():
+            conn.close()
+
+
+def request_client_screenshot(client_id, *, timeout=None, requested_by=None):
+    """Request one PNG screenshot from the connected interactive agent."""
+    if timeout is None:
+        try:
+            timeout = max(1.0, float(os.getenv("SCREENSHOT_REQUEST_TIMEOUT", "30")))
+        except ValueError:
+            timeout = 30.0
+
+    command_id = f"screenshot-{int(time.time() * 1000)}"
+    result = execute_client_command(
+        client_id,
+        "REQUEST_SCREENSHOT",
+        args={"command_id": command_id},
+        timeout=timeout,
+        process_network_scan=False,
+        agent_role="interactive",
+    )
+    if result.get("status") != "ok":
+        message = result.get("message", "Screenshot request failed.")
+        status = "client_timeout" if "timed out" in message.lower() else "client_unavailable"
+        return {
+            "status": status,
+            "client_id": client_id,
+            "timeout_seconds": timeout,
+            "message": message,
+        }
+
+    data = result.get("data")
+    if not isinstance(data, dict) or data.get("status") != "ok":
+        return {
+            "status": "client_error",
+            "client_id": client_id,
+            "message": data.get("message", "Client could not capture a screenshot.") if isinstance(data, dict) else "Client returned an invalid screenshot response.",
+        }
+
+    try:
+        from server_components.screenshot_storage import store_screenshot
+
+        metadata = store_screenshot(client_id, data)
+        _persist_screenshot_metadata(client_id, metadata, requested_by=requested_by)
+    except Exception as error:
+        return {"status": "storage_error", "client_id": client_id, "message": str(error)}
+
+    return {
+        "status": "completed",
+        "client_id": client_id,
+        "timeout_seconds": timeout,
+        **metadata,
+    }
 
 
 def request_client_network_neighbourhood(client_id, *, timeout=None):
