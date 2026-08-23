@@ -131,11 +131,16 @@ class NetworkQuarantineManager:
     def _get_active_windows_profile_policy(self) -> Tuple[Optional[Tuple[str, str, str]], str]:
         """Return the active profile and its effective inbound/outbound policy."""
         command = (
-            "$profile = Get-NetConnectionProfile | Select-Object -First 1 "
-            "-ExpandProperty NetworkCategory; "
-            "$firewall = Get-NetFirewallProfile -Name $profile; "
-            'Write-Output "$profile|$($firewall.DefaultInboundAction)|'
-            '$($firewall.DefaultOutboundAction)"'
+            "$net = Get-NetConnectionProfile -ErrorAction SilentlyContinue | Select-Object -First 1; "
+            "$cat = if ($net -and $net.NetworkCategory) { [string]$net.NetworkCategory } else { 'Public' }; "
+            "$profile = switch -regex ($cat) { "
+            "'Domain' { 'Domain' } "
+            "'Private' { 'Private' } "
+            "default { 'Public' } }; "
+            "$firewall = Get-NetFirewallProfile -Name $profile -ErrorAction SilentlyContinue; "
+            "$in = if ($firewall -and $firewall.DefaultInboundAction -and [string]$firewall.DefaultInboundAction -ne 'NotConfigured') { [string]$firewall.DefaultInboundAction } else { 'Block' }; "
+            "$out = if ($firewall -and $firewall.DefaultOutboundAction -and [string]$firewall.DefaultOutboundAction -ne 'NotConfigured') { [string]$firewall.DefaultOutboundAction } else { 'Allow' }; "
+            'Write-Output "$profile|$in|$out"'
         )
         code, output = self._run_cmd(
             ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command]
@@ -143,14 +148,15 @@ class NetworkQuarantineManager:
         if code != 0:
             return None, output
         try:
-            profile, inbound, outbound = output.strip().splitlines()[-1].split("|")
+            profile_raw, inbound_raw, outbound_raw = output.strip().splitlines()[-1].split("|")
         except ValueError:
             return None, f"Unexpected firewall policy response: {output}"
-        if profile not in {"Domain", "Private", "Public"}:
-            return None, f"Unsupported active firewall profile: {profile}"
-        if self._firewall_policy_argument(inbound, outbound) is None:
-            return None, f"Unsupported active firewall policy: {inbound}|{outbound}"
-        return (profile, inbound.upper(), outbound.upper()), ""
+
+        profile = "Domain" if "domain" in profile_raw.lower() else ("Private" if "private" in profile_raw.lower() else "Public")
+        inbound = "ALLOW" if inbound_raw.upper() == "ALLOW" else "BLOCK"
+        outbound = "BLOCK" if outbound_raw.upper() == "BLOCK" else "ALLOW"
+
+        return (profile, inbound, outbound), ""
 
     def _set_windows_profile_policy(
         self, profile: str, inbound: str, outbound: str
