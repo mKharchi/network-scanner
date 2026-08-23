@@ -817,7 +817,13 @@ def get_activity_log(period="1d"):
 # ============================================================
 
 
-def handle_command(message):
+def handle_command(
+    message,
+    *,
+    quarantine_manager=None,
+    process_monitor=None,
+    network_state_manager=None,
+):
     if not isinstance(message, dict):
         return {"error": "Invalid message format"}
 
@@ -856,6 +862,56 @@ def handle_command(message):
     elif command == "GET_ACTIVITY_LOG":
         period = message.get("args", "1d")
         return get_activity_log(period)
+
+    elif command == "QUARANTINE_CLIENT":
+        args = message.get("args") or {}
+        reason = args.get("reason", "Administrator requested network isolation") if isinstance(args, dict) else str(args)
+        duration = args.get("duration_minutes") if isinstance(args, dict) else None
+        cmd_id = args.get("command_id") if isinstance(args, dict) else None
+        if quarantine_manager:
+            return quarantine_manager.quarantine_endpoint(reason=reason, duration_minutes=duration, command_id=cmd_id)
+        return {"status": "error", "message": "Quarantine manager is not initialized"}
+
+    elif command == "RELEASE_CLIENT":
+        args = message.get("args") or {}
+        reason = args.get("reason", "Administrator released network isolation") if isinstance(args, dict) else str(args)
+        cmd_id = args.get("command_id") if isinstance(args, dict) else None
+        if quarantine_manager:
+            return quarantine_manager.release_quarantine(reason=reason, command_id=cmd_id)
+        return {"status": "error", "message": "Quarantine manager is not initialized"}
+
+    elif command == "GET_QUARANTINE_STATUS":
+        if quarantine_manager:
+            return quarantine_manager.get_status()
+        return {"status": "error", "message": "Quarantine manager is not initialized"}
+
+    elif command == "ISOLATE_DEVICE":
+        args = message.get("args") or {}
+        reason = (
+            args.get("reason", "Administrator requested static device isolation")
+            if isinstance(args, dict)
+            else str(args)
+        )
+        if network_state_manager:
+            # The command intentionally removes the active route and may prevent
+            # this response from reaching the server.
+            return network_state_manager.isolate_static_ip(reason=reason, enabled=True)
+        return {"status": "error", "message": "Network state manager is not initialized"}
+
+    elif command == "GET_DEVICE_ISOLATION_STATUS":
+        if network_state_manager:
+            return {
+                "status": "ok",
+                "data": network_state_manager.get_lifecycle_state(),
+            }
+        return {"status": "error", "message": "Network state manager is not initialized"}
+
+    elif command == "UPDATE_FORBIDDEN_PROCESS_POLICY":
+        rules = message.get("args", [])
+        if process_monitor and isinstance(rules, list):
+            process_monitor.set_rules(rules)
+            return {"status": "ok", "rules_loaded": len(rules)}
+        return {"status": "error", "message": "Process monitor not initialized or invalid rules format"}
 
     elif command == "PING":
         return {"status": "ok"}

@@ -22,6 +22,7 @@ from server_components.log_storage import store_log_file
 clients = {}
 clients_lock = threading.Lock()
 pending_disconnect_checks = {}
+device_isolation_status = {}
 DHCP_OBSERVATION_QUEUE_SIZE = 1024
 dhcp_observation_queue = queue.Queue(maxsize=DHCP_OBSERVATION_QUEUE_SIZE)
 dhcp_observation_worker_lock = threading.Lock()
@@ -940,6 +941,14 @@ def remove_client(mac, connection=None):
         client = clients.pop(mac, None)
         if client:
             expected_disconnect = client.get("disconnect_expected", False)
+            disconnect_reason = client.get("disconnect_reason")
+            if disconnect_reason == "DEVICE_ISOLATION":
+                existing = device_isolation_status.get(client["client_id"], {})
+                device_isolation_status[client["client_id"]] = {
+                    **existing,
+                    "status": "CONNECTION_LOST_AFTER_ISOLATION",
+                    "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                }
             check_token = None
             if not expected_disconnect:
                 check_token = object()
@@ -989,7 +998,9 @@ def handle_network_neighbour_report(
         report_validator = validate_neighbour_report
 
     source = payload.get("observation_source") if isinstance(payload, dict) else None
-    global_scan_id = payload.get("global_scan_id") if isinstance(payload, dict) else None
+    global_scan_id = (
+        payload.get("global_scan_id") if isinstance(payload, dict) else None
+    )
     scan_status = payload.get("scan_status") if isinstance(payload, dict) else None
     reported_count = (
         len(payload.get("neighbours", []))
@@ -1109,7 +1120,9 @@ def handle_network_neighbour_report(
         if source == "ACTIVE_NEIGHBOUR_SCAN":
             global_scan_manager = None
             if global_scan_id:
-                from server_components.global_network_scan import global_network_scan_manager
+                from server_components.global_network_scan import (
+                    global_network_scan_manager,
+                )
 
                 global_scan_manager = global_network_scan_manager
                 if global_scan_manager.is_duplicate_report(
@@ -1346,7 +1359,9 @@ def execute_client_command(
                     devs = data.get("devices", [])
                     if devs:
                         try:
-                            print(f"Storing ARP_SCAN_NETWORK observations from {client['mac']} done in {int(datetime.now().timestamp())} .")
+                            print(
+                                f"Storing ARP_SCAN_NETWORK observations from {client['mac']} done in {int(datetime.now().timestamp())} ."
+                            )
                             from server_components.network_device_storage import (
                                 store_client_neighbour_observations,
                             )
@@ -1433,6 +1448,205 @@ def request_client_network_neighbourhood(client_id, *, timeout=None):
         "client_id": client_id,
         "observations_sent": data.get("observations_sent", 0),
         "timeout_seconds": timeout,
+    }
+
+
+def request_client_passive_neighbourhood(client_id, *, timeout=None):
+    """Request one connected client's bounded passive-protocol snapshot.
+
+    Passive observations stay separate from the existing neighbourhood/device
+    pipeline. This helper only dispatches the client command and validates the
+    response contract for the REST layer added in the next phase.
+    """
+    if timeout is None:
+        try:
+            timeout = max(
+                0.1,
+                float(os.getenv("PASSIVE_NEIGHBOURHOOD_REQUEST_TIMEOUT", "10")),
+            )
+        except ValueError:
+            timeout = 10.0
+
+    result = execute_client_command(
+        client_id,
+        "GET_PASSIVE_NEIGHBOURHOOD",
+        timeout=timeout,
+        process_network_scan=False,
+    )
+    if result.get("status") != "ok":
+        message = result.get("message", "Client passive neighbourhood request failed.")
+        if "timed out" in message.lower():
+            return {
+                "status": "client_timeout",
+                "client_id": client_id,
+                "timeout_seconds": timeout,
+                "message": message,
+            }
+        if "not connected" in message.lower():
+            return {
+                "status": "client_unavailable",
+                "client_id": client_id,
+                "message": message,
+            }
+        return {"status": "client_error", "client_id": client_id, "message": message}
+
+    data = result.get("data")
+    observations = data.get("observations") if isinstance(data, dict) else None
+    valid_observations = isinstance(observations, list) and all(
+        isinstance(observation, dict)
+        and observation.get("protocol") in {"dhcp", "mdns", "llmnr", "nbns", "ssdp"}
+        for observation in observations
+    )
+    if (
+        not isinstance(data, dict)
+        or not isinstance(data.get("observed_at"), str)
+        or not isinstance(data.get("reporter"), str)
+        or not valid_observations
+    ):
+        return {
+            "status": "client_error",
+            "client_id": client_id,
+            "message": "Client returned an invalid passive neighbourhood response.",
+        }
+    from .passive_neighbourhood_storage import (
+        append_passive_neighbourhood_snapshot,
+    )
+    try:
+        storage_path = append_passive_neighbourhood_snapshot(
+        client_id=client_id,
+        reporter=data["reporter"],
+        observed_at=data["observed_at"],
+        observations=observations,
+    )
+    except Exception:
+        return {
+                    "status": "storage_error",
+                    "client_id": client_id,
+                    "message": "Failed to store passive neighbourhood snapshot.",
+                }
+        storage_path = None
+    return {
+        "status": "completed",
+        "client_id": client_id,
+        "timeout_seconds": timeout,
+        "observed_at": data["observed_at"],
+        "reporter": data["reporter"],
+        "observations": observations,
+        "observation_count": len(observations),
+    }
+
+
+def quarantine_client(client_id, reason="Administrator requested network quarantine", duration_minutes=60, timeout=10.0):
+    """Dispatch QUARANTINE_CLIENT command to a connected client."""
+    cmd_id = f"cmd-quarantine-{int(time.time())}"
+    args = {
+        "reason": reason,
+        "duration_minutes": duration_minutes,
+        "command_id": cmd_id,
+    }
+    return execute_client_command(client_id, "QUARANTINE_CLIENT", args=args, timeout=timeout)
+
+
+def release_client_quarantine(client_id, reason="Administrator released network quarantine", timeout=10.0):
+    """Dispatch RELEASE_CLIENT command to a connected client."""
+    cmd_id = f"cmd-release-{int(time.time())}"
+    args = {
+        "reason": reason,
+        "command_id": cmd_id,
+    }
+    return execute_client_command(client_id, "RELEASE_CLIENT", args=args, timeout=timeout)
+
+
+def get_client_quarantine_status(client_id, timeout=10.0):
+    """Dispatch GET_QUARANTINE_STATUS command to a connected client."""
+    return execute_client_command(client_id, "GET_QUARANTINE_STATUS", timeout=timeout)
+
+
+def isolate_client(
+    client_id,
+    reason="Administrator requested static device isolation",
+    timeout=10.0,
+):
+    """Request static-IP isolation and classify the expected disconnect.
+
+    The client removes its production route, so a missing response after the
+    command is sent is a successful transport outcome, not a normal agent-loss
+    alert. Network restoration intentionally remains a local admin action.
+    """
+    client = get_client(client_id)
+    if not client:
+        return {"status": "error", "message": f"Client '{client_id}' is not connected."}
+
+    sent_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    with clients_lock:
+        current_client = clients.get(client["mac"])
+        if current_client is not client:
+            return {"status": "error", "message": f"Client '{client_id}' is not connected."}
+        client["disconnect_expected"] = True
+        client["disconnect_reason"] = "DEVICE_ISOLATION"
+        device_isolation_status[client_id] = {
+            "status": "SENT",
+            "reason": reason,
+            "sent_at": sent_at,
+            "updated_at": sent_at,
+        }
+
+    result = execute_client_command(
+        client_id,
+        "ISOLATE_DEVICE",
+        args={"reason": reason},
+        timeout=timeout,
+    )
+    if result.get("status") == "ok":
+        with clients_lock:
+            existing = device_isolation_status.get(client_id, {})
+            device_isolation_status[client_id] = {
+                **existing,
+                "status": "ACKNOWLEDGED",
+                "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            }
+        return {**result, "isolation_status": "ACKNOWLEDGED"}
+
+    message = result.get("message", "Device isolation command failed.")
+    if "disconnected" in message.lower() or "connection lost" in message.lower():
+        with clients_lock:
+            existing = device_isolation_status.get(client_id, {})
+            device_isolation_status[client_id] = {
+                **existing,
+                "status": "CONNECTION_LOST_AFTER_ISOLATION",
+                "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            }
+        return {
+            "status": "ok",
+            "client_id": client_id,
+            "isolation_status": "CONNECTION_LOST_AFTER_ISOLATION",
+            "message": "Isolation command was sent and the client disconnected as expected.",
+        }
+
+    with clients_lock:
+        current_client = clients.get(client["mac"])
+        if current_client is client:
+            client.pop("disconnect_expected", None)
+            client.pop("disconnect_reason", None)
+        existing = device_isolation_status.get(client_id, {})
+        device_isolation_status[client_id] = {
+            **existing,
+            "status": "FAILED",
+            "message": message,
+            "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        }
+    return result
+
+
+def get_device_isolation_status(client_id):
+    """Return the latest server-side isolation dispatch state for a client."""
+    with clients_lock:
+        status = device_isolation_status.get(client_id)
+        if status:
+            return {"status": "ok", "data": status.copy()}
+    return {
+        "status": "ok",
+        "data": {"status": "NOT_REQUESTED", "client_connected": get_client(client_id) is not None},
     }
 
 

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, type ManagedClientSummary } from "../api/client";
 import { useFetch } from "../hooks/useFetch";
-import { OnlineBadge, OfflineBadge } from "../components/Badge";
+import { ClientStatusBadge } from "../components/Badge";
 import { Button } from "../components/Button";
 import { DataTable, type Column } from "../components/DataTable";
 import {
@@ -49,6 +49,7 @@ function FilterBar({
         {[
           { value: "", label: "All" },
           { value: "ONLINE", label: "Online" },
+          { value: "ISOLATED", label: "Isolated" },
           { value: "OFFLINE", label: "Offline" },
         ].map(({ value, label }) => (
           <button
@@ -122,8 +123,7 @@ const columns: Column<ManagedClientSummary>[] = [
   {
     key: "connection",
     label: "Status",
-    render: (c) =>
-      c.connection.state === "ONLINE" ? <OnlineBadge /> : <OfflineBadge />,
+    render: (c) => <ClientStatusBadge state={c.connection.state} />,
   },
   {
     key: "os",

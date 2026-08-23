@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { api } from '../api/client';
+import { api, type ClientPassiveNeighbourhood } from '../api/client';
 import { useFetch } from '../hooks/useFetch';
 import { useToast } from '../hooks/useToast';
-import { OnlineBadge, OfflineBadge, Badge } from '../components/Badge';
+import { ClientStatusBadge, Badge } from '../components/Badge';
 import { Button } from '../components/Button';
 import { SectionCard, MetricCard } from '../components/Card';
 import { Skeleton, ErrorState, Notice } from '../components/States';
@@ -70,6 +70,9 @@ export function ClientDetailPage() {
   const [commandLoading, setCommandLoading] = useState(false);
   const [commandResult, setCommandResult] = useState<any>(null);
   const [neighbourhoodLoading, setNeighbourhoodLoading] = useState(false);
+  const [passiveNeighbourhoodLoading, setPassiveNeighbourhoodLoading] = useState(false);
+  const [passiveNeighbourhood, setPassiveNeighbourhood] = useState<ClientPassiveNeighbourhood | null>(null);
+  const [quarantineLoading, setQuarantineLoading] = useState(false);
 
   // Process management states
   const [processList, setProcessList] = useState<ProcessItem[] | null>(null);
@@ -177,6 +180,81 @@ export function ClientDetailPage() {
     }
   };
 
+  const requestPassiveNeighbourhood = async () => {
+    if (!clientId) return;
+    setPassiveNeighbourhoodLoading(true);
+    try {
+      const result = await api.requestClientPassiveNeighbourhood(clientId);
+      setPassiveNeighbourhood(result);
+      const protocols = new Set(result.observations.map((observation) => observation.protocol));
+      addToast({
+        title: 'Passive information received',
+        message: `Received ${result.observation_count} observation(s) across ${protocols.size} protocol(s) from ${c.hostname}.`,
+        severity: 'SUCCESS',
+      });
+    } catch (err: any) {
+      addToast({
+        title: 'Passive information request failed',
+        message: err?.message || 'The client did not provide passive network information.',
+        severity: 'CRITICAL',
+      });
+    } finally {
+      setPassiveNeighbourhoodLoading(false);
+    }
+  };
+
+  const handleQuarantine = async () => {
+    if (!clientId) return;
+    const reason = window.prompt(
+      'Enter reason for network quarantine (e.g. repeated malware policy violations):',
+      'Administrator requested network quarantine',
+    );
+    if (reason === null) return;
+    setQuarantineLoading(true);
+    try {
+      await api.quarantineClient(clientId, { reason: reason || undefined });
+      addToast({
+        title: 'Quarantine applied',
+        message: `${c.hostname} has been isolated on the network.`,
+        severity: 'HIGH',
+      });
+      refetch();
+    } catch (err: any) {
+      addToast({
+        title: 'Quarantine failed',
+        message: err?.message || 'Failed to apply network quarantine.',
+        severity: 'CRITICAL',
+      });
+    } finally {
+      setQuarantineLoading(false);
+    }
+  };
+
+  const handleReleaseQuarantine = async () => {
+    if (!clientId) return;
+    if (!window.confirm(`Are you sure you want to release ${c.hostname} from network quarantine?`)) {
+      return;
+    }
+    setQuarantineLoading(true);
+    try {
+      await api.releaseClientQuarantine(clientId);
+      addToast({
+        title: 'Quarantine released',
+        message: `${c.hostname} network access has been restored.`,
+        severity: 'SUCCESS',
+      });
+      refetch();
+    } catch (err: any) {
+      addToast({
+        title: 'Release failed',
+        message: err?.message || 'Failed to release network quarantine.',
+        severity: 'CRITICAL',
+      });
+    } finally {
+      setQuarantineLoading(false);
+    }
+  };
+
   if (state.status === 'idle' || state.status === 'loading') {
     return <ClientDetailSkeleton />;
   }
@@ -194,6 +272,7 @@ export function ClientDetailPage() {
   const d = state.status === 'success' ? state.data : state.staleData!;
   const c = d.client;
   const isOnline = c.connection.state === 'ONLINE';
+  const isIsolated = c.connection.state === 'ISOLATED';
 
   const filteredProcesses = (processList || []).filter((p) => {
     if (!processFilter) return true;
@@ -230,6 +309,37 @@ export function ClientDetailPage() {
         </Notice>
       )}
 
+      {/* Prominent Isolated Device Notice */}
+      {isIsolated && (
+        <div style={{ marginBottom: 'var(--space-5)' }}>
+          <Notice variant="danger" title="🔴 DEVICE ISOLATED">
+            <div style={{ display: 'grid', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
+              <div>
+                <strong>Reason:</strong>{' '}
+                {c.connection.isolation?.reason || 'Administrator requested static device isolation'}
+              </div>
+              {c.connection.isolation?.isolated_at && (
+                <div>
+                  <strong>Isolated at:</strong> {formatDateTime(c.connection.isolation.isolated_at)}
+                </div>
+              )}
+              {c.ip_address && (
+                <div>
+                  <strong>Previous IP:</strong> {c.ip_address}
+                </div>
+              )}
+              <div>
+                <strong>Last server contact:</strong>{' '}
+                {c.connection.last_connected_at ? formatDateTime(c.connection.last_connected_at) : 'Disconnected'}
+              </div>
+              <div>
+                <strong>Recovery:</strong> Administrator intervention required (physical logon / recovery script on client machine).
+              </div>
+            </div>
+          </Notice>
+        </div>
+      )}
+
       {/* Header Banner */}
       <div
         style={{
@@ -246,7 +356,11 @@ export function ClientDetailPage() {
             width: 48,
             height: 48,
             borderRadius: 'var(--radius)',
-            background: isOnline ? 'var(--success-bg)' : 'var(--surface-muted)',
+            background: isIsolated
+              ? 'var(--danger-bg, #fee2e2)'
+              : isOnline
+              ? 'var(--success-bg)'
+              : 'var(--surface-muted)',
             border: '1px solid var(--border)',
             display: 'flex',
             alignItems: 'center',
@@ -256,7 +370,7 @@ export function ClientDetailPage() {
           }}
           aria-hidden="true"
         >
-          💻
+          {isIsolated ? '🔒' : '💻'}
         </div>
         <div>
           <h1
@@ -276,9 +390,11 @@ export function ClientDetailPage() {
               flexWrap: 'wrap',
             }}
           >
-            {isOnline ? <OnlineBadge /> : <OfflineBadge />}
+            <ClientStatusBadge state={c.connection.state} />
             <span style={{ fontSize: 'var(--font-xs)', color: 'var(--text-muted)' }}>
-              {isOnline
+              {isIsolated
+                ? `Isolated (last contact ${formatRelative(c.connection.last_connected_at)})`
+                : isOnline
                 ? `Connected ${formatRelative(c.connection.last_connected_at)}`
                 : `Last seen ${formatRelative(c.connection.last_connected_at)}`}
             </span>
@@ -300,8 +416,13 @@ export function ClientDetailPage() {
       <SectionCard title="Agent Remote Control & Telemetry">
         {!isOnline && (
           <div style={{ marginBottom: 'var(--space-3)' }}>
-            <Notice variant="info" title="Client is offline">
-              Agent must be online and connected to execute remote diagnostics.
+            <Notice
+              variant={isIsolated ? 'warning' : 'info'}
+              title={isIsolated ? 'Client is isolated' : 'Client is offline'}
+            >
+              {isIsolated
+                ? 'Device static isolation is active. Communication with the server has been severed as expected until local administrator restoration.'
+                : 'Agent must be online and connected to execute remote diagnostics.'}
             </Notice>
           </div>
         )}
@@ -370,10 +491,19 @@ export function ClientDetailPage() {
           <Button
             variant="primary"
             size="sm"
-            disabled={!isOnline || commandLoading || neighbourhoodLoading}
+            disabled={!isOnline || commandLoading || neighbourhoodLoading || passiveNeighbourhoodLoading}
             onClick={requestNeighbourhood}
           >
             {neighbourhoodLoading ? 'Collecting Neighbourhood…' : 'Collect Neighbourhood'}
+          </Button>
+
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={!isOnline || commandLoading || neighbourhoodLoading || passiveNeighbourhoodLoading}
+            onClick={requestPassiveNeighbourhood}
+          >
+            {passiveNeighbourhoodLoading ? 'Requesting Passive Info…' : 'Get Passive Network Information'}
           </Button>
 
           {/* Activity Log dropdown & button */}
@@ -412,6 +542,24 @@ export function ClientDetailPage() {
             onClick={() => setShowStartModal(true)}
           >
             🚀 Start Process
+          </Button>
+
+          <Button
+            variant="danger"
+            size="sm"
+            disabled={!isOnline || commandLoading || quarantineLoading}
+            onClick={handleQuarantine}
+          >
+            🚨 {quarantineLoading ? 'Quarantining…' : 'Isolate / Quarantine'}
+          </Button>
+
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={!isOnline || commandLoading || quarantineLoading}
+            onClick={handleReleaseQuarantine}
+          >
+            🔓 Release Quarantine
           </Button>
 
           <Button
@@ -471,6 +619,121 @@ export function ClientDetailPage() {
           </div>
         )}
       </SectionCard>
+
+      {passiveNeighbourhood && (() => {
+        const protocols = [...new Set(
+          passiveNeighbourhood.observations.map((observation) => observation.protocol),
+        )].sort();
+        const devices = new Set(
+          passiveNeighbourhood.observations.map((observation) =>
+            observation.mac_address
+            || observation.ip_address
+            || observation.hostname
+            || observation.service_name
+            || observation.device_type
+            || observation.raw_fields?.usn
+            || observation.protocol,
+          ),
+        );
+        const latestObservation = passiveNeighbourhood.observations.reduce<string | null>(
+          (latest, observation) => (
+            observation.observed_at && (!latest || observation.observed_at > latest)
+              ? observation.observed_at
+              : latest
+          ),
+          null,
+        );
+
+        return (
+          <div style={{ marginTop: 'var(--space-6)' }}>
+            <SectionCard title="Passive Network Information">
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                  gap: 'var(--space-3)',
+                }}
+              >
+                <MetricCard label="Observations" value={String(passiveNeighbourhood.observation_count)} />
+                <MetricCard label="Observed endpoints" value={String(devices.size)} />
+                <MetricCard label="Protocols" value={String(protocols.length)} />
+              </div>
+              <div style={{ marginTop: 'var(--space-4)' }}>
+                <DetailRow label="Protocols detected" value={protocols.length ? protocols.join(', ') : 'None'} />
+                <DetailRow label="Latest observation" value={latestObservation ? formatDateTime(latestObservation) : 'No observations'} />
+                <DetailRow label="Snapshot received" value={formatDateTime(passiveNeighbourhood.observed_at)} />
+                <DetailRow label="Reporter" value={passiveNeighbourhood.reporter} mono />
+              </div>
+              <div style={{ marginTop: 'var(--space-4)', overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-xs)' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
+                      <th style={{ padding: '8px' }}>Protocol</th>
+                      <th style={{ padding: '8px' }}>Observed device or service</th>
+                      <th style={{ padding: '8px' }}>Address</th>
+                      <th style={{ padding: '8px' }}>Advertisement details</th>
+                      <th style={{ padding: '8px' }}>Seen</th>
+                      <th style={{ padding: '8px' }}>Latest</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {passiveNeighbourhood.observations.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                          No passive protocol observations have been collected in this client session.
+                        </td>
+                      </tr>
+                    ) : (
+                      passiveNeighbourhood.observations.map((observation, index) => {
+                        const identity =`${observation.device_name}
+                           ${ observation.service_name}
+                           ${ observation.hostname}
+                           ${observation.device_type}
+                          ${observation.raw_fields?.usn}` 
+                        
+                          || 'Unidentified observation';
+                        const address = [observation.ip_address, observation.mac_address]
+                          .filter(Boolean)
+                          .join('\n');
+                        const details = [
+                          observation.observation_kind,
+                          observation.service_type,
+                          observation.service_port ? `port ${observation.service_port}` : null,
+                          observation.server,
+                          observation.location,
+                        ].filter(Boolean).join('\n');
+
+                        return (
+                          <tr key={`${observation.protocol}-${observation.observed_at ?? index}-${index}`} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                            <td style={{ padding: '8px', verticalAlign: 'top' }}>
+                              <Badge variant="info">{observation.protocol}</Badge>
+                            </td>
+                            <td style={{ padding: '8px', verticalAlign: 'top', fontWeight: 600, maxWidth: '260px', wordBreak: 'break-word' }}>
+                              {identity}
+                            </td>
+                            <td style={{ padding: '8px', verticalAlign: 'top', whiteSpace: 'pre-line', fontFamily: 'var(--font-mono)' }}>
+                              {address || '—'}
+                            </td>
+                            <td style={{ padding: '8px', verticalAlign: 'top', whiteSpace: 'pre-line', maxWidth: '360px', overflowWrap: 'anywhere', color: 'var(--text-muted)' }}>
+                              {details || '—'}
+                            </td>
+                            <td style={{ padding: '8px', verticalAlign: 'top', textAlign: 'right' }}>
+                              {observation.seen_count ?? 1}
+                            </td>
+                            <td style={{ padding: '8px', verticalAlign: 'top', whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>
+                              {observation.observed_at ? formatDateTime(observation.observed_at) : '—'}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </SectionCard>
+          </div>
+        );
+      })()}
 
       {/* Live Process Explorer & Manager */}
       {processList && (

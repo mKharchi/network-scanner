@@ -4,8 +4,8 @@ import "../styles/shell.css";
 import { useApiState } from "../hooks/useApiState";
 import { TbCloudNetwork } from "react-icons/tb";
 import { RiScanLine } from "react-icons/ri";
-import { FiPackage } from "react-icons/fi";
 import { MdHistory } from "react-icons/md";
+import { FiServer } from "react-icons/fi";
 
 // ── Icons ────────────────────────────────────────────────────────
 function IconDashboard() {
@@ -44,22 +44,17 @@ function IconClients() {
   );
 }
 
-const IconHistory = () => {
-  return (
-    <div className="nav-item__icon" aria-hidden="true">
-      {" "}
-      <MdHistory size={15} />
-    </div>
-  );
-};
+const IconHistory = () => (
+  <div className="nav-item__icon" aria-hidden="true">
+    <MdHistory size={15} />
+  </div>
+);
 
-const IconDhcp = () => {
-  return (
-    <div className="nav-item__icon" aria-hidden="true">
-      <FiPackage size={15} />
-    </div>
-  );
-};
+const IconAllDevices = () => (
+  <div className="nav-item__icon" aria-hidden="true">
+    <FiServer size={15} />
+  </div>
+);
 
 function IconScan() {
   return (
@@ -260,6 +255,17 @@ function Sidebar({ isOpen = false, newAlertCount = 0, onClose }: SidebarProps) {
         </span>
 
         <NavLink
+          to="/network/devices"
+          onClick={onClose}
+          className={({ isActive }) =>
+            `nav-item nav-item--sub${isActive ? " active" : ""}`
+          }
+        >
+          <IconAllDevices />
+          All Devices
+        </NavLink>
+
+        <NavLink
           to="/network/latest"
           onClick={onClose}
           className={({ isActive }) =>
@@ -279,17 +285,6 @@ function Sidebar({ isOpen = false, newAlertCount = 0, onClose }: SidebarProps) {
         >
           <IconHistory />
           Scan History
-        </NavLink>
-
-        <NavLink
-          to="/network/dhcp"
-          onClick={onClose}
-          className={({ isActive }) =>
-            `nav-item nav-item--sub${isActive ? " active" : ""}`
-          }
-        >
-          <IconDhcp />
-          DHCP Activity
         </NavLink>
 
         <NavLink

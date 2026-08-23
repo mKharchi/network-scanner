@@ -147,6 +147,7 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     {"command": "PING", "label": "Ping"},
                     {"command": "KILL_PROCESS", "label": "Kill process"},
                     {"command": "START_PROCESS", "label": "Start process"},
+                    {"command": "ISOLATE_DEVICE", "label": "Isolate device (static IP)"},
                     {"command": "DISCONNECT", "label": "Disconnect client"},
                 ]
                 self.send_data({"items": commands})
@@ -160,6 +161,26 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     self.send_error_response(404, "NOT_FOUND", f"Client '{client_id}' not found.")
                     return
                 self.send_data(detail)
+                return
+
+            # Client quarantine status GET
+            m = re.match(r"^/api/v1/clients/([^/]+)/quarantine$", path)
+            if m:
+                client_id = urllib.parse.unquote(m.group(1))
+                status_res = server_lib.get_client_quarantine_status(client_id)
+                if status_res.get("status") == "ok":
+                    self.send_data(status_res.get("data", status_res))
+                else:
+                    self.send_error_response(400, "COMMAND_FAILED", status_res.get("message", "Failed to retrieve quarantine status."))
+                return
+
+            # Device-isolation dispatch status is server-side because the
+            # client intentionally disconnects after its active route is removed.
+            m = re.match(r"^/api/v1/clients/([^/]+)/isolation$", path)
+            if m:
+                client_id = urllib.parse.unquote(m.group(1))
+                status_res = server_lib.get_device_isolation_status(client_id)
+                self.send_data(status_res.get("data", status_res))
                 return
 
             # 5. Network Scans
@@ -253,7 +274,16 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 self.send_data(scan_data)
                 return
 
-            # 6. Network Devices
+            # 6a. Network Devices — list all
+            if path == "/api/v1/network/devices":
+                search = get_param("search")
+                limit = get_int_param("limit", 500)
+                offset = get_int_param("offset", 0)
+                devices_data = api_service.list_network_devices(search=search, limit=limit, offset=offset)
+                self.send_data(devices_data)
+                return
+
+            # 6b. Network Device — single device by MAC
             m = re.match(r"^/api/v1/network/devices/([^/]+)$", path)
             if m:
                 mac_addr = urllib.parse.unquote(m.group(1))
@@ -338,6 +368,21 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
         path = parsed_url.path.rstrip("/")
 
         try:
+            # Request bounded passive-protocol observations from one connected client.
+            m = re.match(r"^/api/v1/clients/([^/]+)/passive-neighbourhood$", path)
+            if m:
+                client_id = urllib.parse.unquote(m.group(1))
+                result = server_lib.request_client_passive_neighbourhood(client_id)
+                if result["status"] == "completed":
+                    self.send_data(result, status_code=200)
+                elif result["status"] == "client_timeout":
+                    self.send_error_response(504, "CLIENT_TIMEOUT", result["message"])
+                elif result["status"] == "client_unavailable":
+                    self.send_error_response(409, "CLIENT_UNAVAILABLE", result["message"])
+                else:
+                    self.send_error_response(502, "CLIENT_REQUEST_FAILED", result["message"])
+                return
+
             # Direct passive neighbourhood collection from one connected client.
             m = re.match(r"^/api/v1/clients/([^/]+)/network-neighbourhood$", path)
             if m:
@@ -379,6 +424,18 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     )
                     return
 
+                if command == "ISOLATE_DEVICE":
+                    reason = args.get("reason") if isinstance(args, dict) else None
+                    res = server_lib.isolate_client(
+                        client_id,
+                        reason=reason or "Administrator requested static device isolation",
+                    )
+                    if res.get("status") == "ok":
+                        self.send_data(res, status_code=200)
+                    else:
+                        self.send_error_response(400, "ISOLATION_FAILED", res.get("message", "Failed to isolate client."))
+                    return
+
                 res = server_lib.execute_client_command(
                     client_id,
                     command,
@@ -389,6 +446,61 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     self.send_data(res, status_code=200)
                 else:
                     self.send_error_response(400, "COMMAND_FAILED", res.get("message", "Command execution failed."))
+                return
+
+            # Client Quarantine (POST /api/v1/clients/{client_id}/quarantine)
+            m = re.match(r"^/api/v1/clients/([^/]+)/quarantine$", path)
+            if m:
+                client_id = urllib.parse.unquote(m.group(1))
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                    body = self.rfile.read(length).decode("utf-8") if length else "{}"
+                    payload = json.loads(body) if body else {}
+                except Exception:
+                    payload = {}
+                reason = payload.get("reason", "Administrator requested network quarantine")
+                duration = payload.get("duration_minutes", 60)
+                res = server_lib.quarantine_client(client_id, reason=reason, duration_minutes=duration)
+                if res.get("status") == "ok":
+                    self.send_data(res, status_code=200)
+                else:
+                    self.send_error_response(400, "QUARANTINE_FAILED", res.get("message", "Failed to quarantine client."))
+                return
+
+            # Device isolation (POST /api/v1/clients/{client_id}/isolation).
+            m = re.match(r"^/api/v1/clients/([^/]+)/isolation$", path)
+            if m:
+                client_id = urllib.parse.unquote(m.group(1))
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                    body = self.rfile.read(length).decode("utf-8") if length else "{}"
+                    payload = json.loads(body) if body else {}
+                except Exception:
+                    payload = {}
+                reason = payload.get("reason", "Administrator requested static device isolation")
+                res = server_lib.isolate_client(client_id, reason=reason)
+                if res.get("status") == "ok":
+                    self.send_data(res, status_code=200)
+                else:
+                    self.send_error_response(400, "ISOLATION_FAILED", res.get("message", "Failed to isolate client."))
+                return
+
+            # Client Release Quarantine (POST /api/v1/clients/{client_id}/release-quarantine)
+            m = re.match(r"^/api/v1/clients/([^/]+)/release-quarantine$", path)
+            if m:
+                client_id = urllib.parse.unquote(m.group(1))
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                    body = self.rfile.read(length).decode("utf-8") if length else "{}"
+                    payload = json.loads(body) if body else {}
+                except Exception:
+                    payload = {}
+                reason = payload.get("reason", "Administrator released network quarantine")
+                res = server_lib.release_client_quarantine(client_id, reason=reason)
+                if res.get("status") == "ok":
+                    self.send_data(res, status_code=200)
+                else:
+                    self.send_error_response(400, "RELEASE_FAILED", res.get("message", "Failed to release client quarantine."))
                 return
 
             # Manual Network Scan Trigger / Report Merge (POST /api/v1/network/scans)

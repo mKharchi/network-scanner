@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   api,
   type GlobalNeighbourhoodCollection,
-  type NetworkDevice,
+  type NetworkDeviceSummary,
 } from "../api/client";
 import { useFetch } from "../hooks/useFetch";
 import { useToast } from "../hooks/useToast";
@@ -18,18 +18,19 @@ import {
 } from "../components/States";
 import { formatDateTime, formatRelative, normalizeMac } from "../utils/format";
 
-export function LatestScanPage() {
+export function AllDevicesPage() {
   const navigate = useNavigate();
   const [filter, setFilter] = useState<"ALL" | "MANAGED" | "UNMANAGED">("ALL");
   const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState("hostname");
+  const [sortKey, setSortKey] = useState("last_seen");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   const { state, refetch } = useFetch(
-    () => api.getLatestScan(),
+    () => api.listNetworkDevices({ limit: 500 }),
     [],
-    ["app:network_update", "network_update"]
+    ["app:network_update", "network_update", "client_neighbourhood_update"]
   );
+
   const handleSort = (key: string) => {
     if (sortKey === key) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -39,14 +40,19 @@ export function LatestScanPage() {
     }
   };
 
-  const scan =
+  const rawDevices: NetworkDeviceSummary[] =
     state.status === "success"
-      ? state.data.scan
+      ? state.data.devices
       : state.status === "error" && state.staleData
-        ? state.staleData.scan
-        : null;
+        ? state.staleData.devices
+        : [];
 
-  const rawDevices: NetworkDevice[] = scan?.devices ?? [];
+  const totalCount =
+    state.status === "success"
+      ? state.data.total
+      : state.status === "error" && state.staleData
+        ? state.staleData.total
+        : rawDevices.length;
 
   const filteredDevices = rawDevices.filter((d) => {
     if (filter === "MANAGED" && !d.is_managed) return false;
@@ -84,14 +90,17 @@ export function LatestScanPage() {
     } else if (sortKey === "vendor") {
       av = a.vendor ?? "";
       bv = b.vendor ?? "";
-    } else if (sortKey === "last_observed_at") {
-      av = a.last_observed_at ?? "";
-      bv = b.last_observed_at ?? "";
+    } else if (sortKey === "first_seen") {
+      av = a.first_seen ?? "";
+      bv = b.first_seen ?? "";
+    } else if (sortKey === "last_seen") {
+      av = a.last_seen ?? "";
+      bv = b.last_seen ?? "";
     }
     return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
   });
 
-  const columns: Column<NetworkDevice>[] = [
+  const columns: Column<NetworkDeviceSummary>[] = [
     {
       key: "ip_address",
       label: "IP Address",
@@ -128,17 +137,33 @@ export function LatestScanPage() {
       render: (d) => <ClassificationBadge managed={d.is_managed} />,
     },
     {
-      key: "last_observed_at",
+      key: "first_seen",
+      label: "First Seen",
+      sortable: true,
+      render: (d) =>
+        d.first_seen ? (
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <span style={{ fontSize: "var(--font-xs)", fontWeight: 500, color: "var(--text)" }}>
+              {formatDateTime(d.first_seen)}
+            </span>
+            <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+              {formatRelative(d.first_seen)}
+            </span>
+          </div>
+        ) : null,
+    },
+    {
+      key: "last_seen",
       label: "Last Seen",
       sortable: true,
       align: "right",
       render: (d) => (
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
           <span style={{ fontSize: "var(--font-xs)", fontWeight: 500, color: "var(--text)" }}>
-            {formatDateTime(d.last_observed_at)}
+            {formatDateTime(d.last_seen)}
           </span>
           <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-            {formatRelative(d.last_observed_at)}
+            {formatRelative(d.last_seen)}
           </span>
         </div>
       ),
@@ -168,7 +193,10 @@ export function LatestScanPage() {
       }
 
       addToast({
-        title: collection.status === "completed" ? "Neighbourhood collection complete" : "Neighbourhood collection partially complete",
+        title:
+          collection.status === "completed"
+            ? "Neighbourhood collection complete"
+            : "Neighbourhood collection partially complete",
         message: `${collection.clients_succeeded}/${collection.clients_requested} clients responded; ${collection.devices_discovered} device(s) discovered.`,
         severity: collection.status === "completed" ? "SUCCESS" : "INFO",
       });
@@ -188,11 +216,9 @@ export function LatestScanPage() {
     <div>
       <div className="page-header">
         <div>
-          <h1 className="page-title">Latest Network Scan</h1>
+          <h1 className="page-title">All Known Devices</h1>
           <p className="page-description">
-            {scan
-              ? `Completed ${formatDateTime(scan.completed_at)} · Found ${scan.devices_found} device(s)`
-              : "Devices observed in the most recent network scan snapshot."}
+            Comprehensive registry of all devices discovered across all client neighbourhood scans ({totalCount} total).
           </p>
         </div>
         <div style={{ display: "flex", gap: "var(--space-2)", alignItems: "center" }}>
@@ -228,8 +254,8 @@ export function LatestScanPage() {
       )}
 
       {state.status === "error" && (
-        <Notice variant="warning" title="Scan data is stale or unavailable">
-          {state.staleData ? "Showing previously loaded scan. " : ""}
+        <Notice variant="warning" title="Device data is stale or unavailable">
+          {state.staleData ? "Showing previously loaded devices. " : ""}
           {state.error.message}
           <Button
             variant="quiet"
@@ -310,21 +336,21 @@ export function LatestScanPage() {
       </div>
 
       {state.status === "idle" || state.status === "loading" ? (
-        <SkeletonTable rows={8} columns={6} />
+        <SkeletonTable rows={8} columns={7} />
       ) : state.status === "error" && !state.staleData ? (
         <ErrorState
-          title="Unable to load latest scan"
+          title="Unable to load devices"
           message={state.error.message}
           onRetry={refetch}
         />
       ) : sortedDevices.length === 0 ? (
         <EmptyState
-          icon="📡"
+          icon="🖥️"
           title="No devices found"
           body={
             search || filter !== "ALL"
               ? "No devices match your current filters."
-              : "No devices were observed in the latest scan."
+              : "No devices recorded in the database yet."
           }
         />
       ) : (
@@ -335,7 +361,7 @@ export function LatestScanPage() {
           onRowClick={(d) =>
             navigate(`/network/devices/${encodeURIComponent(d.mac_address)}`)
           }
-          aria-label="Latest scan devices"
+          aria-label="All network devices"
           sortKey={sortKey}
           sortDir={sortDir}
           onSort={handleSort}
