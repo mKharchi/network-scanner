@@ -26,6 +26,7 @@ class ClientRegistrationTests(unittest.TestCase):
         self.original_log = server_lib.log_connection
         self.original_alert = server_lib.create_connection_alert
         server_lib.clients.clear()
+        server_lib.interactive_clients.clear()
         server_lib.pending_disconnect_checks.clear()
         self.updates = []
         server_lib.update_client_db = lambda *args: self.updates.append(args) or True
@@ -37,6 +38,7 @@ class ClientRegistrationTests(unittest.TestCase):
         server_lib.log_connection = self.original_log
         server_lib.create_connection_alert = self.original_alert
         server_lib.clients.clear()
+        server_lib.interactive_clients.clear()
         server_lib.pending_disconnect_checks.clear()
 
     @staticmethod
@@ -62,6 +64,22 @@ class ClientRegistrationTests(unittest.TestCase):
 
         self.assertIsNone(client_id)
         self.assertEqual(server_lib.clients, {})
+
+    def test_combined_registration_supports_commands_and_screenshots(self):
+        connection = type("Connection", (), {"close": lambda self: None})()
+        info = self.client_info()
+        info["agent_role"] = "combined"
+
+        client_id = server_lib.register_client(info, connection)
+
+        mac = "E4:FD:45:BA:8B:96"
+        self.assertEqual(client_id, "client-e4fd45ba8b96")
+        self.assertIs(server_lib.clients[mac], server_lib.interactive_clients[mac])
+        self.assertIs(server_lib.get_client(client_id), server_lib.get_interactive_client(client_id))
+
+        server_lib.remove_client(mac, connection, agent_role="combined")
+        self.assertNotIn(mac, server_lib.clients)
+        self.assertNotIn(mac, server_lib.interactive_clients)
 
 
 if __name__ == "__main__":
