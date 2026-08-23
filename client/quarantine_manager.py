@@ -162,14 +162,15 @@ class NetworkQuarantineManager:
         self, profile: str, inbound: str, outbound: str
     ) -> Tuple[bool, str]:
         policy = self._firewall_policy_argument(inbound, outbound)
-        if profile not in {"Domain", "Private", "Public"} or policy is None:
+        if profile not in {"Domain", "Private", "Public", "allprofiles"} or policy is None:
             return False, "Invalid Windows Firewall profile policy."
+        target_profile = "allprofiles" if profile == "allprofiles" else f"{profile.lower()}profile"
         code, output = self._run_cmd(
             [
                 "netsh",
                 "advfirewall",
                 "set",
-                f"{profile.lower()}profile",
+                target_profile,
                 "firewallpolicy",
                 policy,
             ]
@@ -195,8 +196,8 @@ class NetworkQuarantineManager:
         return (not errors, "; ".join(errors) if errors else "")
 
     def _apply_windows_firewall_rules(self) -> Tuple[bool, str]:
-        """Default-deny the active profile while explicitly preserving management."""
-        # Remove old rules from the previous unsafe implementation before adding
+        """Default-deny all firewall profiles while explicitly preserving management."""
+        # Remove old rules from the previous implementation before adding
         # the allow rules that work with a profile-level default deny.
         cleaned, cleanup_error = self._delete_windows_firewall_rules(
             ALL_QUARANTINE_RULES + LEGACY_BLOCK_RULES
@@ -253,22 +254,22 @@ class NetworkQuarantineManager:
             self._delete_windows_firewall_rules(ALL_QUARANTINE_RULES)
             return False, f"Failed adding loopback out rule: {out}"
 
-        # Default policy blocking does not override explicit allow rules, unlike
-        # the broad explicit block rules used by the earlier implementation.
-        changed, change_error = self._set_windows_profile_policy(profile, "BLOCK", "BLOCK")
+        # Apply blockoutbound across allprofiles so no secondary profile/adapter escapes.
+        changed, change_error = self._set_windows_profile_policy("allprofiles", "BLOCK", "BLOCK")
         if not changed:
             self._delete_windows_firewall_rules(ALL_QUARANTINE_RULES)
             return False, f"Failed enabling default-deny quarantine policy: {change_error}"
         self._windows_profile_policy = (profile, inbound, outbound)
 
-        return True, f"Firewall quarantine enabled for the {profile} profile."
+        return True, "Firewall quarantine enabled across all firewall profiles."
 
     def _remove_windows_firewall_rules(self) -> Tuple[bool, str]:
         """Restore profile policy before removing the server allow rules."""
         if self._windows_profile_policy is not None:
             profile, inbound, outbound = self._windows_profile_policy
+            # Restore allprofiles to default allowoutbound, or original profile policy
             restored, restore_error = self._set_windows_profile_policy(
-                profile, inbound, outbound
+                "allprofiles", inbound, outbound
             )
             if not restored:
                 return False, f"Could not restore firewall policy: {restore_error}"
