@@ -450,6 +450,102 @@ def get_client_detail(client_id: str) -> Optional[Dict[str, Any]]:
         conn.close()
 
 
+def list_client_screenshots(client_id: str, limit: int = 12) -> Optional[List[Dict[str, Any]]]:
+    """List stored screenshots for one managed client."""
+    if limit <= 0:
+        limit = 12
+
+    conn = get_connection()
+    if not conn:
+        return None
+
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT id
+            FROM clients
+            WHERE client_id = %s
+            """,
+            (client_id,),
+        )
+        client_row = cursor.fetchone()
+        if not client_row:
+            return None
+
+        cursor.execute(
+            """
+            SELECT id, command_id, requested_by, filename, mime_type,
+                   file_size, device_name, captured_at, uploaded_at, status
+            FROM screenshots
+            WHERE client_id = %s
+            ORDER BY uploaded_at DESC, id DESC
+            LIMIT %s
+            """,
+            (client_row["id"], limit),
+        )
+        items: List[Dict[str, Any]] = []
+        for row in cursor.fetchall():
+            items.append(
+                {
+                    "id": row["id"],
+                    "client_id": client_id,
+                    "command_id": row.get("command_id"),
+                    "requested_by": row.get("requested_by"),
+                    "filename": row["filename"],
+                    "mime_type": row["mime_type"],
+                    "file_size": row["file_size"],
+                    "device_name": row.get("device_name"),
+                    "captured_at": _iso_utc(row.get("captured_at")),
+                    "uploaded_at": _iso_utc(row.get("uploaded_at")),
+                    "status": row["status"],
+                }
+            )
+        return items
+    finally:
+        conn.close()
+
+
+def get_screenshot_record(screenshot_id: int) -> Optional[Dict[str, Any]]:
+    """Return one screenshot metadata row with its backing storage path."""
+    conn = get_connection()
+    if not conn:
+        return None
+
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT s.id, c.client_id, s.command_id, s.requested_by, s.filename,
+                   s.storage_path, s.mime_type, s.file_size, s.device_name,
+                   s.captured_at, s.uploaded_at, s.status
+            FROM screenshots s
+            JOIN clients c ON c.id = s.client_id
+            WHERE s.id = %s
+            """,
+            (screenshot_id,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+        return {
+            "id": row["id"],
+            "client_id": row["client_id"],
+            "command_id": row.get("command_id"),
+            "requested_by": row.get("requested_by"),
+            "filename": row["filename"],
+            "storage_path": row["storage_path"],
+            "mime_type": row["mime_type"],
+            "file_size": row["file_size"],
+            "device_name": row.get("device_name"),
+            "captured_at": _iso_utc(row.get("captured_at")),
+            "uploaded_at": _iso_utc(row.get("uploaded_at")),
+            "status": row["status"],
+        }
+    finally:
+        conn.close()
+
+
 # ============================================================
 # NETWORK SCANS & DEVICES
 # ============================================================
