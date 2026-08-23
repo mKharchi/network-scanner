@@ -16,6 +16,15 @@ import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+# Load the same server-local database configuration when the REST API is
+# launched independently from server.py.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+except ImportError:
+    pass
+
 from server_components import api_service, event_broadcaster, server_lib
 
 API_HOST = os.getenv("API_HOST", "0.0.0.0")

@@ -863,7 +863,10 @@ def list_alerts(
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
 
-        query += " ORDER BY a.detected_at DESC LIMIT %s"
+        # Alert timestamps can originate from clients in different time zones.
+        # The auto-increment ID is the authoritative insertion order, so the
+        # newest persisted alert cannot be hidden behind clock skew.
+        query += " ORDER BY a.id DESC LIMIT %s"
         params.append(limit)
 
         cursor.execute(query, params)
