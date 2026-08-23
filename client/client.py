@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import socket
 from pathlib import Path
@@ -14,6 +15,7 @@ from client_lib import (
 from process_scanner import scan_for_forbidden_processes
 from process_monitor import ForbiddenProcessMonitor
 from quarantine_manager import NetworkQuarantineManager
+from network_state_manager import NetworkStateManager
 from network_neighbour_collector import NetworkNeighbourCollector
 from dhcp_listener import DHCPListener
 from passive_protocol_listener import PassiveProtocolListener
@@ -49,6 +51,7 @@ NEIGHBOUR_SNAPSHOT_STATE_FILE = os.path.join(
     os.path.dirname(__file__), "neighbour_snapshot_state.json"
 )
 STARTUP_LOG_FILE = CLIENT_DIR / "client_service.log"
+LOG = logging.getLogger("client")
 
 socket_lock = threading.Lock()
 scanner_lock = threading.Lock()
@@ -574,6 +577,7 @@ def start_client(stop_event=None):
         server_port=SERVER_PORT,
         default_max_duration_minutes=int(os.getenv("QUARANTINE_MAX_DURATION_MINUTES", "60")),
     )
+    network_state_manager = NetworkStateManager()
 
     while not stop_event.is_set():
         client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -615,11 +619,79 @@ def start_client(stop_event=None):
 
         quarantine_manager.event_callback = _on_quarantine_event
 
+        # ------------------------------------------------------------------
+        # Auto-isolation on repeated escalation (opt-in via environment var).
+        # This integrates the forbidden-process feature with device isolation
+        # only when AUTO_ISOLATE_ON_ESCALATION=1 is explicitly set.  It is
+        # disabled by default so both features can be validated independently
+        # before they are joined.  Per the plan, isolation is intentionally
+        # fire-and-forget: the callback runs in a background thread and never
+        # waits for a server acknowledgement.
+        # ------------------------------------------------------------------
+        _auto_isolate_enabled = os.getenv("AUTO_ISOLATE_ON_ESCALATION", "0").strip() == "1"
+
+        def _on_escalation_isolate(critical_alert):
+            """Triggered when a forbidden process crosses the escalation threshold."""
+            if not _auto_isolate_enabled:
+                return
+
+            # Idempotency: skip if already isolating/isolated.
+            try:
+                current = network_state_manager.get_lifecycle_state()
+                if current and current.get("state") in (
+                    "ISOLATING",
+                    "ISOLATED",
+                    "RESTORING",
+                ):
+                    LOG.info(
+                        "[PROCESS MONITOR] Isolation skipped — already in state %s.",
+                        current.get("state"),
+                    )
+                    return
+            except Exception:
+                pass  # If state is unreadable, proceed with isolation attempt.
+
+            process_name = critical_alert.get("process_name", "unknown")
+            violation_count = critical_alert.get("violation_count", 0)
+            reason = (
+                f"Automatic isolation: forbidden process '{process_name}' "
+                f"violated policy {violation_count} times."
+            )
+
+            LOG.warning(
+                "[PROCESS MONITOR] Escalation threshold crossed for '%s' "
+                "(%d violations). Triggering device isolation.",
+                process_name,
+                violation_count,
+            )
+
+            def _run_isolation():
+                try:
+                    result = network_state_manager.isolate_static_ip(
+                        reason=reason,
+                        enabled=True,
+                    )
+                    LOG.warning(
+                        "[PROCESS MONITOR] Device isolation result: %s",
+                        result.get("status"),
+                    )
+                except Exception as iso_err:
+                    LOG.error(
+                        "[PROCESS MONITOR] Device isolation failed: %s", iso_err
+                    )
+
+            threading.Thread(
+                target=_run_isolation,
+                name="auto-isolation",
+                daemon=True,
+            ).start()
+
         process_monitor = ForbiddenProcessMonitor(
             scan_interval_seconds=float(os.getenv("PROCESS_SCAN_INTERVAL_SECONDS", "10.0")),
             escalation_threshold=int(os.getenv("PROCESS_ESCALATION_THRESHOLD", "3")),
             escalation_window_seconds=int(os.getenv("PROCESS_ESCALATION_WINDOW_SECONDS", "120")),
             alert_callback=_on_process_alert,
+            isolation_callback=_on_escalation_isolate,
             auto_terminate=True,
         )
 
@@ -781,6 +853,7 @@ def start_client(stop_event=None):
                             message,
                             quarantine_manager=quarantine_manager,
                             process_monitor=process_monitor,
+                            network_state_manager=network_state_manager,
                         )
 
                     # A server-requested activity log (including the standard 24-hour

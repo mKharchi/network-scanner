@@ -119,6 +119,34 @@ class ForbiddenProcessMonitorTestCase(unittest.TestCase):
         self.assertIn("FORBIDDEN_PROCESS_DETECTED", event_types)
         self.assertIn("CRITICAL_FORBIDDEN_PROCESS_REPEATED", event_types)
 
+    @patch("psutil.process_iter")
+    @patch.object(ForbiddenProcessMonitor, "terminate_process")
+    def test_scan_and_enforce_isolation_callback(self, mock_terminate, mock_proc_iter):
+        isolation_cb = MagicMock()
+        monitor = ForbiddenProcessMonitor(
+            rules=self.rules,
+            scan_interval_seconds=10.0,
+            escalation_threshold=2,
+            escalation_window_seconds=60,
+            isolation_callback=isolation_cb,
+            auto_terminate=True,
+        )
+        mock_proc = MagicMock()
+        mock_proc.info = {"pid": 7001, "name": "uTorrent.exe", "exe": "C:\\uTorrent\\uTorrent.exe"}
+        mock_proc_iter.return_value = [mock_proc]
+        mock_terminate.return_value = {"status": "SUCCESS", "action": "TERMINATED", "message": "Terminated"}
+
+        # 1st scan -> no escalation, isolation callback not called
+        monitor.scan_and_enforce()
+        isolation_cb.assert_not_called()
+
+        # 2nd scan -> reaches threshold (2) -> isolation callback fired
+        monitor.scan_and_enforce()
+        isolation_cb.assert_called_once()
+        call_arg = isolation_cb.call_args[0][0]
+        self.assertEqual(call_arg["event_type"], "CRITICAL_FORBIDDEN_PROCESS_REPEATED")
+        self.assertEqual(call_arg["process_name"], "utorrent")
+
 
 if __name__ == "__main__":
     unittest.main()

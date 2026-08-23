@@ -115,6 +115,7 @@ class ForbiddenProcessMonitor:
         escalation_threshold: int = 3,
         escalation_window_seconds: int = 120,
         alert_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+        isolation_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
         auto_terminate: bool = True,
         termination_timeout_seconds: float = 1.5,
     ):
@@ -122,6 +123,7 @@ class ForbiddenProcessMonitor:
         self.auto_terminate = auto_terminate
         self.termination_timeout = max(0.2, float(termination_timeout_seconds))
         self.alert_callback = alert_callback
+        self.isolation_callback = isolation_callback
         self.violation_tracker = ViolationTracker(
             threshold=escalation_threshold,
             window_seconds=escalation_window_seconds,
@@ -328,6 +330,17 @@ class ForbiddenProcessMonitor:
                                 self.alert_callback(critical_alert)
                             except Exception as cb_err:
                                 LOG.warning("[PROCESS MONITOR] Critical alert callback error: %s", cb_err)
+
+                        # Notify the isolation hook (opt-in).  This fires every
+                        # time the window threshold is exceeded, so the caller is
+                        # responsible for idempotency (e.g. skip if already
+                        # isolated).  The payload matches the critical alert so
+                        # callers need no additional imports.
+                        if self.isolation_callback:
+                            try:
+                                self.isolation_callback(critical_alert)
+                            except Exception as cb_err:
+                                LOG.warning("[PROCESS MONITOR] Isolation callback error: %s", cb_err)
 
                     # Once matched for a PID, break out of rule checking for that PID
                     break

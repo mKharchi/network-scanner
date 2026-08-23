@@ -22,6 +22,7 @@ from server_components.log_storage import store_log_file
 clients = {}
 clients_lock = threading.Lock()
 pending_disconnect_checks = {}
+device_isolation_status = {}
 DHCP_OBSERVATION_QUEUE_SIZE = 1024
 dhcp_observation_queue = queue.Queue(maxsize=DHCP_OBSERVATION_QUEUE_SIZE)
 dhcp_observation_worker_lock = threading.Lock()
@@ -940,6 +941,14 @@ def remove_client(mac, connection=None):
         client = clients.pop(mac, None)
         if client:
             expected_disconnect = client.get("disconnect_expected", False)
+            disconnect_reason = client.get("disconnect_reason")
+            if disconnect_reason == "DEVICE_ISOLATION":
+                existing = device_isolation_status.get(client["client_id"], {})
+                device_isolation_status[client["client_id"]] = {
+                    **existing,
+                    "status": "CONNECTION_LOST_AFTER_ISOLATION",
+                    "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                }
             check_token = None
             if not expected_disconnect:
                 check_token = object()
@@ -1551,6 +1560,94 @@ def release_client_quarantine(client_id, reason="Administrator released network 
 def get_client_quarantine_status(client_id, timeout=10.0):
     """Dispatch GET_QUARANTINE_STATUS command to a connected client."""
     return execute_client_command(client_id, "GET_QUARANTINE_STATUS", timeout=timeout)
+
+
+def isolate_client(
+    client_id,
+    reason="Administrator requested static device isolation",
+    timeout=10.0,
+):
+    """Request static-IP isolation and classify the expected disconnect.
+
+    The client removes its production route, so a missing response after the
+    command is sent is a successful transport outcome, not a normal agent-loss
+    alert. Network restoration intentionally remains a local admin action.
+    """
+    client = get_client(client_id)
+    if not client:
+        return {"status": "error", "message": f"Client '{client_id}' is not connected."}
+
+    sent_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    with clients_lock:
+        current_client = clients.get(client["mac"])
+        if current_client is not client:
+            return {"status": "error", "message": f"Client '{client_id}' is not connected."}
+        client["disconnect_expected"] = True
+        client["disconnect_reason"] = "DEVICE_ISOLATION"
+        device_isolation_status[client_id] = {
+            "status": "SENT",
+            "reason": reason,
+            "sent_at": sent_at,
+            "updated_at": sent_at,
+        }
+
+    result = execute_client_command(
+        client_id,
+        "ISOLATE_DEVICE",
+        args={"reason": reason},
+        timeout=timeout,
+    )
+    if result.get("status") == "ok":
+        with clients_lock:
+            existing = device_isolation_status.get(client_id, {})
+            device_isolation_status[client_id] = {
+                **existing,
+                "status": "ACKNOWLEDGED",
+                "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            }
+        return {**result, "isolation_status": "ACKNOWLEDGED"}
+
+    message = result.get("message", "Device isolation command failed.")
+    if "disconnected" in message.lower() or "connection lost" in message.lower():
+        with clients_lock:
+            existing = device_isolation_status.get(client_id, {})
+            device_isolation_status[client_id] = {
+                **existing,
+                "status": "CONNECTION_LOST_AFTER_ISOLATION",
+                "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            }
+        return {
+            "status": "ok",
+            "client_id": client_id,
+            "isolation_status": "CONNECTION_LOST_AFTER_ISOLATION",
+            "message": "Isolation command was sent and the client disconnected as expected.",
+        }
+
+    with clients_lock:
+        current_client = clients.get(client["mac"])
+        if current_client is client:
+            client.pop("disconnect_expected", None)
+            client.pop("disconnect_reason", None)
+        existing = device_isolation_status.get(client_id, {})
+        device_isolation_status[client_id] = {
+            **existing,
+            "status": "FAILED",
+            "message": message,
+            "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        }
+    return result
+
+
+def get_device_isolation_status(client_id):
+    """Return the latest server-side isolation dispatch state for a client."""
+    with clients_lock:
+        status = device_isolation_status.get(client_id)
+        if status:
+            return {"status": "ok", "data": status.copy()}
+    return {
+        "status": "ok",
+        "data": {"status": "NOT_REQUESTED", "client_connected": get_client(client_id) is not None},
+    }
 
 
 def send_command(client_id, command, args=None):
