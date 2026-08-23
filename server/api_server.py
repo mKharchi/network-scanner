@@ -396,6 +396,7 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 except ValueError as exc:
                     self.send_error_response(400, "INVALID_RULE", str(exc))
                     return
+                server_lib.broadcast_forbidden_processes()
                 self.send_data(rule, status_code=201)
                 return
 
@@ -611,6 +612,7 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
         if rule is None:
             self.send_error_response(404, "NOT_FOUND", "Forbidden process rule not found.")
             return
+        server_lib.broadcast_forbidden_processes()
         self.send_data(rule)
 
     def do_DELETE(self) -> None:  # noqa: N802
@@ -623,6 +625,7 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
         if not api_service.delete_forbidden_process(urllib.parse.unquote(m.group(1))):
             self.send_error_response(404, "NOT_FOUND", "Forbidden process rule not found.")
             return
+        server_lib.broadcast_forbidden_processes()
         self.send_data({"deleted": True})
 
     def do_PATCH(self) -> None:  # noqa: N802
