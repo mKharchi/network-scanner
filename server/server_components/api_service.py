@@ -167,7 +167,7 @@ def get_dashboard_data() -> Dict[str, Any]:
             )
             for r in cursor.fetchall():
                 recent_alerts.append({
-                    "id": r["id"],
+                    "id": r.get("id"),
                     "client": {
                         "id": r["client_id"],
                         "hostname": r["hostname"] or "Unknown",
@@ -863,7 +863,10 @@ def list_alerts(
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
 
-        query += " ORDER BY a.detected_at DESC LIMIT %s"
+        # Alert timestamps can originate from clients in different time zones.
+        # The auto-increment ID is the authoritative insertion order, so the
+        # newest persisted alert cannot be hidden behind clock skew.
+        query += " ORDER BY a.id DESC LIMIT %s"
         params.append(limit)
 
         cursor.execute(query, params)
@@ -1097,9 +1100,10 @@ def get_forbidden_processes_settings() -> Dict[str, Any]:
     if conn:
         try:
             cursor = conn.cursor(dictionary=True)
-            cursor.execute("SELECT process_name, severity, enabled, description FROM forbidden_processes ORDER BY process_name")
+            cursor.execute("SELECT id, process_name, severity, enabled, description FROM forbidden_processes ORDER BY process_name")
             for r in cursor.fetchall():
                 items.append({
+                    "id": r.get("id"),
                     "process_name": r["process_name"],
                     "severity": r["severity"],
                     "enabled": bool(r["enabled"]),
@@ -1111,3 +1115,132 @@ def get_forbidden_processes_settings() -> Dict[str, Any]:
     return {
         "items": items,
     }
+
+
+def get_forbidden_process(identifier: str) -> Optional[Dict[str, Any]]:
+    conn = get_connection()
+    if not conn:
+        return None
+    try:
+        cursor = conn.cursor(dictionary=True)
+        if identifier.isdigit():
+            cursor.execute("SELECT id, process_name, severity, enabled, description FROM forbidden_processes WHERE id = %s", (int(identifier),))
+        else:
+            cursor.execute("SELECT id, process_name, severity, enabled, description FROM forbidden_processes WHERE process_name = %s", (identifier.strip().lower(),))
+        row = cursor.fetchone()
+        if not row:
+            return None
+        row["enabled"] = bool(row["enabled"])
+        return row
+    finally:
+        conn.close()
+
+
+FORBIDDEN_PROCESS_SEVERITIES = {"LOW", "MEDIUM", "HIGH", "CRITICAL"}
+
+
+def _validate_forbidden_process_payload(payload: Dict[str, Any], *, require_name: bool = True) -> Dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise ValueError("Payload must be a JSON object.")
+
+    process_name = str(payload.get("process_name", "")).strip().lower()
+    if require_name and (not process_name or len(process_name) > 255):
+        raise ValueError("process_name is required and must be at most 255 characters.")
+    if process_name and any(char.isspace() for char in process_name):
+        raise ValueError("process_name must be a binary name without whitespace.")
+
+    severity = str(payload.get("severity", "HIGH")).strip().upper()
+    if severity not in FORBIDDEN_PROCESS_SEVERITIES:
+        raise ValueError("severity must be LOW, MEDIUM, HIGH, or CRITICAL.")
+
+    description = payload.get("description")
+    if description is not None:
+        description = str(description).strip() or None
+        if description and len(description) > 1000:
+            raise ValueError("description must be at most 1000 characters.")
+
+    return {
+        "process_name": process_name,
+        "severity": severity,
+        "enabled": bool(payload.get("enabled", True)),
+        "description": description,
+    }
+
+
+def create_forbidden_process(payload: Dict[str, Any]) -> Dict[str, Any]:
+    rule = _validate_forbidden_process_payload(payload)
+    conn = get_connection()
+    if not conn:
+        raise RuntimeError("Database connection unavailable.")
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO forbidden_processes (process_name, severity, enabled, description)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (rule["process_name"], rule["severity"], rule["enabled"], rule["description"]),
+        )
+        conn.commit()
+        rule["id"] = cursor.lastrowid
+        return rule
+    except Exception as exc:
+        if "duplicate" in str(exc).lower() or "unique" in str(exc).lower():
+            raise ValueError(f"A rule for '{rule['process_name']}' already exists.") from exc
+        raise
+    finally:
+        conn.close()
+
+
+def update_forbidden_process(identifier: str, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    lookup_by_id = identifier.isdigit()
+    current_name = identifier.strip().lower()
+    if not current_name:
+        raise ValueError("process_name is required.")
+    conn = get_connection()
+    if not conn:
+        raise RuntimeError("Database connection unavailable.")
+    try:
+        cursor = conn.cursor()
+        lookup_value = int(identifier) if lookup_by_id else current_name
+        lookup_column = "id" if lookup_by_id else "process_name"
+        if lookup_by_id:
+            cursor.execute("SELECT process_name FROM forbidden_processes WHERE id = %s", (lookup_value,))
+            existing = cursor.fetchone()
+            if not existing:
+                return None
+            current_name = existing["process_name"] if isinstance(existing, dict) else existing[0]
+        rule = _validate_forbidden_process_payload({**payload, "process_name": current_name})
+        cursor.execute(
+            f"""
+            UPDATE forbidden_processes
+            SET severity = %s, enabled = %s, description = %s
+            WHERE {lookup_column} = %s
+            """,
+            (rule["severity"], rule["enabled"], rule["description"], lookup_value),
+        )
+        if cursor.rowcount == 0:
+            return None
+        conn.commit()
+        rule["id"] = int(identifier) if lookup_by_id else None
+        return rule
+    finally:
+        conn.close()
+
+
+def delete_forbidden_process(identifier: str) -> bool:
+    conn = get_connection()
+    if not conn:
+        raise RuntimeError("Database connection unavailable.")
+    try:
+        cursor = conn.cursor()
+        if identifier.isdigit():
+            cursor.execute("DELETE FROM forbidden_processes WHERE id = %s", (int(identifier),))
+        else:
+            cursor.execute("DELETE FROM forbidden_processes WHERE process_name = %s", (identifier.strip().lower(),))
+        deleted = cursor.rowcount > 0
+        if deleted:
+            conn.commit()
+        return deleted
+    finally:
+        conn.close()

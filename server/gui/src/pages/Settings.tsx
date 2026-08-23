@@ -1,4 +1,5 @@
-import { api } from '../api/client';
+import { useState } from 'react';
+import { api, type ForbiddenProcessRule } from '../api/client';
 import { useFetch } from '../hooks/useFetch';
 import { SeverityBadge, type AlertSeverity } from '../components/Badge';
 import { SectionCard } from '../components/Card';
@@ -12,10 +13,15 @@ interface WorkingHoursData {
 }
 
 interface ForbiddenProcessesData {
-  items: { process_name: string; severity: string; enabled: boolean; description: string | null }[];
+  items: ForbiddenProcessRule[];
 }
 
 export function SettingsPage() {
+  const [newProcessName, setNewProcessName] = useState('');
+  const [newSeverity, setNewSeverity] = useState('HIGH');
+  const [newDescription, setNewDescription] = useState('');
+  const [ruleBusy, setRuleBusy] = useState(false);
+  const [ruleError, setRuleError] = useState<string | null>(null);
   const {
     state: whState,
     refetch: refetchWh,
@@ -41,6 +47,58 @@ export function SettingsPage() {
       : fpState.status === 'error' && fpState.staleData
         ? fpState.staleData
         : null;
+
+  async function addRule() {
+    if (!newProcessName.trim()) return;
+    setRuleBusy(true);
+    setRuleError(null);
+    try {
+      await api.createForbiddenProcess({
+        process_name: newProcessName.trim(),
+        severity: newSeverity,
+        enabled: true,
+        description: newDescription.trim() || null,
+      });
+      setNewProcessName('');
+      setNewDescription('');
+      refetchFp();
+    } catch (error) {
+      setRuleError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setRuleBusy(false);
+    }
+  }
+
+  async function updateRule(rule: ForbiddenProcessRule, enabled: boolean) {
+    setRuleBusy(true);
+    setRuleError(null);
+    try {
+      await api.updateForbiddenProcess(rule.process_name, {
+        severity: rule.severity,
+        enabled,
+        description: rule.description,
+      });
+      refetchFp();
+    } catch (error) {
+      setRuleError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setRuleBusy(false);
+    }
+  }
+
+  async function deleteRule(processName: string) {
+    if (!window.confirm(`Delete the forbidden-process rule for ${processName}?`)) return;
+    setRuleBusy(true);
+    setRuleError(null);
+    try {
+      await api.deleteForbiddenProcess(processName);
+      refetchFp();
+    } catch (error) {
+      setRuleError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setRuleBusy(false);
+    }
+  }
 
   return (
     <div>
@@ -166,8 +224,18 @@ export function SettingsPage() {
                   marginBottom: 'var(--space-4)',
                 }}
               >
-                Agents actively terminate or alert when any of these binaries execute on a managed client.
+                Agents alert when any of these binaries execute on a managed client.
               </p>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr 1.5fr auto', gap: 'var(--space-2)', marginBottom: 'var(--space-4)' }}>
+                <input aria-label="Process name" placeholder="process.exe" value={newProcessName} onChange={(event) => setNewProcessName(event.target.value)} />
+                <select aria-label="Severity" value={newSeverity} onChange={(event) => setNewSeverity(event.target.value)}>
+                  {['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].map((severity) => <option key={severity}>{severity}</option>)}
+                </select>
+                <input aria-label="Description" placeholder="Description" value={newDescription} onChange={(event) => setNewDescription(event.target.value)} />
+                <Button size="sm" variant="primary" loading={ruleBusy} onClick={addRule}>Add</Button>
+              </div>
+              {ruleError && <Notice variant="danger" title="Rule update failed">{ruleError}</Notice>}
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
                 {fpData.items.map((item) => (
@@ -181,10 +249,16 @@ export function SettingsPage() {
                     }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
-                        {item.process_name}
-                      </span>
-                      <SeverityBadge severity={item.severity as AlertSeverity} />
+                      <div>
+                        <span style={{ fontWeight: 600, fontFamily: 'var(--font-mono)' }}>{item.process_name}</span>
+                        <SeverityBadge severity={item.severity as AlertSeverity} />
+                      </div>
+                      <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+                        <label style={{ fontSize: 'var(--font-xs)', color: 'var(--text-muted)' }}>
+                          <input type="checkbox" checked={item.enabled} disabled={ruleBusy} onChange={(event) => updateRule(item, event.target.checked)} /> Enabled
+                        </label>
+                        <Button size="sm" variant="danger" disabled={ruleBusy} onClick={() => deleteRule(item.process_name)}>Delete</Button>
+                      </div>
                     </div>
                     {item.description && (
                       <div
