@@ -16,4 +16,6 @@ from client import start_client  # noqa: E402  (set the working directory first)
 
 
 if __name__ == "__main__":
-    start_client()
+    # Kept as a compatibility entry point for existing scheduled tasks. The
+    # combined mode also handles ordinary remote commands on this connection.
+    start_client(agent_role="combined")
