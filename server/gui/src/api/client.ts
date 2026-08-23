@@ -285,6 +285,34 @@ export interface ActivityLogRecord {
   received_at: string;
 }
 
+export interface ClientScreenshot {
+  id: number;
+  client_id: string;
+  command_id: string | null;
+  requested_by: string | null;
+  filename: string;
+  mime_type: string;
+  file_size: number;
+  device_name: string | null;
+  captured_at: string | null;
+  uploaded_at: string | null;
+  status: "REQUESTED" | "CAPTURED" | "UPLOADED" | "FAILED";
+}
+
+export interface ClientScreenshotCaptureResult {
+  status: "completed" | "client_timeout" | "client_unavailable" | "client_error" | "storage_error";
+  client_id: string;
+  timeout_seconds?: number;
+  filename?: string;
+  storage_path?: string;
+  mime_type?: string;
+  file_size?: number;
+  device_name?: string;
+  captured_at?: string;
+  command_id?: string;
+  message?: string;
+}
+
 // ── Dashboard ─────────────────────────────────────────────────────
 
 export interface DashboardData {
@@ -332,6 +360,14 @@ export const api = {
       alert_counts: { new: number; total: number };
       latest_activity_log: ActivityLogRecord | null;
     }>(`/clients/${encodeURIComponent(clientId)}`),
+
+  getClientScreenshots: (clientId: string, params?: { limit?: number }) =>
+    get<{ items: ClientScreenshot[]; next_cursor: string | null }>(
+      `/clients/${encodeURIComponent(clientId)}/screenshots`,
+      {
+        limit: String(params?.limit ?? 12),
+      },
+    ),
 
   // Network scans
   getLatestScan: () =>
@@ -540,6 +576,27 @@ export const api = {
       return (await resp.json()).data;
     })(),
 
+  requestClientScreenshot: (clientId: string) =>
+    (async () => {
+      const baseWithApi = API_ORIGIN.replace(/\/+$/, "") + BASE;
+      const resp = await fetch(
+        baseWithApi + `/clients/${encodeURIComponent(clientId)}/screenshot`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+        },
+      );
+      const body = await resp.json().catch(() => null);
+      if (!resp.ok) {
+        throw new ApiError(
+          body?.error?.code ?? "UNKNOWN_ERROR",
+          body?.error?.message ?? `HTTP ${resp.status}`,
+          resp.status,
+        );
+      }
+      return body?.data as ClientScreenshotCaptureResult;
+    })(),
+
   requestClientNeighbourhood: (clientId: string) =>
     (async () => {
       const baseWithApi = API_ORIGIN.replace(/\/+$/, "") + BASE;
@@ -586,6 +643,9 @@ export const api = {
       }
       return (await resp.json()).data as ClientPassiveNeighbourhood;
     })(),
+
+  getScreenshotFileUrl: (screenshotId: number) =>
+    `${API_ORIGIN.replace(/\/+$/, "")}${BASE}/screenshots/${encodeURIComponent(String(screenshotId))}/file`,
 
   triggerManualScan: () =>
     (async () => {

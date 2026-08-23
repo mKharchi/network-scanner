@@ -14,6 +14,7 @@ import re
 import threading
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 # Load the same server-local database configuration when the REST API is
@@ -162,6 +163,7 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     {"command": "GET_NETWORK_INFO", "label": "Network information"},
                     {"command": "GET_PROCESSES", "label": "Processes"},
                     {"command": "GET_ACTIVITY_LOG", "label": "Activity log"},
+                    {"command": "REQUEST_SCREENSHOT", "label": "Request screenshot (interactive session)"},
                     {"command": "PING", "label": "Ping"},
                     {"command": "KILL_PROCESS", "label": "Kill process"},
                     {"command": "START_PROCESS", "label": "Start process"},
@@ -179,6 +181,17 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     self.send_error_response(404, "NOT_FOUND", f"Client '{client_id}' not found.")
                     return
                 self.send_data(detail)
+                return
+
+            m = re.match(r"^/api/v1/clients/([^/]+)/screenshots$", path)
+            if m:
+                client_id = urllib.parse.unquote(m.group(1))
+                limit = get_int_param("limit", 12)
+                screenshots = api_service.list_client_screenshots(client_id, limit=limit)
+                if screenshots is None:
+                    self.send_error_response(404, "NOT_FOUND", f"Client '{client_id}' not found.")
+                    return
+                self.send_data({"items": screenshots, "next_cursor": None})
                 return
 
             # Client quarantine status GET
@@ -341,6 +354,29 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 self.send_data(alert_data)
                 return
 
+            m = re.match(r"^/api/v1/screenshots/(\d+)/file$", path)
+            if m:
+                screenshot_id = int(m.group(1))
+                screenshot = api_service.get_screenshot_record(screenshot_id)
+                if not screenshot:
+                    self.send_error_response(404, "NOT_FOUND", f"Screenshot #{screenshot_id} not found.")
+                    return
+
+                file_path = Path(screenshot["storage_path"])
+                if not file_path.is_file():
+                    self.send_error_response(404, "NOT_FOUND", "Screenshot file is no longer available.")
+                    return
+
+                payload = file_path.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", screenshot.get("mime_type") or "application/octet-stream")
+                self.send_header("Content-Length", str(len(payload)))
+                self.send_header("Content-Disposition", f'inline; filename="{screenshot["filename"]}"')
+                self._send_cors_headers()
+                self.end_headers()
+                self.wfile.write(payload)
+                return
+
             # 9. Activity Logs
             if path == "/api/v1/activity-logs":
                 client_id = get_param("client_id")
@@ -407,6 +443,26 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     return
                 server_lib.broadcast_forbidden_processes()
                 self.send_data(rule, status_code=201)
+                return
+
+            # Request one screenshot from the matching interactive user-session agent.
+            m = re.match(r"^/api/v1/clients/([^/]+)/screenshot$", path)
+            if m:
+                client_id = urllib.parse.unquote(m.group(1))
+                requested_by = self.headers.get("X-Operator-Id") or "local-network-operator"
+                result = server_lib.request_client_screenshot(
+                    client_id, requested_by=requested_by
+                )
+                if result["status"] == "completed":
+                    self.send_data(result, status_code=200)
+                elif result["status"] == "client_timeout":
+                    self.send_error_response(504, "CLIENT_TIMEOUT", result["message"])
+                elif result["status"] == "client_unavailable":
+                    self.send_error_response(409, "INTERACTIVE_AGENT_UNAVAILABLE", result["message"])
+                elif result["status"] == "storage_error":
+                    self.send_error_response(422, "INVALID_SCREENSHOT", result["message"])
+                else:
+                    self.send_error_response(502, "SCREENSHOT_FAILED", result["message"])
                 return
 
             # Request bounded passive-protocol observations from one connected client.

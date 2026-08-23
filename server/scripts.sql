@@ -37,6 +37,24 @@ CREATE TABLE IF NOT EXISTS activity_logs (
         ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS screenshots (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    client_id INT NOT NULL,
+    command_id VARCHAR(100) NULL,
+    requested_by VARCHAR(255) NULL,
+    filename VARCHAR(255) NOT NULL,
+    storage_path VARCHAR(512) NOT NULL,
+    mime_type VARCHAR(100) NOT NULL,
+    file_size BIGINT NOT NULL,
+    device_name VARCHAR(255) NULL,
+    captured_at DATETIME NULL,
+    uploaded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    status ENUM('REQUESTED', 'CAPTURED', 'UPLOADED', 'FAILED') NOT NULL DEFAULT 'REQUESTED',
+    FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+    INDEX idx_screenshots_client_time (client_id, uploaded_at),
+    INDEX idx_screenshots_command (command_id)
+);
+
 CREATE TABLE IF NOT EXISTS alerts (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     client_id INT NOT NULL,

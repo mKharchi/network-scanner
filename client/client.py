@@ -1,3 +1,4 @@
+import base64
 import json
 import logging
 import os
@@ -19,6 +20,7 @@ from network_state_manager import NetworkStateManager
 from network_neighbour_collector import NetworkNeighbourCollector
 from dhcp_listener import DHCPListener
 from passive_protocol_listener import PassiveProtocolListener
+from screenshot_manager import ScreenshotManager
 from neighbourhood import (
     get_daily_neighbourhood_path,
     load_daily_neighbourhood,
@@ -66,6 +68,10 @@ network_scan_state_lock = threading.Lock()
 active_network_scan_global_id = None
 forbidden_processes = []
 PASSIVE_NEIGHBOURHOOD_COMMAND = "GET_PASSIVE_NEIGHBOURHOOD"
+SCREENSHOT_COMMAND = "REQUEST_SCREENSHOT"
+SCREENSHOT_MAX_RESPONSE_BYTES = max(
+    1, int(os.getenv("SCREENSHOT_MAX_RESPONSE_BYTES", str(8 * 1024 * 1024)))
+)
 
 
 class _StopEventProxy:
@@ -331,6 +337,64 @@ def start_requested_neighbourhood_command(client_socket):
         args=(client_socket,),
         daemon=True,
         name="requested-neighbourhood-report",
+    )
+    worker.start()
+    return worker
+
+
+def _complete_screenshot_command(client_socket, message, screenshot_manager):
+    """Capture and return one screenshot without blocking the command loop."""
+    command_id = None
+    args = message.get("args")
+    if isinstance(args, dict):
+        command_id = args.get("command_id")
+    try:
+        result = screenshot_manager.capture(command_id=command_id)
+        image_bytes = result.path.read_bytes()
+        if len(image_bytes) > SCREENSHOT_MAX_RESPONSE_BYTES:
+            response = {
+                "status": "error",
+                "message": "Screenshot exceeds the configured response size limit.",
+            }
+        else:
+            response = {
+                "status": "ok",
+                "command_id": command_id,
+                "filename": result.filename,
+                "device_name": result.device_name,
+                "captured_at": result.captured_at,
+                "mime_type": result.mime_type,
+                "image_base64": base64.b64encode(image_bytes).decode("ascii"),
+            }
+    except Exception as error:
+        response = {"status": "error", "command_id": command_id, "message": str(error)}
+    # The screenshot is deleted only after a response has been successfully
+    # handed to the socket layer. If sending fails, retain it for the bounded
+    # ScreenshotManager cleanup policy instead of losing it immediately.
+    sent = False
+    try:
+        with socket_lock:
+            send_message(
+                client_socket,
+                {"type": "RESPONSE", "command": SCREENSHOT_COMMAND, "data": response},
+            )
+        sent = True
+    except OSError as error:
+        _startup_log(f"Could not send screenshot response: {error}")
+    if sent and "result" in locals():
+        try:
+            result.path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def start_screenshot_command(client_socket, message, screenshot_manager):
+    """Run an explicitly requested screenshot capture in a background worker."""
+    worker = threading.Thread(
+        target=_complete_screenshot_command,
+        args=(client_socket, message, screenshot_manager),
+        daemon=True,
+        name="requested-screenshot",
     )
     worker.start()
     return worker
@@ -605,11 +669,14 @@ def background_scanner(client_socket, stop_event=None):
 # ============================================================
 
 
-def start_client(stop_event=None):
+def start_client(stop_event=None, *, agent_role="service"):
     if stop_event is None:
         stop_event = threading.Event()
 
-    _startup_log(f"Client starting with server target {SERVER_IP}:{SERVER_PORT}.")
+    screenshot_manager = ScreenshotManager() if agent_role == "interactive" else None
+    _startup_log(
+        f"Client starting with server target {SERVER_IP}:{SERVER_PORT}; role={agent_role}."
+    )
 
     quarantine_manager = NetworkQuarantineManager(
         server_ip=SERVER_IP,
@@ -754,7 +821,12 @@ def start_client(stop_event=None):
             # Register
             # --------------------------------------------------------
             with socket_lock:
-                send_message(client, create_registration_message(client.getsockname()[0]))
+                send_message(
+                    client,
+                    create_registration_message(
+                        client.getsockname()[0], agent_role=agent_role
+                    ),
+                )
             _startup_log("Registration sent.")
 
             # --------------------------------------------------------
@@ -883,6 +955,15 @@ def start_client(stop_event=None):
                     elif command == "GET_NETWORK_NEIGHBOURHOOD":
                         start_requested_neighbourhood_command(client)
                         continue
+                    elif command == SCREENSHOT_COMMAND:
+                        if screenshot_manager is None:
+                            result = {
+                                "status": "error",
+                                "message": "Screenshot capture is available only to the interactive user-session agent.",
+                            }
+                        else:
+                            start_screenshot_command(client, message, screenshot_manager)
+                            continue
                     elif command == PASSIVE_NEIGHBOURHOOD_COMMAND:
                         result = get_requested_passive_neighbourhood(
                             passive_protocol_listener
@@ -958,4 +1039,7 @@ def start_client(stop_event=None):
 # ============================================================
 
 if __name__ == "__main__":
-    start_client()
+    # The normal interactive launch provides both command execution and
+    # desktop capture through one connection.  The Windows service continues
+    # to call start_client() explicitly in service mode.
+    start_client(agent_role="combined")
