@@ -162,6 +162,7 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     {"command": "GET_NETWORK_INFO", "label": "Network information"},
                     {"command": "GET_PROCESSES", "label": "Processes"},
                     {"command": "GET_ACTIVITY_LOG", "label": "Activity log"},
+                    {"command": "REQUEST_SCREENSHOT", "label": "Request screenshot (interactive session)"},
                     {"command": "PING", "label": "Ping"},
                     {"command": "KILL_PROCESS", "label": "Kill process"},
                     {"command": "START_PROCESS", "label": "Start process"},
@@ -407,6 +408,26 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     return
                 server_lib.broadcast_forbidden_processes()
                 self.send_data(rule, status_code=201)
+                return
+
+            # Request one screenshot from the matching interactive user-session agent.
+            m = re.match(r"^/api/v1/clients/([^/]+)/screenshot$", path)
+            if m:
+                client_id = urllib.parse.unquote(m.group(1))
+                requested_by = self.headers.get("X-Operator-Id") or "local-network-operator"
+                result = server_lib.request_client_screenshot(
+                    client_id, requested_by=requested_by
+                )
+                if result["status"] == "completed":
+                    self.send_data(result, status_code=200)
+                elif result["status"] == "client_timeout":
+                    self.send_error_response(504, "CLIENT_TIMEOUT", result["message"])
+                elif result["status"] == "client_unavailable":
+                    self.send_error_response(409, "INTERACTIVE_AGENT_UNAVAILABLE", result["message"])
+                elif result["status"] == "storage_error":
+                    self.send_error_response(422, "INVALID_SCREENSHOT", result["message"])
+                else:
+                    self.send_error_response(502, "SCREENSHOT_FAILED", result["message"])
                 return
 
             # Request bounded passive-protocol observations from one connected client.

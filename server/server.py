@@ -72,6 +72,9 @@ def accept_clients(server):
                     # client registry. Use the same canonical key here so
                     # command responses reach that client's queue.
                     args=(registration["data"]["mac"].upper().replace("-", ":"), conn),
+                    kwargs={
+                        "agent_role": registration["data"].get("agent_role", "service")
+                    },
                     daemon=True,
                 ).start()
 
