@@ -643,7 +643,7 @@ def start_client(stop_event=None):
                                 "CRITICAL"
                                 if "FAILED" in event.get("event_type", "")
                                 or "QUARANTINED" in event.get("event_type", "")
-                                else "INFO"
+                                else "LOW"
                             ),
                             "title": f"Network Quarantine Event: {event.get('event_type')}",
                             "description": event.get("reason", "Quarantine event"),
