@@ -99,6 +99,24 @@ async function post<T>(path: string, payload: unknown = {}): Promise<T> {
   return body?.data as T;
 }
 
+async function mutate<T>(method: "PUT" | "DELETE", path: string, payload?: unknown): Promise<T> {
+  const fullUrl = API_ORIGIN.replace(/\/+$/, "") + BASE + path;
+  const response = await fetch(fullUrl, {
+    method,
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: payload === undefined ? undefined : JSON.stringify(payload),
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new ApiError(
+      body?.error?.code ?? "UNKNOWN_ERROR",
+      body?.error?.message ?? `HTTP ${response.status}`,
+      response.status,
+    );
+  }
+  return body?.data as T;
+}
+
 // ── Shared view models ────────────────────────────────────────────
 
 export interface ClientOS {
@@ -106,6 +124,14 @@ export interface ClientOS {
   release: string | null;
   version: string | null;
   machine: string | null;
+}
+
+export interface ForbiddenProcessRule {
+  id?: number;
+  process_name: string;
+  severity: string;
+  enabled: boolean;
+  description: string | null;
 }
 
 export interface ClientConnection {
@@ -472,6 +498,19 @@ export const api = {
         description: string | null;
       }[];
     }>("/settings/forbidden-processes"),
+
+  createForbiddenProcess: (payload: {
+    process_name: string;
+    severity: string;
+    enabled: boolean;
+    description: string | null;
+  }) => post<ForbiddenProcessRule>("/settings/forbidden-processes", payload),
+
+  updateForbiddenProcess: (processName: string, payload: Omit<ForbiddenProcessRule, "process_name">) =>
+    mutate<ForbiddenProcessRule>("PUT", `/settings/forbidden-processes/${encodeURIComponent(processName)}`, payload),
+
+  deleteForbiddenProcess: (processName: string) =>
+    mutate<{ deleted: boolean }>("DELETE", `/settings/forbidden-processes/${encodeURIComponent(processName)}`),
 
   // Client commands
   listClientCommands: (clientId: string) =>

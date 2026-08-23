@@ -65,6 +65,15 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
             }
         })
 
+    def _read_json_payload(self) -> Optional[Dict[str, Any]]:
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            body = self.rfile.read(length).decode("utf-8") if length else "{}"
+            payload = json.loads(body) if body else {}
+            return payload if isinstance(payload, dict) else None
+        except (ValueError, TypeError, json.JSONDecodeError, UnicodeDecodeError):
+            return None
+
     def do_GET(self) -> None:  # noqa: N802
         print(f"[REST API REQUEST] GET {self.path} (from {self.client_address[0]})")
         parsed_url = urllib.parse.urlparse(self.path)
@@ -353,6 +362,15 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 self.send_data(fp_data)
                 return
 
+            m = re.match(r"^/api/v1/settings/forbidden-processes/([^/]+)$", path)
+            if m:
+                rule = api_service.get_forbidden_process(urllib.parse.unquote(m.group(1)))
+                if rule is None:
+                    self.send_error_response(404, "NOT_FOUND", "Forbidden process rule not found.")
+                else:
+                    self.send_data(rule)
+                return
+
             # Fallback 404
             self.send_error_response(404, "NOT_FOUND", f"Unknown endpoint '{path}'.")
 
@@ -368,6 +386,19 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
         path = parsed_url.path.rstrip("/")
 
         try:
+            if path == "/api/v1/settings/forbidden-processes":
+                payload = self._read_json_payload()
+                if payload is None:
+                    self.send_error_response(400, "INVALID_PAYLOAD", "Invalid JSON payload.")
+                    return
+                try:
+                    rule = api_service.create_forbidden_process(payload)
+                except ValueError as exc:
+                    self.send_error_response(400, "INVALID_RULE", str(exc))
+                    return
+                self.send_data(rule, status_code=201)
+                return
+
             # Request bounded passive-protocol observations from one connected client.
             m = re.match(r"^/api/v1/clients/([^/]+)/passive-neighbourhood$", path)
             if m:
@@ -560,6 +591,42 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
             print(f"[REST API EXCEPTION] POST Error on {path}: {e}")
             traceback.print_exc()
             self.send_error_response(500, "INTERNAL_ERROR", f"An unexpected server error occurred: {e}")
+
+    def do_PUT(self) -> None:  # noqa: N802
+        parsed_url = urllib.parse.urlparse(self.path)
+        path = parsed_url.path.rstrip("/")
+        m = re.match(r"^/api/v1/settings/forbidden-processes/([^/]+)$", path)
+        if not m:
+            self.send_error_response(404, "NOT_FOUND", f"Unknown endpoint '{path}'.")
+            return
+        payload = self._read_json_payload()
+        if payload is None:
+            self.send_error_response(400, "INVALID_PAYLOAD", "Invalid JSON payload.")
+            return
+        try:
+            rule = api_service.update_forbidden_process(urllib.parse.unquote(m.group(1)), payload)
+        except ValueError as exc:
+            self.send_error_response(400, "INVALID_RULE", str(exc))
+            return
+        if rule is None:
+            self.send_error_response(404, "NOT_FOUND", "Forbidden process rule not found.")
+            return
+        self.send_data(rule)
+
+    def do_DELETE(self) -> None:  # noqa: N802
+        parsed_url = urllib.parse.urlparse(self.path)
+        path = parsed_url.path.rstrip("/")
+        m = re.match(r"^/api/v1/settings/forbidden-processes/([^/]+)$", path)
+        if not m:
+            self.send_error_response(404, "NOT_FOUND", f"Unknown endpoint '{path}'.")
+            return
+        if not api_service.delete_forbidden_process(urllib.parse.unquote(m.group(1))):
+            self.send_error_response(404, "NOT_FOUND", "Forbidden process rule not found.")
+            return
+        self.send_data({"deleted": True})
+
+    def do_PATCH(self) -> None:  # noqa: N802
+        self.do_PUT()
 
 
 def run_api_server(host: str = API_HOST, port: int = API_PORT) -> ThreadingHTTPServer:
