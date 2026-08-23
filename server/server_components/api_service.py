@@ -20,7 +20,7 @@ except ImportError:
     from server_components.network_scan_storage import DEFAULT_STORAGE_DIR
     NETWORK_SCAN_STORAGE_DIR = Path(os.getenv("NETWORK_SCAN_STORAGE_DIR", DEFAULT_STORAGE_DIR))
 
-from server_components.server_lib import clients as memory_clients, clients_lock, get_working_hours_status
+from server_components.server_lib import clients as memory_clients, clients_lock, device_isolation_status, get_working_hours_status
 
 
 def _iso_utc(dt: Optional[Any]) -> Optional[str]:
@@ -41,6 +41,23 @@ def _format_mac(mac: Optional[str]) -> Optional[str]:
     return mac.upper().replace("-", ":")
 
 
+def _get_isolation_info(client_id: str) -> Optional[Dict[str, Any]]:
+    """Return isolation state details if the device has been isolated."""
+    with clients_lock:
+        info = device_isolation_status.get(client_id)
+        if info and isinstance(info, dict) and info.get("status") in (
+            "SENT",
+            "ACKNOWLEDGED",
+            "CONNECTION_LOST_AFTER_ISOLATION",
+        ):
+            return {
+                "status": info.get("status"),
+                "reason": info.get("reason"),
+                "isolated_at": info.get("updated_at") or info.get("sent_at"),
+            }
+    return None
+
+
 # ============================================================
 # DASHBOARD
 # ============================================================
@@ -52,9 +69,20 @@ def get_dashboard_data() -> Dict[str, Any]:
     # 1. Client counts and online list
     with clients_lock:
         online_macs = set(memory_clients.keys())
-    
+        isolated_client_ids = {
+            cid
+            for cid, info in device_isolation_status.items()
+            if isinstance(info, dict)
+            and info.get("status") in (
+                "SENT",
+                "ACKNOWLEDGED",
+                "CONNECTION_LOST_AFTER_ISOLATION",
+            )
+        }
+
     total_clients = 0
     online_count = len(online_macs)
+    isolated_count = len(isolated_client_ids)
     online_client_summaries = []
     
     conn = get_connection()
@@ -102,7 +130,7 @@ def get_dashboard_data() -> Dict[str, Any]:
         finally:
             conn.close()
 
-    offline_count = max(0, total_clients - online_count)
+    offline_count = max(0, total_clients - online_count - isolated_count)
     
     # 2. Alerts count & recent list
     new_alerts = 0
@@ -187,6 +215,7 @@ def get_dashboard_data() -> Dict[str, Any]:
         "generated_at": now_iso,
         "clients": {
             "online": online_count,
+            "isolated": isolated_count,
             "offline": offline_count,
             "total": total_clients,
         },
@@ -243,15 +272,31 @@ def list_clients(
 
         cursor.execute(query, params)
         for r in cursor.fetchall():
+            cid = r["client_id"]
             norm_mac = _format_mac(r["mac"])
             is_online = norm_mac in online_macs
-            client_state = "ONLINE" if is_online else "OFFLINE"
+            isolation_info = _get_isolation_info(cid)
+
+            if isolation_info:
+                client_state = "ISOLATED"
+            elif is_online:
+                client_state = "ONLINE"
+            else:
+                client_state = "OFFLINE"
 
             if state_filter and state_filter.upper() != client_state:
                 continue
 
+            conn_obj: Dict[str, Any] = {
+                "state": client_state,
+                "last_connected_at": _iso_utc(r["updated_at"]),
+                "last_disconnected_at": None,
+            }
+            if isolation_info:
+                conn_obj["isolation"] = isolation_info
+
             items.append({
-                "id": r["client_id"],
+                "id": cid,
                 "database_id": r["id"],
                 "hostname": r["hostname"] or "Unknown",
                 "ip_address": r["ip"],
@@ -262,11 +307,7 @@ def list_clients(
                     "version": r["os_version"],
                     "machine": r["os_machine"],
                 },
-                "connection": {
-                    "state": client_state,
-                    "last_connected_at": _iso_utc(r["updated_at"]),
-                    "last_disconnected_at": None,
-                },
+                "connection": conn_obj,
                 "created_at": _iso_utc(r["created_at"]),
                 "updated_at": _iso_utc(r["updated_at"]),
             })
@@ -303,8 +344,24 @@ def get_client_detail(client_id: str) -> Optional[Dict[str, Any]]:
 
         norm_mac = _format_mac(r["mac"])
         is_online = norm_mac in online_macs
-        client_state = "ONLINE" if is_online else "OFFLINE"
+        isolation_info = _get_isolation_info(client_id)
+
+        if isolation_info:
+            client_state = "ISOLATED"
+        elif is_online:
+            client_state = "ONLINE"
+        else:
+            client_state = "OFFLINE"
+
         db_id = r["id"]
+
+        conn_obj: Dict[str, Any] = {
+            "state": client_state,
+            "last_connected_at": _iso_utc(r["updated_at"]),
+            "last_disconnected_at": None,
+        }
+        if isolation_info:
+            conn_obj["isolation"] = isolation_info
 
         client_summary = {
             "id": r["client_id"],
@@ -318,11 +375,7 @@ def get_client_detail(client_id: str) -> Optional[Dict[str, Any]]:
                 "version": r["os_version"],
                 "machine": r["os_machine"],
             },
-            "connection": {
-                "state": client_state,
-                "last_connected_at": _iso_utc(r["updated_at"]),
-                "last_disconnected_at": None,
-            },
+            "connection": conn_obj,
             "created_at": _iso_utc(r["created_at"]),
             "updated_at": _iso_utc(r["updated_at"]),
         }

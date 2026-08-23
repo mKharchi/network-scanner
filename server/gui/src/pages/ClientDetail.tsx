@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { api, type ClientPassiveNeighbourhood } from '../api/client';
 import { useFetch } from '../hooks/useFetch';
 import { useToast } from '../hooks/useToast';
-import { OnlineBadge, OfflineBadge, Badge } from '../components/Badge';
+import { ClientStatusBadge, Badge } from '../components/Badge';
 import { Button } from '../components/Button';
 import { SectionCard, MetricCard } from '../components/Card';
 import { Skeleton, ErrorState, Notice } from '../components/States';
@@ -272,6 +272,7 @@ export function ClientDetailPage() {
   const d = state.status === 'success' ? state.data : state.staleData!;
   const c = d.client;
   const isOnline = c.connection.state === 'ONLINE';
+  const isIsolated = c.connection.state === 'ISOLATED';
 
   const filteredProcesses = (processList || []).filter((p) => {
     if (!processFilter) return true;
@@ -308,6 +309,37 @@ export function ClientDetailPage() {
         </Notice>
       )}
 
+      {/* Prominent Isolated Device Notice */}
+      {isIsolated && (
+        <div style={{ marginBottom: 'var(--space-5)' }}>
+          <Notice variant="danger" title="🔴 DEVICE ISOLATED">
+            <div style={{ display: 'grid', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
+              <div>
+                <strong>Reason:</strong>{' '}
+                {c.connection.isolation?.reason || 'Administrator requested static device isolation'}
+              </div>
+              {c.connection.isolation?.isolated_at && (
+                <div>
+                  <strong>Isolated at:</strong> {formatDateTime(c.connection.isolation.isolated_at)}
+                </div>
+              )}
+              {c.ip_address && (
+                <div>
+                  <strong>Previous IP:</strong> {c.ip_address}
+                </div>
+              )}
+              <div>
+                <strong>Last server contact:</strong>{' '}
+                {c.connection.last_connected_at ? formatDateTime(c.connection.last_connected_at) : 'Disconnected'}
+              </div>
+              <div>
+                <strong>Recovery:</strong> Administrator intervention required (physical logon / recovery script on client machine).
+              </div>
+            </div>
+          </Notice>
+        </div>
+      )}
+
       {/* Header Banner */}
       <div
         style={{
@@ -324,7 +356,11 @@ export function ClientDetailPage() {
             width: 48,
             height: 48,
             borderRadius: 'var(--radius)',
-            background: isOnline ? 'var(--success-bg)' : 'var(--surface-muted)',
+            background: isIsolated
+              ? 'var(--danger-bg, #fee2e2)'
+              : isOnline
+              ? 'var(--success-bg)'
+              : 'var(--surface-muted)',
             border: '1px solid var(--border)',
             display: 'flex',
             alignItems: 'center',
@@ -334,7 +370,7 @@ export function ClientDetailPage() {
           }}
           aria-hidden="true"
         >
-          💻
+          {isIsolated ? '🔒' : '💻'}
         </div>
         <div>
           <h1
@@ -354,9 +390,11 @@ export function ClientDetailPage() {
               flexWrap: 'wrap',
             }}
           >
-            {isOnline ? <OnlineBadge /> : <OfflineBadge />}
+            <ClientStatusBadge state={c.connection.state} />
             <span style={{ fontSize: 'var(--font-xs)', color: 'var(--text-muted)' }}>
-              {isOnline
+              {isIsolated
+                ? `Isolated (last contact ${formatRelative(c.connection.last_connected_at)})`
+                : isOnline
                 ? `Connected ${formatRelative(c.connection.last_connected_at)}`
                 : `Last seen ${formatRelative(c.connection.last_connected_at)}`}
             </span>
@@ -378,8 +416,13 @@ export function ClientDetailPage() {
       <SectionCard title="Agent Remote Control & Telemetry">
         {!isOnline && (
           <div style={{ marginBottom: 'var(--space-3)' }}>
-            <Notice variant="info" title="Client is offline">
-              Agent must be online and connected to execute remote diagnostics.
+            <Notice
+              variant={isIsolated ? 'warning' : 'info'}
+              title={isIsolated ? 'Client is isolated' : 'Client is offline'}
+            >
+              {isIsolated
+                ? 'Device static isolation is active. Communication with the server has been severed as expected until local administrator restoration.'
+                : 'Agent must be online and connected to execute remote diagnostics.'}
             </Notice>
           </div>
         )}

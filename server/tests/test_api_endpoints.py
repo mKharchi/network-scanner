@@ -122,6 +122,70 @@ class ApiEndpointsTestCase(unittest.TestCase):
         self.assertEqual(status, 404)
         self.assertEqual(body["error"]["code"], "NOT_FOUND")
 
+    @patch("server_components.api_service.get_connection")
+    def test_clients_list_and_detail_isolated_state(self, mock_db):
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_db.return_value = mock_conn
+        mock_conn.cursor.return_value = mock_cursor
+        row = {
+            "id": 1,
+            "client_id": "client-isolated-1",
+            "mac": "12-34-56-78-90-AB",
+            "hostname": "ISOLATED-HOST",
+            "ip": "192.168.1.50",
+            "os_system": "Windows",
+            "os_release": "10",
+            "os_version": "10.0.19041",
+            "os_machine": "AMD64",
+            "created_at": None,
+            "updated_at": None,
+        }
+        mock_cursor.fetchall.side_effect = [
+            [row],  # for list_clients
+            [],     # for connections query in get_client_detail
+            [],     # for activity logs in get_client_detail
+        ]
+        mock_cursor.fetchone.side_effect = [
+            row,                           # 1. for get_client_detail main client query
+            {"total": 0, "total_new": 0},  # 2. for alert_counts query
+            None,                          # 3. for latest_activity_log query
+        ]
+
+        with patch.dict(
+            "server_components.server_lib.device_isolation_status",
+            {
+                "client-isolated-1": {
+                    "status": "CONNECTION_LOST_AFTER_ISOLATION",
+                    "reason": "Repeated forbidden process execution",
+                    "sent_at": "2026-08-23T14:20:00Z",
+                    "updated_at": "2026-08-23T14:20:32Z",
+                }
+            },
+        ):
+            status, body = self._fetch("/api/v1/clients")
+            self.assertEqual(status, 200)
+            client_item = body["data"]["items"][0]
+            self.assertEqual(client_item["connection"]["state"], "ISOLATED")
+            self.assertEqual(
+                client_item["connection"]["isolation"]["status"],
+                "CONNECTION_LOST_AFTER_ISOLATION",
+            )
+            self.assertEqual(
+                client_item["connection"]["isolation"]["reason"],
+                "Repeated forbidden process execution",
+            )
+
+            status, body = self._fetch("/api/v1/clients/client-isolated-1")
+            self.assertEqual(status, 200)
+            self.assertEqual(
+                body["data"]["client"]["connection"]["state"], "ISOLATED"
+            )
+            self.assertEqual(
+                body["data"]["client"]["connection"]["isolation"]["reason"],
+                "Repeated forbidden process execution",
+            )
+
     # 4. Network Scans
     def test_latest_scan_empty(self):
         status, body = self._fetch("/api/v1/network/scans/latest")
@@ -484,6 +548,36 @@ class ApiEndpointsTestCase(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(body["data"]["state"], "QUARANTINED")
         self.assertTrue(body["data"]["is_quarantined"])
+
+    @patch("server_components.server_lib.isolate_client")
+    def test_post_client_isolation_endpoint(self, mock_isolate):
+        mock_isolate.return_value = {
+            "status": "ok",
+            "isolation_status": "CONNECTION_LOST_AFTER_ISOLATION",
+        }
+        url = f"{self.base_url}/api/v1/clients/client-test-1/isolation"
+        payload = json.dumps({"reason": "Controlled response"}).encode("utf-8")
+        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+
+        with urllib.request.urlopen(req) as resp:
+            status = resp.status
+            body = json.loads(resp.read().decode("utf-8"))
+
+        self.assertEqual(status, 200)
+        self.assertEqual(body["data"]["isolation_status"], "CONNECTION_LOST_AFTER_ISOLATION")
+        mock_isolate.assert_called_once_with("client-test-1", reason="Controlled response")
+
+    @patch("server_components.server_lib.get_device_isolation_status")
+    def test_get_client_isolation_status_endpoint(self, mock_status):
+        mock_status.return_value = {
+            "status": "ok",
+            "data": {"status": "CONNECTION_LOST_AFTER_ISOLATION"},
+        }
+
+        status, body = self._fetch("/api/v1/clients/client-test-1/isolation")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(body["data"]["status"], "CONNECTION_LOST_AFTER_ISOLATION")
 
 
 if __name__ == "__main__":

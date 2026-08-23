@@ -110,7 +110,7 @@ class NetworkQuarantineManagerTestCase(unittest.TestCase):
             success, _message = manager._apply_windows_firewall_rules()
 
         self.assertTrue(success)
-        self.assertIn(("Public", "Block", "Allow"), [manager._windows_profile_policy])
+        self.assertIn(("Public", "BLOCK", "ALLOW"), [manager._windows_profile_policy])
         self.assertIn(
             [
                 "netsh", "advfirewall", "set", "publicprofile",
