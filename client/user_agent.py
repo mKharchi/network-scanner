@@ -16,4 +16,4 @@ from client import start_client  # noqa: E402  (set the working directory first)
 
 
 if __name__ == "__main__":
-    start_client()
+    start_client(agent_role="interactive")

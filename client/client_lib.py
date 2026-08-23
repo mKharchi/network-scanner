@@ -927,8 +927,16 @@ def handle_command(
 # ============================================================
 
 
-def create_registration_message(ip_address=None):
-    return {"type": "REGISTER", "data": get_system_info(ip_address)}
+def create_registration_message(ip_address=None, *, agent_role="service"):
+    """Create a client registration frame with the process role.
+
+    The same device can run the Session 0 service and an interactive user-session
+    agent.  The role lets the server route desktop-specific requests only to the
+    interactive connection while retaining the existing MAC-derived device ID.
+    """
+    data = get_system_info(ip_address)
+    data["agent_role"] = agent_role
+    return {"type": "REGISTER", "data": data}
 
 
 # ============================================================
