@@ -138,6 +138,34 @@ def get_forbidden_processes():
             conn.close()
 
 
+def broadcast_forbidden_processes():
+    """Push the current enabled forbidden-process policy to every client."""
+    policy = get_forbidden_processes()
+    message = {"type": "FORBIDDEN_PROCESSES", "data": policy}
+    sent = 0
+    failed = 0
+    with clients_lock:
+        connected_clients = list(clients.values())
+
+    for client in connected_clients:
+        conn = client.get("connection")
+        send_lock = client.get("send_lock")
+        if conn is None or send_lock is None:
+            continue
+        try:
+            with send_lock:
+                send_message(conn, message)
+            sent += 1
+        except OSError as error:
+            failed += 1
+            print(
+                f"Could not push forbidden-process policy to {client.get('client_id', 'unknown')}: {error}"
+            )
+
+    print(f"Pushed forbidden-process policy to {sent} clients ({failed} failed).")
+    return {"sent": sent, "failed": failed}
+
+
 ALERT_SEVERITIES = {"LOW", "MEDIUM", "HIGH", "CRITICAL"}
 WORKING_HOURS_DISABLED = "DISABLED"
 WORKING_HOURS_WITHIN = "WITHIN"

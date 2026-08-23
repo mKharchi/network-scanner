@@ -84,6 +84,35 @@ class ForbiddenProcessScannerTests(unittest.TestCase):
         self.assertEqual(run_scan.call_args_list[0].args[1], "1d")
         self.assertEqual(run_scan.call_args_list[1].args[1], "1h")
 
+    @patch("process_scanner.psutil.process_iter")
+    def test_browser_activity_terminates_active_browser(self, mock_process_iter):
+        browser = MagicMock()
+        browser.info = {
+            "pid": 303,
+            "name": "chrome.exe",
+            "exe": r"C:\\Chrome\\chrome.exe",
+            "cmdline": ["chrome.exe"],
+        }
+        mock_process_iter.return_value = [browser]
+
+        alerts, _ = scan_for_forbidden_processes(
+            {
+                "activity": [{
+                    "time": "2026-08-23 10:15:00",
+                    "type": "Browser History",
+                    "detail": "Discord",
+                }]
+            },
+            [{"process_name": "discord", "severity": "HIGH"}],
+            set(),
+            enforce=True,
+        )
+
+        self.assertEqual(len(alerts), 1)
+        self.assertEqual(alerts[0]["action"], "BROWSER_TERMINATED")
+        self.assertEqual(alerts[0]["enforcement"][0]["pid"], 303)
+        browser.terminate.assert_called_once_with()
+
 
 if __name__ == "__main__":
     unittest.main()

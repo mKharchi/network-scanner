@@ -506,7 +506,10 @@ def scan_activity_log(log_data):
 
     with scanner_lock:
         new_alerts, reported_alerts = scan_for_forbidden_processes(
-            log_data, forbidden_processes, reported_alerts
+            log_data,
+            forbidden_processes,
+            reported_alerts,
+            enforce=True,
         )
         save_reported_alerts(reported_alerts)
 
