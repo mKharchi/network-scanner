@@ -5,6 +5,7 @@ import sys
 import threading
 import types
 import unittest
+import tempfile
 import urllib.request
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -51,6 +52,15 @@ class ApiEndpointsTestCase(unittest.TestCase):
             status = e.code
             body = json.loads(e.read().decode("utf-8"))
             return status, body
+
+    def _fetch_raw(self, path: str):
+        url = f"{self.base_url}{path}"
+        req = urllib.request.Request(url, headers={"Accept": "*/*"})
+        try:
+            with urllib.request.urlopen(req) as resp:
+                return resp.status, dict(resp.headers), resp.read()
+        except urllib.error.HTTPError as e:
+            return e.code, dict(e.headers), e.read()
 
     # 1. Health check
     def test_health_check(self):
@@ -185,6 +195,64 @@ class ApiEndpointsTestCase(unittest.TestCase):
                 body["data"]["client"]["connection"]["isolation"]["reason"],
                 "Repeated forbidden process execution",
             )
+
+    @patch("server_components.api_service.get_connection")
+    def test_client_screenshots_list_endpoint(self, mock_db):
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_db.return_value = mock_conn
+        mock_conn.cursor.return_value = mock_cursor
+        mock_cursor.fetchone.side_effect = [
+            {"id": 1},
+        ]
+        mock_cursor.fetchall.return_value = [
+            {
+                "id": 7,
+                "command_id": "screenshot-1",
+                "requested_by": "operator",
+                "filename": "DESKTOP-ABC.png",
+                "mime_type": "image/png",
+                "file_size": 2048,
+                "device_name": "DESKTOP-ABC",
+                "captured_at": "2026-08-23T15:00:00+00:00",
+                "uploaded_at": "2026-08-23T15:01:00+00:00",
+                "status": "UPLOADED",
+            }
+        ]
+
+        status, body = self._fetch("/api/v1/clients/client-123/screenshots?limit=1")
+        self.assertEqual(status, 200)
+        self.assertEqual(len(body["data"]["items"]), 1)
+        self.assertEqual(body["data"]["items"][0]["filename"], "DESKTOP-ABC.png")
+        self.assertEqual(body["data"]["items"][0]["client_id"], "client-123")
+
+    def test_screenshot_file_endpoint(self):
+        with tempfile.TemporaryDirectory() as directory:
+            file_path = Path(directory) / "shot.png"
+            payload = b"fake-png-bytes"
+            file_path.write_bytes(payload)
+
+            with patch.object(
+                api_service,
+                "get_screenshot_record",
+                return_value={
+                    "id": 9,
+                    "client_id": "client-123",
+                    "filename": "shot.png",
+                    "storage_path": str(file_path),
+                    "mime_type": "image/png",
+                    "file_size": len(payload),
+                    "device_name": "DESKTOP-ABC",
+                    "captured_at": "2026-08-23T15:00:00+00:00",
+                    "uploaded_at": "2026-08-23T15:01:00+00:00",
+                    "status": "UPLOADED",
+                },
+            ):
+                status, headers, body = self._fetch_raw("/api/v1/screenshots/9/file")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(headers.get("Content-Type"), "image/png")
+        self.assertEqual(body, payload)
 
     # 4. Network Scans
     def test_latest_scan_empty(self):
