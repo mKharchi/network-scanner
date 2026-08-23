@@ -5,6 +5,12 @@ import re
 import psutil
 
 
+BROWSER_PROCESS_NAMES = {
+    "chrome", "chromium", "google-chrome", "msedge", "microsoft-edge",
+    "firefox", "brave", "brave-browser", "opera", "vivaldi",
+}
+
+
 def _normalize_process_name(name):
     if not name:
         return ""
@@ -58,7 +64,46 @@ def _is_matching_process(proc_name, exe_name, rule_names):
     return False
 
 
-def scan_for_forbidden_processes(log_data, forbidden_processes, reported_alerts):
+def _is_browser_process(proc_name, exe_name):
+    return (
+        _normalize_process_name(proc_name) in BROWSER_PROCESS_NAMES
+        or _normalize_process_name(exe_name) in BROWSER_PROCESS_NAMES
+    )
+
+
+def _terminate_process(proc):
+    """Terminate one browser process and return a serializable result."""
+    pid = proc.info.get("pid")
+    name = proc.info.get("name") or "browser"
+    result = {
+        "pid": pid,
+        "process_name": name,
+        "termination_attempted": bool(pid),
+        "termination_successful": False,
+        "termination_error": None,
+    }
+    if not pid:
+        result["termination_error"] = "Process did not expose a PID."
+        return result
+    try:
+        proc.terminate()
+        proc.wait(timeout=1.5)
+        result["termination_successful"] = True
+    except psutil.TimeoutExpired:
+        try:
+            proc.kill()
+            proc.wait(timeout=1.5)
+            result["termination_successful"] = True
+        except Exception as error:
+            result["termination_error"] = str(error)
+    except (psutil.NoSuchProcess, psutil.ZombieProcess):
+        result["termination_successful"] = True
+    except Exception as error:
+        result["termination_error"] = str(error)
+    return result
+
+
+def scan_for_forbidden_processes(log_data, forbidden_processes, reported_alerts, *, enforce=False):
     """
     log_data: dict from get_activity_log
     forbidden_processes: list of {process_name, severity, description}
@@ -66,6 +111,7 @@ def scan_for_forbidden_processes(log_data, forbidden_processes, reported_alerts)
     Returns: list of new alert candidates, updated reported_alerts
     """
     new_alerts = []
+    browser_activity_matches = set()
 
     for fb in forbidden_processes:
         if not isinstance(fb, dict):
@@ -99,6 +145,8 @@ def scan_for_forbidden_processes(log_data, forbidden_processes, reported_alerts)
 
                 if not matched_keyword:
                     continue
+                if "browser" in str(entry_type).lower():
+                    browser_activity_matches.add(matched_keyword)
 
                 time_str = entry.get("time", "Unknown")
                 detail = str(entry_detail)
@@ -153,6 +201,30 @@ def scan_for_forbidden_processes(log_data, forbidden_processes, reported_alerts)
                         )
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
+
+    # Browser history identifies activity, not a dedicated Discord process.
+    # Close active browsers after a browser log match so web-based forbidden
+    # applications receive the same enforcement as native executables.
+    if enforce:
+        if browser_activity_matches:
+            for proc in psutil.process_iter(["pid", "name", "exe", "cmdline"]):
+                try:
+                    proc_name = proc.info.get("name") or ""
+                    exe_path = proc.info.get("exe") or ""
+                    exe_name = os.path.basename(exe_path) if exe_path else ""
+                    if not _is_browser_process(proc_name, exe_name):
+                        continue
+                    termination = _terminate_process(proc)
+                    for alert in new_alerts:
+                        if alert.get("matched_keyword") in browser_activity_matches:
+                            alert.setdefault("enforcement", []).append(termination)
+                            alert["action"] = (
+                                "BROWSER_TERMINATED"
+                                if termination["termination_successful"]
+                                else "BROWSER_TERMINATION_FAILED"
+                            )
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    continue
 
     # Limit set size
     if len(reported_alerts) > 1000:
