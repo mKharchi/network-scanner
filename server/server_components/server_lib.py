@@ -138,6 +138,34 @@ def get_forbidden_processes():
             conn.close()
 
 
+def broadcast_forbidden_processes():
+    """Push the current enabled forbidden-process policy to every client."""
+    policy = get_forbidden_processes()
+    message = {"type": "FORBIDDEN_PROCESSES", "data": policy}
+    sent = 0
+    failed = 0
+    with clients_lock:
+        connected_clients = list(clients.values())
+
+    for client in connected_clients:
+        conn = client.get("connection")
+        send_lock = client.get("send_lock")
+        if conn is None or send_lock is None:
+            continue
+        try:
+            with send_lock:
+                send_message(conn, message)
+            sent += 1
+        except OSError as error:
+            failed += 1
+            print(
+                f"Could not push forbidden-process policy to {client.get('client_id', 'unknown')}: {error}"
+            )
+
+    print(f"Pushed forbidden-process policy to {sent} clients ({failed} failed).")
+    return {"sent": sent, "failed": failed}
+
+
 ALERT_SEVERITIES = {"LOW", "MEDIUM", "HIGH", "CRITICAL"}
 WORKING_HOURS_DISABLED = "DISABLED"
 WORKING_HOURS_WITHIN = "WITHIN"
@@ -527,8 +555,20 @@ def _parse_alert_time(value, field_name, *, required=False):
 
     try:
         return datetime.datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
-    except ValueError as error:
-        raise ValueError(f"{field_name} must use YYYY-MM-DD HH:MM:SS") from error
+    except ValueError:
+        try:
+            parsed = datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return parsed.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+        except ValueError as error:
+            raise ValueError(
+                f"{field_name} must use YYYY-MM-DD HH:MM:SS or ISO-8601"
+            ) from error
+
+
+def _normalize_alert_process_name(value):
+    """Normalize executable names for comparison with policy keywords."""
+    normalized = str(value or "").strip().lower().replace("\\", "/").rsplit("/", 1)[-1]
+    return normalized[:-4] if normalized.endswith(".exe") else normalized
 
 
 def handle_client_alert(mac, alert_data):
@@ -537,18 +577,23 @@ def handle_client_alert(mac, alert_data):
         print(f"Rejected malformed alert from {mac}: payload is not an object.")
         return False
 
-    if alert_data.get("alert_type") != "FORBIDDEN_PROCESS":
+    alert_type = alert_data.get("alert_type")
+    if alert_type not in {"FORBIDDEN_PROCESS", "SECURITY_EVENT"}:
         print(
-            f"Rejected unsupported alert from {mac}: {alert_data.get('alert_type')!r}"
+            f"Rejected unsupported alert from {mac}: {alert_type!r}"
         )
         return False
 
     process_name = alert_data.get("process_name")
-    if not isinstance(process_name, str) or not process_name.strip():
+    if alert_type == "FORBIDDEN_PROCESS" and (
+        not isinstance(process_name, str) or not process_name.strip()
+    ):
         print(f"Rejected malformed alert from {mac}: process_name is required.")
         return False
 
     claimed_severity = alert_data.get("severity")
+    if claimed_severity == "INFO":
+        claimed_severity = "LOW"
     if claimed_severity not in ALERT_SEVERITIES:
         print(f"Rejected malformed alert from {mac}: invalid severity.")
         return False
@@ -577,35 +622,43 @@ def handle_client_alert(mac, alert_data):
             return False
         client_db_id = row[0]
 
-        # The database configuration, rather than the client payload, decides
-        # whether this process is forbidden and what severity it has.
-        cursor.execute(
-            """
-            SELECT process_name, severity, description
-            FROM forbidden_processes
-            WHERE process_name = %s AND enabled = TRUE
-            """,
-            (process_name.strip(),),
-        )
-        forbidden_process = cursor.fetchone()
-        if not forbidden_process:
-            print(
-                f"Rejected alert from {mac}: {process_name!r} is not an enabled "
-                "forbidden process."
+        if alert_type == "FORBIDDEN_PROCESS":
+            # The database policy decides whether the process is forbidden and
+            # what severity is stored. Compare normalized executable names so
+            # Discord.exe matches a configured rule named discord.
+            cursor.execute(
+                "SELECT process_name, severity, description FROM forbidden_processes WHERE enabled = TRUE"
             )
-            return False
-
-        configured_name, severity, configured_description = forbidden_process
-        if severity not in ALERT_SEVERITIES:
-            print(
-                f"Rejected alert from {mac}: invalid configured severity {severity!r}."
+            forbidden_process = next(
+                (
+                    row
+                    for row in cursor.fetchall()
+                    if _normalize_alert_process_name(row[0])
+                    == _normalize_alert_process_name(process_name)
+                ),
+                None,
             )
-            return False
+            if not forbidden_process:
+                print(
+                    f"Rejected alert from {mac}: {process_name!r} is not an enabled forbidden process."
+                )
+                return False
 
-        title = f"Forbidden process detected: {configured_name}"
-        description = configured_description or (
-            f"Forbidden process '{configured_name}' was detected on the client."
-        )
+            configured_name, severity, configured_description = forbidden_process
+            if severity not in ALERT_SEVERITIES:
+                print(f"Rejected alert from {mac}: invalid configured severity {severity!r}.")
+                return False
+            title = alert_data.get("title") or f"Forbidden process detected: {configured_name}"
+            description = alert_data.get("description") or configured_description or (
+                f"Forbidden process '{configured_name}' was detected on the client."
+            )
+            stored_type = "FORBIDDEN_PROCESS"
+        else:
+            stored_type = "SECURITY_EVENT"
+            severity = claimed_severity
+            event_type = alert_data.get("event_type") or "SECURITY_EVENT"
+            title = alert_data.get("title") or f"Security event: {event_type}"
+            description = alert_data.get("description") or event_type
 
         cursor.execute(
             """
@@ -616,7 +669,7 @@ def handle_client_alert(mac, alert_data):
         """,
             (
                 client_db_id,
-                "FORBIDDEN_PROCESS",
+                stored_type,
                 severity,
                 detected_at,
                 activity_time,
@@ -626,6 +679,28 @@ def handle_client_alert(mac, alert_data):
         )
         conn.commit()
         print(f"\n[!] ALERT RECEIVED from {mac}: {title}", flush=True)
+
+        try:
+            from server_components import event_broadcaster
+
+            event_broadcaster.broadcast_alert(
+                {
+                    "id": getattr(cursor, "lastrowid", None),
+                    "client": {"mac": mac},
+                    "type": stored_type,
+                    "event_type": alert_data.get("event_type"),
+                    "severity": severity,
+                    "status": "NEW",
+                    "title": title,
+                    "description": description,
+                    "detected_at": detected_at.isoformat(),
+                    "activity_time": activity_time.isoformat() if activity_time else None,
+                    "action": alert_data.get("action"),
+                    "process_name": alert_data.get("process_name"),
+                }
+            )
+        except Exception as broadcast_error:
+            print(f"Could not broadcast saved client alert: {broadcast_error}")
         return True
     except Exception as e:
         print(f"Error saving alert: {e}")
