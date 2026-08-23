@@ -22,8 +22,8 @@ export function LatestScanPage() {
   const navigate = useNavigate();
   const [filter, setFilter] = useState<"ALL" | "MANAGED" | "UNMANAGED">("ALL");
   const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState("ip_address");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [sortKey, setSortKey] = useState("hostname");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   const { state, refetch } = useFetch(
     () => api.getLatestScan(),
@@ -84,6 +84,9 @@ export function LatestScanPage() {
     } else if (sortKey === "vendor") {
       av = a.vendor ?? "";
       bv = b.vendor ?? "";
+    } else if (sortKey === "last_observed_at") {
+      av = a.last_observed_at ?? "";
+      bv = b.last_observed_at ?? "";
     }
     return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
   });
@@ -126,44 +129,26 @@ export function LatestScanPage() {
     },
     {
       key: "last_observed_at",
-      label: "Observed",
+      label: "Last Seen",
+      sortable: true,
       align: "right",
       render: (d) => (
-        <span
-          style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}
-        >
-          {formatRelative(d.last_observed_at)}
-        </span>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+          <span style={{ fontSize: "var(--font-xs)", fontWeight: 500, color: "var(--text)" }}>
+            {formatDateTime(d.last_observed_at)}
+          </span>
+          <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+            {formatRelative(d.last_observed_at)}
+          </span>
+        </div>
       ),
     },
   ];
 
   const { addToast } = useToast();
-  const [isScanning, setIsScanning] = useState(false);
   const [isCollectingNeighbourhoods, setIsCollectingNeighbourhoods] = useState(false);
   const [neighbourhoodCollection, setNeighbourhoodCollection] =
     useState<GlobalNeighbourhoodCollection | null>(null);
-
-  const handleRunScan = async () => {
-    setIsScanning(true);
-    try {
-      const res = await api.triggerManualScan();
-      addToast({
-        title: "Network Discovery Completed",
-        message: `Merged client reports: found ${res?.devices_found ?? 0} devices.`,
-        severity: "SUCCESS",
-      });
-      refetch();
-    } catch (err: any) {
-      addToast({
-        title: "Scan Failed",
-        message: err?.message || "Failed to trigger network scan.",
-        severity: "CRITICAL",
-      });
-    } finally {
-      setIsScanning(false);
-    }
-  };
 
   const handleCollectAllNeighbourhoods = async () => {
     setIsCollectingNeighbourhoods(true);
@@ -207,20 +192,12 @@ export function LatestScanPage() {
           <p className="page-description">
             {scan
               ? `Completed ${formatDateTime(scan.completed_at)} · Found ${scan.devices_found} device(s)`
-              : "Devices observed in the most recent network scan."}
+              : "Devices observed in the most recent network scan snapshot."}
           </p>
         </div>
         <div style={{ display: "flex", gap: "var(--space-2)", alignItems: "center" }}>
           <Button
             variant="primary"
-            size="md"
-            disabled={isScanning}
-            onClick={handleRunScan}
-          >
-            {isScanning ? "Merging Reports…" : "Merge Stored Reports"}
-          </Button>
-          <Button
-            variant="secondary"
             size="md"
             disabled={isCollectingNeighbourhoods}
             onClick={handleCollectAllNeighbourhoods}

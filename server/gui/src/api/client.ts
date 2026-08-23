@@ -80,6 +80,25 @@ async function get<T>(
   }
 }
 
+async function post<T>(path: string, payload: unknown = {}): Promise<T> {
+  const baseWithApi = API_ORIGIN.replace(/\/+$/, "") + BASE;
+  const fullUrl = baseWithApi + path;
+  const response = await fetch(fullUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new ApiError(
+      body?.error?.code ?? "UNKNOWN_ERROR",
+      body?.error?.message ?? `HTTP ${response.status}`,
+      response.status,
+    );
+  }
+  return body?.data as T;
+}
+
 // ── Shared view models ────────────────────────────────────────────
 
 export interface ClientOS {
@@ -90,9 +109,49 @@ export interface ClientOS {
 }
 
 export interface ClientConnection {
-  state: "ONLINE" | "OFFLINE";
+  state: "ONLINE" | "OFFLINE" | "ISOLATED";
   last_connected_at: string | null;
   last_disconnected_at: string | null;
+  isolation?: {
+    status?: string;
+    reason?: string;
+    isolated_at?: string;
+  };
+}
+
+export interface PassiveProtocolObservation {
+  protocol: "mdns" | "llmnr" | "nbns" | "ssdp";
+  observed_at?: string;
+  first_observed_at?: string;
+  seen_count?: number;
+  observation_kind?: "query" | "response" | "announcement" | "search" | "advertisement";
+  ip_address?: string;
+  mac_address?: string;
+  hostname?: string;
+  device_name?: string;
+  service_type?: string;
+  service_name?: string;
+  service_port?: number;
+  device_type?: string;
+  vendor?: string;
+  model?: string;
+  server?: string;
+  location?: string;
+  raw_fields?: {
+    usn?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+export interface ClientPassiveNeighbourhood {
+  status: "completed";
+  client_id: string;
+  timeout_seconds: number;
+  observed_at: string;
+  reporter: string;
+  observations: PassiveProtocolObservation[];
+  observation_count: number;
 }
 
 export interface ManagedClientSummary {
@@ -124,6 +183,25 @@ export interface NetworkDevice {
   managed_client_id: string | null;
   last_observed_at: string | null;
   sources: string[];
+}
+
+/** Lightweight row returned by GET /api/v1/network/devices (list all) */
+export interface NetworkDeviceSummary {
+  mac_address: string;
+  ip_address: string | null;
+  hostname: string | null;
+  vendor: string | null;
+  is_managed: boolean;
+  managed_client_id: string | null;
+  first_seen: string | null;
+  last_seen: string | null;
+}
+
+export interface NetworkDeviceListResponse {
+  devices: NetworkDeviceSummary[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 export interface GlobalNetworkScan {
@@ -185,7 +263,7 @@ export interface ActivityLogRecord {
 
 export interface DashboardData {
   generated_at: string;
-  clients: { online: number; offline: number; total: number };
+  clients: { online: number; isolated?: number; offline: number; total: number };
   alerts: { new: number; critical: number };
   latest_scan: {
     completed_at: string;
@@ -449,6 +527,27 @@ export const api = {
       };
     })(),
 
+  requestClientPassiveNeighbourhood: (clientId: string) =>
+    (async () => {
+      const baseWithApi = API_ORIGIN.replace(/\/+$/, "") + BASE;
+      const resp = await fetch(
+        baseWithApi + `/clients/${encodeURIComponent(clientId)}/passive-neighbourhood`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+        },
+      );
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => null);
+        throw new ApiError(
+          body?.error?.code ?? "UNKNOWN_ERROR",
+          body?.error?.message ?? `HTTP ${resp.status}`,
+          resp.status,
+        );
+      }
+      return (await resp.json()).data as ClientPassiveNeighbourhood;
+    })(),
+
   triggerManualScan: () =>
     (async () => {
       const baseWithApi = API_ORIGIN.replace(/\/+$/, "") + BASE;
@@ -538,4 +637,26 @@ export const api = {
         ? `/network/scans/global-active/${encodeURIComponent(scanId)}`
         : "/network/scans/global-active",
     ),
+
+  listNetworkDevices: (params?: { search?: string; limit?: number; offset?: number }) =>
+    get<NetworkDeviceListResponse>("/network/devices", {
+      ...(params?.search ? { search: params.search } : {}),
+      ...(params?.limit != null ? { limit: String(params.limit) } : {}),
+      ...(params?.offset != null ? { offset: String(params.offset) } : {}),
+    }),
+
+  quarantineClient: (clientId: string, payload?: { reason?: string; duration_minutes?: number }) =>
+    post<any>(`/clients/${encodeURIComponent(clientId)}/quarantine`, payload ?? {}),
+
+  releaseClientQuarantine: (clientId: string, payload?: { reason?: string }) =>
+    post<any>(`/clients/${encodeURIComponent(clientId)}/release-quarantine`, payload ?? {}),
+
+  getClientQuarantineStatus: (clientId: string) =>
+    get<any>(`/clients/${encodeURIComponent(clientId)}/quarantine`),
+
+  isolateClient: (clientId: string, payload?: { reason?: string }) =>
+    post<any>(`/clients/${encodeURIComponent(clientId)}/isolation`, payload ?? {}),
+
+  getClientIsolationStatus: (clientId: string) =>
+    get<any>(`/clients/${encodeURIComponent(clientId)}/isolation`),
 };

@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import socket
 from pathlib import Path
@@ -12,8 +13,12 @@ from client_lib import (
     get_mac,
 )
 from process_scanner import scan_for_forbidden_processes
+from process_monitor import ForbiddenProcessMonitor
+from quarantine_manager import NetworkQuarantineManager
+from network_state_manager import NetworkStateManager
 from network_neighbour_collector import NetworkNeighbourCollector
 from dhcp_listener import DHCPListener
+from passive_protocol_listener import PassiveProtocolListener
 from neighbourhood import (
     get_daily_neighbourhood_path,
     load_daily_neighbourhood,
@@ -46,6 +51,7 @@ NEIGHBOUR_SNAPSHOT_STATE_FILE = os.path.join(
     os.path.dirname(__file__), "neighbour_snapshot_state.json"
 )
 STARTUP_LOG_FILE = CLIENT_DIR / "client_service.log"
+LOG = logging.getLogger("client")
 
 socket_lock = threading.Lock()
 scanner_lock = threading.Lock()
@@ -53,6 +59,7 @@ network_scan_lock = threading.Lock()
 network_scan_state_lock = threading.Lock()
 active_network_scan_global_id = None
 forbidden_processes = []
+PASSIVE_NEIGHBOURHOOD_COMMAND = "GET_PASSIVE_NEIGHBOURHOOD"
 
 
 class _StopEventProxy:
@@ -323,6 +330,30 @@ def start_requested_neighbourhood_command(client_socket):
     return worker
 
 
+def get_requested_passive_neighbourhood(listener):
+    """Return the passive listener's bounded snapshot in its response contract.
+
+    This is intentionally separate from the daily ARP/DHCP neighbourhood
+    request and does not trigger collection, persistence, or network traffic.
+    """
+    observations = []
+    if listener is None:
+        return {
+            "observed_at": datetime.now().astimezone().isoformat(),
+            "reporter": _snapshot_client_mac() or "unknown",
+            "observations": observations,
+        }
+    try:
+        observations = listener.snapshot()
+    except Exception as error:
+        print(f"[PASSIVE LISTENER] Could not read observation snapshot: {error}")
+    return {
+        "observed_at": datetime.now().astimezone().isoformat(),
+        "reporter": _snapshot_client_mac() or "unknown",
+        "observations": observations if isinstance(observations, list) else [],
+    }
+
+
 def _lookup_dhcp_vendor(mac_address):
     if not mac_address:
         return None
@@ -495,6 +526,12 @@ def send_alerts(client_socket, alerts, source):
                 return
 
 
+def send_process_monitor_alert(client_socket, alert):
+    """Frame a process-monitor alert for the client-server protocol."""
+    if isinstance(alert, dict):
+        send_alerts(client_socket, [{"type": "ALERT", "alert": alert}], "process-monitor")
+
+
 def background_scanner(client_socket, stop_event=None):
     if stop_event:
         if stop_event.wait(10):
@@ -535,12 +572,128 @@ def start_client(stop_event=None):
 
     _startup_log(f"Client starting with server target {SERVER_IP}:{SERVER_PORT}.")
 
+    quarantine_manager = NetworkQuarantineManager(
+        server_ip=SERVER_IP,
+        server_port=SERVER_PORT,
+        default_max_duration_minutes=int(os.getenv("QUARANTINE_MAX_DURATION_MINUTES", "60")),
+    )
+    network_state_manager = NetworkStateManager()
+
     while not stop_event.is_set():
         client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         session_stop_event = threading.Event()
         stop_proxy = _StopEventProxy(stop_event, session_stop_event)
         background_thread = None
         dhcp_listener = None
+        passive_protocol_listener = None
+        process_monitor = None
+
+        def _on_process_alert(alert):
+            send_process_monitor_alert(client, alert)
+
+        def _on_quarantine_event(event):
+            send_alerts(
+                client,
+                [
+                    {
+                        "type": "ALERT",
+                        "alert": {
+                            "alert_type": "SECURITY_EVENT",
+                            "event_type": event.get("event_type"),
+                            "severity": (
+                                "CRITICAL"
+                                if "FAILED" in event.get("event_type", "")
+                                or "QUARANTINED" in event.get("event_type", "")
+                                else "INFO"
+                            ),
+                            "title": f"Network Quarantine Event: {event.get('event_type')}",
+                            "description": event.get("reason", "Quarantine event"),
+                            "detected_at": event.get("timestamp"),
+                            "activity_time": event.get("timestamp"),
+                            "command_id": event.get("command_id"),
+                        },
+                    }
+                ],
+                "quarantine-manager",
+            )
+
+        quarantine_manager.event_callback = _on_quarantine_event
+
+        # ------------------------------------------------------------------
+        # Auto-isolation on repeated escalation (opt-in via environment var).
+        # This integrates the forbidden-process feature with device isolation
+        # only when AUTO_ISOLATE_ON_ESCALATION=1 is explicitly set.  It is
+        # disabled by default so both features can be validated independently
+        # before they are joined.  Per the plan, isolation is intentionally
+        # fire-and-forget: the callback runs in a background thread and never
+        # waits for a server acknowledgement.
+        # ------------------------------------------------------------------
+        _auto_isolate_enabled = os.getenv("AUTO_ISOLATE_ON_ESCALATION", "0").strip() == "1"
+
+        def _on_escalation_isolate(critical_alert):
+            """Triggered when a forbidden process crosses the escalation threshold."""
+            if not _auto_isolate_enabled:
+                return
+
+            # Idempotency: skip if already isolating/isolated.
+            try:
+                current = network_state_manager.get_lifecycle_state()
+                if current and current.get("state") in (
+                    "ISOLATING",
+                    "ISOLATED",
+                    "RESTORING",
+                ):
+                    LOG.info(
+                        "[PROCESS MONITOR] Isolation skipped — already in state %s.",
+                        current.get("state"),
+                    )
+                    return
+            except Exception:
+                pass  # If state is unreadable, proceed with isolation attempt.
+
+            process_name = critical_alert.get("process_name", "unknown")
+            violation_count = critical_alert.get("violation_count", 0)
+            reason = (
+                f"Automatic isolation: forbidden process '{process_name}' "
+                f"violated policy {violation_count} times."
+            )
+
+            LOG.warning(
+                "[PROCESS MONITOR] Escalation threshold crossed for '%s' "
+                "(%d violations). Triggering device isolation.",
+                process_name,
+                violation_count,
+            )
+
+            def _run_isolation():
+                try:
+                    result = network_state_manager.isolate_static_ip(
+                        reason=reason,
+                        enabled=True,
+                    )
+                    LOG.warning(
+                        "[PROCESS MONITOR] Device isolation result: %s",
+                        result.get("status"),
+                    )
+                except Exception as iso_err:
+                    LOG.error(
+                        "[PROCESS MONITOR] Device isolation failed: %s", iso_err
+                    )
+
+            threading.Thread(
+                target=_run_isolation,
+                name="auto-isolation",
+                daemon=True,
+            ).start()
+
+        process_monitor = ForbiddenProcessMonitor(
+            scan_interval_seconds=float(os.getenv("PROCESS_SCAN_INTERVAL_SECONDS", "10.0")),
+            escalation_threshold=int(os.getenv("PROCESS_ESCALATION_THRESHOLD", "3")),
+            escalation_window_seconds=int(os.getenv("PROCESS_ESCALATION_WINDOW_SECONDS", "120")),
+            alert_callback=_on_process_alert,
+            isolation_callback=_on_escalation_isolate,
+            auto_terminate=True,
+        )
 
         try:
             try:
@@ -608,6 +761,10 @@ def start_client(stop_event=None):
                             f"Received {len(forbidden_processes)} forbidden processes."
                         )
 
+                        # Update and start continuous process monitoring
+                        process_monitor.set_rules(forbidden_processes)
+                        process_monitor.start()
+
                         # Start background daily neighbour snapshot collection so it never blocks command execution
                         threading.Thread(
                             target=collect_daily_network_neighbours,
@@ -624,6 +781,18 @@ def start_client(stop_event=None):
                             )
                             background_thread.start()
 
+                        # Select one interface for passive capture services in this session.
+                        detected_iface = None
+                        try:
+                            from network_neighbour_collector import get_local_network
+
+                            local_net = get_local_network()
+                            if local_net:
+                                detected_iface = local_net.get("interface")
+                        except Exception:
+                            pass
+                        listen_iface = os.getenv("DHCP_LISTEN_INTERFACE") or detected_iface
+
                         # Start passive DHCP listener (idempotent per session)
                         try:
                             if dhcp_listener is None:
@@ -631,20 +800,6 @@ def start_client(stop_event=None):
                                 def _on_dhcp_obs(obs):
                                     store_dhcp_neighbourhood_observation(obs)
 
-                                # Auto-detect active network interface for sniffing
-                                detected_iface = None
-                                try:
-                                    from network_neighbour_collector import get_local_network
-
-                                    local_net = get_local_network()
-                                    if local_net:
-                                        detected_iface = local_net.get("interface")
-                                except Exception:
-                                    pass
-
-                                listen_iface = (
-                                    os.getenv("DHCP_LISTEN_INTERFACE") or detected_iface
-                                )
                                 dhcp_listener = DHCPListener(
                                     _on_dhcp_obs,
                                     interface=listen_iface,
@@ -652,6 +807,23 @@ def start_client(stop_event=None):
                                 dhcp_listener.start()
                         except Exception as e:
                             print(f"[DHCP] Could not start listener: {e}")
+
+                        # Start unified passive discovery listener covering DHCP, mDNS, SSDP, LLMNR, NBNS
+                        try:
+                            if passive_protocol_listener is None:
+                                def _on_passive_dhcp(obs):
+                                    store_dhcp_neighbourhood_observation(obs)
+
+                                passive_protocol_listener = PassiveProtocolListener(
+                                    interface=listen_iface,
+                                    status_callback=_startup_log,
+                                    dhcp_callback=_on_passive_dhcp,
+                                )
+                                passive_protocol_listener.start()
+                        except Exception as error:
+                            print(
+                                f"[PASSIVE LISTENER] Could not start listener: {error}"
+                            )
                         continue
 
                     if msg_type != "COMMAND":
@@ -672,8 +844,17 @@ def start_client(stop_event=None):
                     elif command == "GET_NETWORK_NEIGHBOURHOOD":
                         start_requested_neighbourhood_command(client)
                         continue
+                    elif command == PASSIVE_NEIGHBOURHOOD_COMMAND:
+                        result = get_requested_passive_neighbourhood(
+                            passive_protocol_listener
+                        )
                     else:
-                        result = handle_command(message)
+                        result = handle_command(
+                            message,
+                            quarantine_manager=quarantine_manager,
+                            process_monitor=process_monitor,
+                            network_state_manager=network_state_manager,
+                        )
 
                     # A server-requested activity log (including the standard 24-hour
                     # request) is another detection opportunity.  Send any resulting
@@ -708,11 +889,21 @@ def start_client(stop_event=None):
             stop_event.set()
         finally:
             session_stop_event.set()
+            if process_monitor is not None:
+                try:
+                    process_monitor.stop()
+                except Exception as error:
+                    print(f"[PROCESS MONITOR] Could not stop monitor: {error}")
             if dhcp_listener is not None:
                 try:
                     dhcp_listener.stop()
                 except Exception as error:
                     print(f"[DHCP] Could not stop listener cleanly: {error}")
+            if passive_protocol_listener is not None:
+                try:
+                    passive_protocol_listener.stop()
+                except Exception as error:
+                    print(f"[PASSIVE LISTENER] Could not stop listener cleanly: {error}")
             if background_thread is not None and background_thread.is_alive():
                 background_thread.join(timeout=2)
             try:
