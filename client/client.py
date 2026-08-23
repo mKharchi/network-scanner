@@ -51,6 +51,12 @@ NEIGHBOUR_SNAPSHOT_STATE_FILE = os.path.join(
     os.path.dirname(__file__), "neighbour_snapshot_state.json"
 )
 STARTUP_LOG_FILE = CLIENT_DIR / "client_service.log"
+FORBIDDEN_PROCESS_STARTUP_SCAN_PERIOD = "1d"
+FORBIDDEN_PROCESS_PERIODIC_SCAN_PERIOD = "1h"
+FORBIDDEN_PROCESS_SCAN_INTERVAL_SECONDS = max(
+    1, int(os.getenv("FORBIDDEN_PROCESS_SCAN_INTERVAL_SECONDS", "600"))
+)
+FORBIDDEN_PROCESS_SCAN_DUMP = CLIENT_DIR / "forbidden_process_scan.json"
 LOG = logging.getLogger("client")
 
 socket_lock = threading.Lock()
@@ -532,33 +538,63 @@ def send_process_monitor_alert(client_socket, alert):
         send_alerts(client_socket, [{"type": "ALERT", "alert": alert}], "process-monitor")
 
 
+def run_forbidden_activity_scan(
+    client_socket,
+    period,
+    source_label,
+    *,
+    dump_path=None,
+):
+    """Collect one activity-log window, scan it, and deliver any alerts."""
+    log_data = get_activity_log(period)
+    if dump_path:
+        try:
+            with open(dump_path, "w", encoding="utf-8") as dump_file:
+                json.dump(log_data, dump_file)
+        except OSError as error:
+            print(f"Could not persist forbidden-process scan snapshot: {error}")
+
+    alerts = scan_activity_log(log_data)
+    print(f"{source_label} found {len(alerts)} new alerts.")
+    send_alerts(client_socket, alerts, source_label)
+    return alerts
+
+
 def background_scanner(client_socket, stop_event=None):
-    if stop_event:
-        if stop_event.wait(10):
-            return
-    else:
-        time.sleep(10)
+    if stop_event and stop_event.is_set():
+        return
+
+    try:
+        print("Background scanner running startup forbidden-process scan...")
+        run_forbidden_activity_scan(
+            client_socket,
+            FORBIDDEN_PROCESS_STARTUP_SCAN_PERIOD,
+            "startup forbidden-process scan",
+            dump_path=FORBIDDEN_PROCESS_SCAN_DUMP,
+        )
+    except Exception as error:
+        print(f"Background scanner startup error: {error}")
 
     while not (stop_event and stop_event.is_set()):
-        try:
-            print("Background scanner running...")
-            # Generate 1h activity log
-            log_data = get_activity_log("1h")
-            with open("hourly_log.json", "w") as f:
-                json.dump(log_data, f)
-
-            alerts = scan_activity_log(log_data)
-            print(f"Background scanner found {len(alerts)} new alerts.")
-            send_alerts(client_socket, alerts, "hourly scan")
-
-        except Exception as e:
-            print(f"Background scanner error: {e}")
-
         if stop_event:
-            if stop_event.wait(3600):
+            if stop_event.wait(FORBIDDEN_PROCESS_SCAN_INTERVAL_SECONDS):
                 break
         else:
-            time.sleep(3600)
+            time.sleep(FORBIDDEN_PROCESS_SCAN_INTERVAL_SECONDS)
+
+        if stop_event and stop_event.is_set():
+            break
+
+        try:
+            print("Background scanner running periodic forbidden-process scan...")
+            run_forbidden_activity_scan(
+                client_socket,
+                FORBIDDEN_PROCESS_PERIODIC_SCAN_PERIOD,
+                "10-minute forbidden-process scan",
+                dump_path=FORBIDDEN_PROCESS_SCAN_DUMP,
+            )
+        except Exception as error:
+            print(f"Background scanner error: {error}")
 
 
 # ============================================================
