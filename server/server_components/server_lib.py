@@ -980,6 +980,9 @@ def register_client(client_info, conn):
             client["connection"] = conn
             client["responses"] = queue.Queue()
             client["send_lock"] = threading.Lock()
+            client["agent_role"] = agent_role
+            if agent_role == "combined":
+                interactive_clients[mac] = client
 
             print(f"Client reconnected: {client['client_id']}")
             log_connection(mac, "reconnected")
@@ -1008,7 +1011,13 @@ def register_client(client_info, conn):
             "connection": conn,
             "responses": queue.Queue(),
             "send_lock": threading.Lock(),
+            "agent_role": agent_role,
         }
+
+        if agent_role == "combined":
+            # A user-session client can safely serve both ordinary commands
+            # and desktop-only commands through one TCP connection.
+            interactive_clients[mac] = clients[mac]
 
         print(f"New client connected: {client_id}")
         log_connection(mac, "connected")
@@ -1048,6 +1057,11 @@ def remove_client(mac, connection=None, *, agent_role="service"):
         if connection is not None and client and client["connection"] is not connection:
             return
         client = registry.pop(mac, None)
+        if agent_role == "combined" and client is not None:
+            # The combined agent is represented in both capability registries
+            # but must be removed from both when its one socket closes.
+            if interactive_clients.get(mac) is client:
+                interactive_clients.pop(mac, None)
         if client and agent_role != "interactive":
             expected_disconnect = client.get("disconnect_expected", False)
             disconnect_reason = client.get("disconnect_reason")

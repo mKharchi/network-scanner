@@ -1043,4 +1043,7 @@ def start_client(stop_event=None, *, agent_role="service"):
 # ============================================================
 
 if __name__ == "__main__":
-    start_client()
+    # The normal interactive launch provides both command execution and
+    # desktop capture through one connection.  The Windows service continues
+    # to call start_client() explicitly in service mode.
+    start_client(agent_role="combined")
