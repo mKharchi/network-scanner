@@ -24,7 +24,13 @@ from server_components.center_layout import ASSIGNABLE_LOCATION_TYPES, LOCATION_
 from server_components.physical_layout import available_floors, build_floor_layout
 from server_components.physical_neighbors import classify_physical_neighbor, neighbor_sort_key
 from server_components.client_health import health_payload
-from server_components.server_lib import clients as memory_clients, clients_lock, device_isolation_status, get_working_hours_status
+from server_components.server_lib import (
+    clients as memory_clients,
+    client_quarantine_status,
+    clients_lock,
+    device_isolation_status,
+    get_working_hours_status,
+)
 
 
 def _iso_utc(dt: Optional[Any]) -> Optional[str]:
@@ -437,8 +443,15 @@ def create_location(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _get_isolation_info(client_id: str) -> Optional[Dict[str, Any]]:
-    """Return isolation state details if the device has been isolated."""
+    """Return quarantine or static-isolation details for a client."""
     with clients_lock:
+        quarantine = client_quarantine_status.get(client_id)
+        if quarantine and isinstance(quarantine, dict):
+            return {
+                "status": quarantine.get("status", "QUARANTINED"),
+                "reason": quarantine.get("reason"),
+                "isolated_at": quarantine.get("updated_at"),
+            }
         info = device_isolation_status.get(client_id)
         if info and isinstance(info, dict) and info.get("status") in (
             "SENT",

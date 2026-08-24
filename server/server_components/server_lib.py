@@ -27,6 +27,10 @@ interactive_clients = {}
 clients_lock = threading.Lock()
 pending_disconnect_checks = {}
 device_isolation_status = {}
+# Server-side quarantine state is separate from static device isolation. The
+# client remains connected during quarantine, so this state must not be inferred
+# from the socket registry alone.
+client_quarantine_status = {}
 DHCP_OBSERVATION_QUEUE_SIZE = 1024
 dhcp_observation_queue = queue.Queue(maxsize=DHCP_OBSERVATION_QUEUE_SIZE)
 dhcp_observation_worker_lock = threading.Lock()
@@ -1765,28 +1769,72 @@ def request_client_passive_neighbourhood(client_id, *, timeout=None):
 
 
 def quarantine_client(client_id, reason="Administrator requested network quarantine", duration_minutes=60, timeout=10.0):
-    """Dispatch QUARANTINE_CLIENT command to a connected client."""
-    cmd_id = f"cmd-quarantine-{int(time.time())}"
+    """Dispatch QUARANTINE_CLIENT over the existing management connection."""
+    cmd_id = f"cmd-quarantine-{int(time.time() * 1000)}"
+    client = get_client(client_id)
+    hostname = client.get("hostname") if client else None
+    print(
+        f"[QUARANTINE] client_id={client_id} hostname={hostname or 'unknown'} "
+        f"socket_available={client is not None}",
+        flush=True,
+    )
     args = {
         "reason": reason,
         "duration_minutes": duration_minutes,
         "command_id": cmd_id,
     }
-    return execute_client_command(client_id, "QUARANTINE_CLIENT", args=args, timeout=timeout)
+    result = execute_client_command(client_id, "QUARANTINE_CLIENT", args=args, timeout=timeout)
+    if result.get("status") == "ok":
+        with clients_lock:
+            client_quarantine_status[client_id] = {
+                "status": "QUARANTINED",
+                "reason": reason,
+                "command_id": cmd_id,
+                "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            }
+        print(
+            f"[QUARANTINE] client_id={client_id} command_sent=true client_ack=true",
+            flush=True,
+        )
+    else:
+        print(
+            f"[QUARANTINE] client_id={client_id} command_sent=false "
+            f"reason={result.get('message', 'command failed')!r}",
+            flush=True,
+        )
+    return result
 
 
 def release_client_quarantine(client_id, reason="Administrator released network quarantine", timeout=10.0):
-    """Dispatch RELEASE_CLIENT command to a connected client."""
-    cmd_id = f"cmd-release-{int(time.time())}"
+    """Dispatch RELEASE_CLIENT over the existing management connection."""
+    cmd_id = f"cmd-release-{int(time.time() * 1000)}"
+    client = get_client(client_id)
+    print(
+        f"[QUARANTINE] release client_id={client_id} "
+        f"socket_available={client is not None}",
+        flush=True,
+    )
     args = {
         "reason": reason,
         "command_id": cmd_id,
     }
-    return execute_client_command(client_id, "RELEASE_CLIENT", args=args, timeout=timeout)
+    result = execute_client_command(client_id, "RELEASE_CLIENT", args=args, timeout=timeout)
+    if result.get("status") == "ok":
+        with clients_lock:
+            client_quarantine_status.pop(client_id, None)
+        print(
+            f"[QUARANTINE] release client_id={client_id} command_sent=true client_ack=true",
+            flush=True,
+        )
+    return result
 
 
 def get_client_quarantine_status(client_id, timeout=10.0):
-    """Dispatch GET_QUARANTINE_STATUS command to a connected client."""
+    """Return server-tracked quarantine state, or query the live client."""
+    with clients_lock:
+        tracked = client_quarantine_status.get(client_id)
+    if tracked:
+        return {"status": "ok", "data": {**tracked, "is_quarantined": True}}
     return execute_client_command(client_id, "GET_QUARANTINE_STATUS", timeout=timeout)
 
 
