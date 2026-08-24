@@ -93,6 +93,36 @@ class NetworkQuarantineManagerTestCase(unittest.TestCase):
         self.assertEqual(events[0]["command_id"], "cmd-release-failed")
         self.assertEqual(len(events), 1)
 
+    def test_missing_firewall_rules_are_ignored_in_french_and_mojibake(self):
+        outputs = [
+            "Aucune règle ne correspond aux critères spécifiés.",
+            "Aucune rÃ¨gle ne correspond aux critÃ¨res spÃ©cifiÃ©s.",
+        ]
+        for output in outputs:
+            with self.subTest(output=output):
+                with patch.object(
+                    self.manager,
+                    "_run_cmd",
+                    return_value=(1, output),
+                ):
+                    success, message = self.manager._delete_windows_firewall_rules(
+                        ["AgentQuarantine-Server-Allow-Out"]
+                    )
+                self.assertTrue(success)
+                self.assertEqual(message, "")
+
+    def test_unexpected_firewall_delete_errors_are_preserved(self):
+        with patch.object(
+            self.manager,
+            "_run_cmd",
+            return_value=(1, "Access is denied."),
+        ):
+            success, message = self.manager._delete_windows_firewall_rules(
+                ["AgentQuarantine-Server-Allow-Out"]
+            )
+        self.assertFalse(success)
+        self.assertIn("Access is denied", message)
+
     @patch("quarantine_manager.platform.system", return_value="Windows")
     def test_windows_quarantine_uses_profile_default_deny_not_block_rules(self, _system):
         manager = NetworkQuarantineManager(

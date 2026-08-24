@@ -175,6 +175,64 @@ export function LocationsPage() {
     }
   };
 
+  const handleQuarantine = async () => {
+    if (!selectedLocation?.client_id || !isOnline) return;
+    const reason = window.prompt(
+      "Enter reason for network quarantine (e.g. repeated malware policy violations):",
+      "Administrator requested network quarantine",
+    );
+    if (reason === null) return;
+    setActionLoading(true);
+    try {
+      await api.quarantineClient(selectedLocation.client_id, {
+        reason: reason || undefined,
+      });
+      addToast({
+        title: "Quarantine applied",
+        message: `${client?.hostname || selectedLocation.client_id} has been isolated on the network.`,
+        severity: "HIGH",
+      });
+      refetch();
+    } catch (err: any) {
+      addToast({
+        title: "Quarantine failed",
+        message: err?.message || "Failed to apply network quarantine.",
+        severity: "CRITICAL",
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleReleaseQuarantine = async () => {
+    if (!selectedLocation?.client_id || client?.connection.state !== "ISOLATED") return;
+    if (
+      !window.confirm(
+        `Are you sure you want to release ${client?.hostname || selectedLocation.client_id} from network quarantine?`,
+      )
+    ) {
+      return;
+    }
+    setActionLoading(true);
+    try {
+      await api.releaseClientQuarantine(selectedLocation.client_id);
+      addToast({
+        title: "Quarantine released",
+        message: `${client?.hostname || selectedLocation.client_id} network access has been restored.`,
+        severity: "SUCCESS",
+      });
+      refetch();
+    } catch (err: any) {
+      addToast({
+        title: "Release failed",
+        message: err?.message || "Failed to release network quarantine.",
+        severity: "CRITICAL",
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   if (state.status === "idle" || state.status === "loading") {
     return <Skeleton />;
   }
@@ -198,6 +256,7 @@ export function LocationsPage() {
 
   const client: ManagedClientSummary | null =
     clientState.status === "success" ? clientState.data.client : null;
+  const isOnline = client?.connection.state === "ONLINE";
   const floors = layout.available_floors.length
     ? layout.available_floors
     : [0, 1, 2];
@@ -729,14 +788,25 @@ export function LocationsPage() {
                     >
                       Shutdown
                     </Button>
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      disabled={actionLoading}
-                      onClick={() => runSingleAction("ISOLATE_DEVICE")}
-                    >
-                      Isolate
-                    </Button>
+                    {client?.connection.state === "ISOLATED" ? (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        disabled={actionLoading}
+                        onClick={handleReleaseQuarantine}
+                      >
+                        Release quarantine
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        disabled={actionLoading || !isOnline}
+                        onClick={handleQuarantine}
+                      >
+                        Quarantine
+                      </Button>
+                    )}
                     <Button
                       variant="quiet"
                       size="sm"

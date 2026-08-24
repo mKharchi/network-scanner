@@ -25,6 +25,7 @@ from server_components.action_framework import (  # noqa: E402
     normalize_action_name,
 )
 from server_components.action_service import create_action, execute_action  # noqa: E402
+from server_components import server_lib  # noqa: E402
 
 
 def _connection(cursor):
@@ -197,6 +198,35 @@ class ActionOrchestrationTests(unittest.TestCase):
 
         self.assertEqual(result["status"], ActionState.SUCCESS.value)
         record_health.assert_called_once_with("PC-A", snapshot)
+
+    @patch("server_components.server_lib.get_client")
+    @patch("server_components.server_lib.execute_client_command")
+    def test_quarantine_tracks_state_after_active_socket_ack(self, execute_command, get_client):
+        get_client.return_value = {"client_id": "PC-A", "hostname": "HOST-A"}
+        execute_command.return_value = {"status": "ok", "command": "QUARANTINE_CLIENT"}
+
+        with patch.dict(server_lib.client_quarantine_status, {}, clear=True):
+            result = server_lib.quarantine_client("PC-A", reason="Policy violation", duration_minutes=15)
+            self.assertEqual(result["status"], "ok")
+            execute_command.assert_called_once()
+            self.assertEqual(server_lib.client_quarantine_status["PC-A"]["status"], "QUARANTINED")
+            self.assertEqual(server_lib.client_quarantine_status["PC-A"]["reason"], "Policy violation")
+
+    @patch("server_components.server_lib.get_client")
+    @patch("server_components.server_lib.execute_client_command")
+    def test_release_clears_tracked_quarantine_after_active_socket_ack(self, execute_command, get_client):
+        get_client.return_value = {"client_id": "PC-A", "hostname": "HOST-A"}
+        execute_command.return_value = {"status": "ok", "command": "RELEASE_CLIENT"}
+
+        with patch.dict(
+            server_lib.client_quarantine_status,
+            {"PC-A": {"status": "QUARANTINED", "reason": "Policy violation"}},
+            clear=True,
+        ):
+            result = server_lib.release_client_quarantine("PC-A", reason="Approved")
+            self.assertEqual(result["status"], "ok")
+            self.assertNotIn("PC-A", server_lib.client_quarantine_status)
+            execute_command.assert_called_once()
 
 
 if __name__ == "__main__":
