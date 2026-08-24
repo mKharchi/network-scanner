@@ -13,6 +13,12 @@ from client_lib import (
     get_activity_log,
     get_mac,
 )
+from action_framework import (
+    PASSIVE_NEIGHBOURHOOD_COMMAND,
+    SCREENSHOT_COMMAND,
+    ActionType,
+    normalize_action_name,
+)
 from process_scanner import scan_for_forbidden_processes
 from process_monitor import ForbiddenProcessMonitor
 from quarantine_manager import NetworkQuarantineManager
@@ -67,8 +73,6 @@ network_scan_lock = threading.Lock()
 network_scan_state_lock = threading.Lock()
 active_network_scan_global_id = None
 forbidden_processes = []
-PASSIVE_NEIGHBOURHOOD_COMMAND = "GET_PASSIVE_NEIGHBOURHOOD"
-SCREENSHOT_COMMAND = "REQUEST_SCREENSHOT"
 SCREENSHOT_MAX_RESPONSE_BYTES = max(
     1, int(os.getenv("SCREENSHOT_MAX_RESPONSE_BYTES", str(8 * 1024 * 1024)))
 )
@@ -941,7 +945,7 @@ def start_client(stop_event=None, *, agent_role="service"):
                         print("Invalid message from server.")
                         continue
 
-                    command = message.get("command")
+                    command = normalize_action_name(message.get("command"))
 
                     if not command:
                         print("Command missing.")
@@ -949,13 +953,13 @@ def start_client(stop_event=None, *, agent_role="service"):
 
                     print(f"Command received: {command}")
 
-                    if command in ("SCAN_NETWORK", "TRIGGER_ARP_SCAN"):
+                    if command in (ActionType.SCAN_NETWORK.value, ActionType.TRIGGER_ARP_SCAN.value):
                         _scan_log(f"Ignored disabled active-scan command: {command}.")
                         result = disabled_active_network_scan_result(command)
-                    elif command == "GET_NETWORK_NEIGHBOURHOOD":
+                    elif command == ActionType.GET_NETWORK_NEIGHBOURHOOD.value:
                         start_requested_neighbourhood_command(client)
                         continue
-                    elif command == SCREENSHOT_COMMAND:
+                    elif command == ActionType.SCREENSHOT.value:
                         if screenshot_manager is None:
                             result = {
                                 "status": "error",
@@ -979,7 +983,7 @@ def start_client(stop_event=None, *, agent_role="service"):
                     # A server-requested activity log (including the standard 24-hour
                     # request) is another detection opportunity.  Send any resulting
                     # alerts before the response containing the full log.
-                    if command == "GET_ACTIVITY_LOG" and isinstance(result, dict):
+                    if command == ActionType.GET_ACTIVITY_LOG.value and isinstance(result, dict):
                         alerts = scan_activity_log(result)
                         print(
                             f"Activity-log scan ({result.get('period', 'unknown')}) "
