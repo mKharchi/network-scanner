@@ -567,26 +567,14 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 self.send_data(rule, status_code=201)
                 return
 
-            # Request one screenshot from the matching interactive user-session agent.
+            # Request one screenshot from the matching interactive/combined user-session agent.
             m = re.match(r"^/api/v1/clients/([^/]+)/screenshot$", path)
             if m:
                 client_id = urllib.parse.unquote(m.group(1))
                 requested_by = self.headers.get("X-Operator-Id") or "local-network-operator"
-                action_id = self.headers.get("X-Action-Id") or self.headers.get("Idempotency-Key")
-                action = action_service.create_action(
-                    ActionType.SCREENSHOT.value,
-                    [client_id],
-                    requested_by=requested_by,
-                    action_id=action_id,
+                result = server_lib.request_client_screenshot(
+                    client_id, requested_by=requested_by
                 )
-                if action.get("status") == ActionState.PENDING.value:
-                    action = action_service.execute_action(action)
-                target_results = (action.get("result") or {}).get("targets", [])
-                result = target_results[0].get("result", {}) if target_results else {
-                    "status": "client_unavailable",
-                    "client_id": client_id,
-                    "message": "No screenshot target result was recorded.",
-                }
                 if result["status"] == "completed":
                     self.send_data(result, status_code=200)
                 elif result["status"] == "client_timeout":

@@ -26,7 +26,7 @@ from network_state_manager import NetworkStateManager
 from network_neighbour_collector import NetworkNeighbourCollector
 from dhcp_listener import DHCPListener
 from passive_protocol_listener import PassiveProtocolListener
-from screenshot_manager import ScreenshotManager
+from screenshot_manager import ScreenshotManager, screenshot_capture_enabled
 from neighbourhood import (
     get_daily_neighbourhood_path,
     load_daily_neighbourhood,
@@ -677,7 +677,7 @@ def start_client(stop_event=None, *, agent_role="service"):
     if stop_event is None:
         stop_event = threading.Event()
 
-    screenshot_manager = ScreenshotManager() if agent_role == "interactive" else None
+    screenshot_manager = ScreenshotManager() if screenshot_capture_enabled(agent_role) else None
     _startup_log(
         f"Client starting with server target {SERVER_IP}:{SERVER_PORT}; role={agent_role}."
     )
@@ -963,7 +963,7 @@ def start_client(stop_event=None, *, agent_role="service"):
                         if screenshot_manager is None:
                             result = {
                                 "status": "error",
-                                "message": "Screenshot capture is available only to the interactive user-session agent.",
+                                "message": "Screenshot capture is available only to the user-session agent.",
                             }
                         else:
                             start_screenshot_command(client, message, screenshot_manager)
