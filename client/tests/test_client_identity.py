@@ -39,6 +39,14 @@ class ClientIdentityTests(unittest.TestCase):
         self.assertEqual(registration["type"], "REGISTER")
         get_info.assert_called_once_with("172.16.0.102")
 
+    def test_registration_reports_cached_location(self):
+        location = {"id": 4, "label": "F1-A1-T1-P1"}
+        with patch.object(client_lib, "get_system_info", return_value={"ip": "172.16.0.102"}), \
+             patch.object(client_lib, "load_client_location", return_value=location):
+            registration = client_lib.create_registration_message()
+
+        self.assertEqual(registration["data"]["location"], location)
+
 
 if __name__ == "__main__":
     unittest.main()

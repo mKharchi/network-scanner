@@ -26,7 +26,8 @@ try:
 except ImportError:
     pass
 
-from server_components import api_service, event_broadcaster, server_lib
+from server_components import action_service, api_service, event_broadcaster, server_lib
+from server_components.action_framework import ActionState, ActionType, get_supported_client_commands
 
 API_HOST = os.getenv("API_HOST", "0.0.0.0")
 API_PORT = int(os.getenv("API_PORT", "8080"))
@@ -146,31 +147,95 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 self.send_data(data)
                 return
 
+            if path == "/api/locations":
+                assignable = (get_param("assignable") or "").lower() in {"1", "true", "yes"}
+                self.send_data({"items": api_service.list_locations(assignable_only=assignable)})
+                return
+
+            if path == "/api/locations/layout":
+                floor = get_int_param("floor", 1)
+                self.send_data(api_service.get_location_layout(floor))
+                return
+
+            m = re.match(r"^/api/locations/(\d+)/clients$", path)
+            if m:
+                self.send_data({"items": api_service.get_location_clients(int(m.group(1)))})
+                return
+
+            m = re.match(r"^/api/locations/(\d+)$", path)
+            if m:
+                location = api_service.get_location(int(m.group(1)))
+                if not location:
+                    self.send_error_response(404, "NOT_FOUND", "Location not found.")
+                    return
+                self.send_data(location)
+                return
+
+            m = re.match(r"^/api/clients/([^/]+)/location-history$", path)
+            if m:
+                client_id = urllib.parse.unquote(m.group(1))
+                self.send_data({"items": api_service.get_client_location_history(client_id)})
+                return
+
+            m = re.match(r"^/api/clients/([^/]+)/physical-neighbors$", path)
+            if m:
+                client_id = urllib.parse.unquote(m.group(1))
+                self.send_data({"items": api_service.get_physical_neighbors(client_id)})
+                return
+
+            m = re.match(r"^/api/clients/([^/]+)/location$", path)
+            if m:
+                client_id = urllib.parse.unquote(m.group(1))
+                location = api_service.get_client_location(client_id)
+                if not location:
+                    self.send_data(None)
+                    return
+                self.send_data(location)
+                return
+
+            # Unified action history and per-target status.
+            if path == "/api/actions":
+                limit = get_int_param("limit", 50)
+                self.send_data({"items": action_service.list_actions(limit=limit)})
+                return
+
+            m = re.match(r"^/api/actions/([^/]+)/targets$", path)
+            if m:
+                action = action_service.get_action(urllib.parse.unquote(m.group(1)))
+                if not action:
+                    self.send_error_response(404, "NOT_FOUND", "Action not found.")
+                    return
+                self.send_data({"items": action.get("targets", [])})
+                return
+
+            m = re.match(r"^/api/actions/([^/]+)$", path)
+            if m:
+                action = action_service.get_action(urllib.parse.unquote(m.group(1)))
+                if not action:
+                    self.send_error_response(404, "NOT_FOUND", "Action not found.")
+                    return
+                self.send_data(action)
+                return
+
             # 4. Clients
             if path == "/api/v1/clients":
                 state_filter = get_param("state")
                 search = get_param("search")
+                location_filter = get_param("location")
                 limit = get_int_param("limit", 50)
-                items = api_service.list_clients(state_filter=state_filter, search=search, limit=limit)
+                items = api_service.list_clients(
+                    state_filter=state_filter,
+                    search=search,
+                    limit=limit,
+                    location_filter=location_filter,
+                )
                 self.send_data({"items": items, "next_cursor": None})
                 return
 
             # Supported commands list for client
             m = re.match(r"^/api/v1/clients/([^/]+)/commands$", path)
             if m:
-                commands = [
-                    {"command": "GET_SYSTEM_INFO", "label": "System information"},
-                    {"command": "GET_NETWORK_INFO", "label": "Network information"},
-                    {"command": "GET_PROCESSES", "label": "Processes"},
-                    {"command": "GET_ACTIVITY_LOG", "label": "Activity log"},
-                    {"command": "REQUEST_SCREENSHOT", "label": "Request screenshot (interactive session)"},
-                    {"command": "PING", "label": "Ping"},
-                    {"command": "KILL_PROCESS", "label": "Kill process"},
-                    {"command": "START_PROCESS", "label": "Start process"},
-                    {"command": "ISOLATE_DEVICE", "label": "Isolate device (static IP)"},
-                    {"command": "DISCONNECT", "label": "Disconnect client"},
-                ]
-                self.send_data({"items": commands})
+                self.send_data({"items": get_supported_client_commands()})
                 return
 
             m = re.match(r"^/api/v1/clients/([^/]+)$", path)
@@ -431,6 +496,64 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
         path = parsed_url.path.rstrip("/")
 
         try:
+            if path == "/api/locations":
+                payload = self._read_json_payload()
+                if payload is None:
+                    self.send_error_response(400, "INVALID_PAYLOAD", "Invalid JSON payload.")
+                    return
+                try:
+                    location = api_service.create_location(payload)
+                except ValueError as exc:
+                    self.send_error_response(400, "INVALID_LOCATION", str(exc))
+                    return
+                self.send_data(location, status_code=201)
+                return
+
+            if path == "/api/actions":
+                payload = self._read_json_payload()
+                if payload is None:
+                    self.send_error_response(400, "INVALID_PAYLOAD", "Invalid JSON payload.")
+                    return
+                action_type = payload.get("action_type")
+                targets = payload.get("targets")
+                if not isinstance(action_type, str) or not isinstance(targets, list):
+                    self.send_error_response(400, "INVALID_ACTION", "Fields 'action_type' and 'targets' are required.")
+                    return
+                try:
+                    requested_action_id = payload.get("action_id") or payload.get("idempotency_key")
+                    existing_action = (
+                        action_service.get_action(str(requested_action_id))
+                        if requested_action_id
+                        else None
+                    )
+                    if existing_action:
+                        self.send_data(existing_action, status_code=200)
+                        return
+                    action = action_service.create_action(
+                        action_type,
+                        targets,
+                        parameters=payload.get("parameters", {}),
+                        requested_by=self.headers.get("X-Operator-Id") or "local-network-operator",
+                        action_id=requested_action_id,
+                    )
+                    # Replaying an existing action is idempotent and must not dispatch it again.
+                    if action.get("status") == ActionState.PENDING.value:
+                        action = action_service.execute_action(action)
+                except ValueError as exc:
+                    self.send_error_response(400, "INVALID_ACTION", str(exc))
+                    return
+                self.send_data(action, status_code=201)
+                return
+
+            m = re.match(r"^/api/actions/([^/]+)/cancel$", path)
+            if m:
+                action = action_service.cancel_action(urllib.parse.unquote(m.group(1)))
+                if not action:
+                    self.send_error_response(404, "NOT_FOUND", "Action not found.")
+                    return
+                self.send_data(action)
+                return
+
             if path == "/api/v1/settings/forbidden-processes":
                 payload = self._read_json_payload()
                 if payload is None:
@@ -445,7 +568,7 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 self.send_data(rule, status_code=201)
                 return
 
-            # Request one screenshot from the matching interactive user-session agent.
+            # Request one screenshot from the matching interactive/combined user-session agent.
             m = re.match(r"^/api/v1/clients/([^/]+)/screenshot$", path)
             if m:
                 client_id = urllib.parse.unquote(m.group(1))
@@ -694,6 +817,37 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
         self.send_data({"deleted": True})
 
     def do_PATCH(self) -> None:  # noqa: N802
+        parsed_url = urllib.parse.urlparse(self.path)
+        path = parsed_url.path.rstrip("/")
+        m = re.match(r"^/api/clients/([^/]+)/location$", path)
+        if m:
+            payload = self._read_json_payload()
+            if payload is None or not isinstance(payload.get("location_id"), int):
+                self.send_error_response(400, "INVALID_LOCATION", "Field 'location_id' must be an integer.")
+                return
+            try:
+                client_id = urllib.parse.unquote(m.group(1))
+                location = api_service.assign_client_location(
+                    client_id,
+                    payload["location_id"],
+                    assigned_by=self.headers.get("X-Operator-Id") or "local-network-operator",
+                )
+            except ValueError as exc:
+                self.send_error_response(400, "INVALID_LOCATION", str(exc))
+                return
+            try:
+                location_action = action_service.create_action(
+                    ActionType.UPDATE_LOCATION.value,
+                    [client_id],
+                    parameters=location,
+                    requested_by=self.headers.get("X-Operator-Id") or "local-network-operator",
+                )
+                location_sync = action_service.execute_action(location_action)
+            except Exception as exc:
+                # Assignment is authoritative even when the client is offline.
+                location_sync = {"status": "not_attempted", "message": str(exc)}
+            self.send_data({"location": location, "location_sync": location_sync})
+            return
         self.do_PUT()
 
 
