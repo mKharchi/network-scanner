@@ -728,42 +728,26 @@ class ApiEndpointsTestCase(unittest.TestCase):
         self.assertEqual(body["data"]["status"], "SUCCESS")
         get_action.assert_called_once_with("action-1")
 
-    @patch("server_components.action_service.execute_action")
-    @patch("server_components.action_service.create_action")
-    def test_legacy_screenshot_endpoint_uses_unified_action(self, create_action, execute_action):
-        create_action.return_value = {
-            "action_id": "screenshot-action-1",
-            "action_type": "SCREENSHOT",
-            "status": "PENDING",
-            "targets": ["client-a"],
-        }
-        execute_action.return_value = {
-            **create_action.return_value,
-            "status": "SUCCESS",
-            "result": {
-                "targets": [{
-                    "client_id": "client-a",
-                    "status": "SUCCESS",
-                    "result": {
-                        "status": "completed",
-                        "client_id": "client-a",
-                        "filename": "capture.png",
-                    },
-                }],
-            },
+    @patch("server_components.server_lib.request_client_screenshot")
+    def test_screenshot_endpoint_requests_interactive_capture(self, request_screenshot):
+        request_screenshot.return_value = {
+            "status": "completed",
+            "client_id": "client-a",
+            "filename": "capture.png",
         }
         req = urllib.request.Request(
             f"{self.base_url}/api/v1/clients/client-a/screenshot",
             data=b"{}",
-            headers={"Content-Type": "application/json", "X-Action-Id": "screenshot-action-1"},
+            headers={"Content-Type": "application/json"},
             method="POST",
         )
         with urllib.request.urlopen(req) as resp:
             self.assertEqual(resp.status, 200)
             body = json.loads(resp.read().decode("utf-8"))
         self.assertEqual(body["data"]["filename"], "capture.png")
-        create_action.assert_called_once()
-        execute_action.assert_called_once()
+        request_screenshot.assert_called_once_with(
+            "client-a", requested_by="local-network-operator"
+        )
 
     @patch("server_components.api_service.list_locations")
     def test_list_locations_endpoint(self, list_locations):
