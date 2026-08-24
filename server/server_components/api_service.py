@@ -20,6 +20,9 @@ except ImportError:
     from server_components.network_scan_storage import DEFAULT_STORAGE_DIR
     NETWORK_SCAN_STORAGE_DIR = Path(os.getenv("NETWORK_SCAN_STORAGE_DIR", DEFAULT_STORAGE_DIR))
 
+from server_components.physical_layout import available_floors, build_floor_layout
+from server_components.physical_neighbors import classify_physical_neighbor, neighbor_sort_key
+from server_components.client_health import health_payload
 from server_components.server_lib import clients as memory_clients, clients_lock, device_isolation_status, get_working_hours_status
 
 
@@ -39,6 +42,381 @@ def _format_mac(mac: Optional[str]) -> Optional[str]:
     if not mac:
         return None
     return mac.upper().replace("-", ":")
+
+
+def _location_from_row(row: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not row:
+        return None
+    location = {
+        "id": row.get("id"),
+        "floor": row.get("floor"),
+        "zone_type": row.get("zone_type"),
+        "zone_name": row.get("zone_name"),
+        "aisle": row.get("aisle"),
+        "table": row.get("table_no"),
+        "row": row.get("row_no"),
+        "position": row.get("position"),
+        "label": row.get("label"),
+    }
+    if row.get("client_id") is not None:
+        location["client_id"] = row["client_id"]
+        location["client_state"] = row.get("client_state", "OFFLINE")
+        location["health"] = row.get("health")
+        location["health_status"] = (row.get("health") or {}).get("status")
+    return location
+
+
+def _numeric(value: Any) -> Optional[float]:
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
+def _open_alert_severity_by_client(cursor) -> Dict[str, str]:
+    cursor.execute(
+        """
+        SELECT c.client_id,
+               MAX(CASE a.severity
+                     WHEN 'CRITICAL' THEN 4
+                     WHEN 'HIGH' THEN 3
+                     WHEN 'MEDIUM' THEN 2
+                     WHEN 'LOW' THEN 1
+                     ELSE 0 END) AS severity_rank
+        FROM alerts a
+        JOIN clients c ON c.id = a.client_id
+        WHERE a.status = 'NEW'
+        GROUP BY c.client_id
+        """
+    )
+    rank_to_name = {4: "CRITICAL", 3: "HIGH", 2: "MEDIUM", 1: "LOW"}
+    severities = {}
+    for row in cursor.fetchall():
+        rank = int(row.get("severity_rank") or 0)
+        client_id = row.get("client_id")
+        if rank and client_id:
+            severities[client_id] = rank_to_name[rank]
+    return severities
+
+
+def _health_from_row(
+    row: Dict[str, Any],
+    *,
+    client_id: Optional[str],
+    connection_state: Optional[str],
+    open_alert_severity: Optional[str] = None,
+    shows_clients: bool = True,
+) -> Dict[str, Any]:
+    return health_payload(
+        client_id=client_id,
+        connection_state=connection_state,
+        cpu_percent=_numeric(row.get("health_cpu_percent")),
+        memory_percent=_numeric(row.get("health_memory_percent")),
+        disk_percent=_numeric(row.get("health_disk_percent")),
+        open_alert_severity=open_alert_severity,
+        updated_at=_iso_utc(row.get("health_updated_at")),
+        shows_clients=shows_clients,
+    )
+
+
+def _client_location_from_row(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    if row.get("location_id") is None:
+        return None
+    return _location_from_row(
+        {
+            "id": row.get("location_id"),
+            "floor": row.get("location_floor"),
+            "zone_type": row.get("location_zone_type"),
+            "zone_name": row.get("location_zone_name"),
+            "aisle": row.get("location_aisle"),
+            "table_no": row.get("location_table"),
+            "row_no": row.get("location_row"),
+            "position": row.get("location_position"),
+            "label": row.get("location_label"),
+            "client_id": row.get("client_id"),
+        }
+    )
+
+
+def list_locations() -> List[Dict[str, Any]]:
+    conn = get_connection()
+    if not conn:
+        return []
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """SELECT l.*, c.client_id, c.mac,
+                      c.health_cpu_percent, c.health_memory_percent,
+                      c.health_disk_percent, c.health_updated_at
+               FROM locations l LEFT JOIN clients c ON c.location_id = l.id
+               ORDER BY l.floor, l.zone_type, l.zone_name, l.aisle, l.table_no, l.row_no, l.position"""
+        )
+        rows = cursor.fetchall()
+        alert_severities = _open_alert_severity_by_client(cursor)
+        with clients_lock:
+            online_macs = set(memory_clients.keys())
+        locations = []
+        for row in rows:
+            if row.get("client_id"):
+                isolation_info = _get_isolation_info(row["client_id"])
+                row["client_state"] = "ISOLATED" if isolation_info else (
+                    "ONLINE" if _format_mac(row.get("mac")) in online_macs else "OFFLINE"
+                )
+                row["health"] = _health_from_row(
+                    row,
+                    client_id=row["client_id"],
+                    connection_state=row["client_state"],
+                    open_alert_severity=alert_severities.get(row["client_id"]),
+                )
+            locations.append(_location_from_row(row))
+        return locations
+    finally:
+        conn.close()
+
+
+def get_location_layout(floor: int) -> Dict[str, Any]:
+    locations = list_locations()
+    layout = build_floor_layout(locations, floor)
+    layout["available_floors"] = available_floors(locations)
+    return layout
+
+
+def get_location(location_id: int) -> Optional[Dict[str, Any]]:
+    conn = get_connection()
+    if not conn:
+        return None
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """SELECT l.*, c.client_id, c.mac,
+                      c.health_cpu_percent, c.health_memory_percent,
+                      c.health_disk_percent, c.health_updated_at
+               FROM locations l LEFT JOIN clients c ON c.location_id = l.id
+               WHERE l.id = %s""",
+            (location_id,),
+        )
+        row = cursor.fetchone()
+        if row and row.get("client_id"):
+            isolation_info = _get_isolation_info(row["client_id"])
+            with clients_lock:
+                online_macs = set(memory_clients.keys())
+            row["client_state"] = "ISOLATED" if isolation_info else (
+                "ONLINE" if _format_mac(row.get("mac")) in online_macs else "OFFLINE"
+            )
+            alert_severities = _open_alert_severity_by_client(cursor)
+            row["health"] = _health_from_row(
+                row,
+                client_id=row["client_id"],
+                connection_state=row["client_state"],
+                open_alert_severity=alert_severities.get(row["client_id"]),
+            )
+        return _location_from_row(row)
+    finally:
+        conn.close()
+
+
+def get_location_clients(location_id: int) -> List[Dict[str, Any]]:
+    conn = get_connection()
+    if not conn:
+        return []
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """SELECT client_id, hostname, ip, mac, os_system, os_release, os_version, os_machine
+               FROM clients WHERE location_id = %s ORDER BY hostname, client_id""",
+            (location_id,),
+        )
+        return list(cursor.fetchall())
+    finally:
+        conn.close()
+
+
+def get_client_location(client_id: str) -> Optional[Dict[str, Any]]:
+    conn = get_connection()
+    if not conn:
+        return None
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """SELECT l.*, c.client_id
+               FROM clients c LEFT JOIN locations l ON l.id = c.location_id
+               WHERE c.client_id = %s""",
+            (client_id,),
+        )
+        row = cursor.fetchone()
+        return _location_from_row(row) if row and row.get("id") is not None else None
+    finally:
+        conn.close()
+
+
+def get_client_location_history(client_id: str) -> List[Dict[str, Any]]:
+    conn = get_connection()
+    if not conn:
+        return []
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """SELECT h.id, h.assigned_at, h.unassigned_at, h.assigned_by,
+                      l.id AS location_id, l.floor, l.zone_type, l.zone_name,
+                      l.aisle, l.table_no, l.row_no, l.position, l.label
+               FROM client_location_history h
+               JOIN clients c ON c.id = h.client_id
+               JOIN locations l ON l.id = h.location_id
+               WHERE c.client_id = %s ORDER BY h.assigned_at DESC""",
+            (client_id,),
+        )
+        history = []
+        for row in cursor.fetchall():
+            item = {
+                "id": row["id"],
+                "assigned_at": _iso_utc(row["assigned_at"]),
+                "unassigned_at": _iso_utc(row["unassigned_at"]),
+                "assigned_by": row["assigned_by"],
+                "location": _location_from_row({**row, "id": row["location_id"]}),
+            }
+            history.append(item)
+        return history
+    finally:
+        conn.close()
+
+
+def get_physical_neighbors(client_id: str, limit: int = 8) -> List[Dict[str, Any]]:
+    conn = get_connection()
+    if not conn:
+        return []
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """SELECT l.floor, l.zone_type, l.zone_name, l.aisle, l.table_no, l.row_no, l.position
+               FROM clients c JOIN locations l ON l.id = c.location_id
+               WHERE c.client_id = %s""",
+            (client_id,),
+        )
+        origin = cursor.fetchone()
+        if not origin:
+            return []
+        cursor.execute(
+            """SELECT c.client_id, c.hostname, c.ip, c.mac,
+                      l.id AS location_id, l.floor, l.zone_type, l.zone_name,
+                      l.aisle, l.table_no, l.row_no, l.position, l.label
+               FROM clients c JOIN locations l ON l.id = c.location_id
+               WHERE l.floor = %s AND c.client_id <> %s""",
+            (origin["floor"], client_id),
+        )
+        neighbors = []
+        with clients_lock:
+            online_macs = set(memory_clients.keys())
+        for row in cursor.fetchall():
+            classified = classify_physical_neighbor(origin, row)
+            if not classified:
+                continue
+            relationship, distance = classified
+            isolation_info = _get_isolation_info(row["client_id"])
+            state = "ISOLATED" if isolation_info else (
+                "ONLINE" if _format_mac(row.get("mac")) in online_macs else "OFFLINE"
+            )
+            neighbors.append({
+                "client_id": row["client_id"],
+                "hostname": row["hostname"] or "Unknown",
+                "ip_address": row["ip"],
+                "mac_address": _format_mac(row["mac"]),
+                "state": state,
+                "relationship": relationship,
+                "distance": distance,
+                "location": _location_from_row({
+                    **row,
+                    "id": row["location_id"],
+                    "client_id": row["client_id"],
+                    "client_state": state,
+                }),
+            })
+        neighbors.sort(key=neighbor_sort_key)
+        return neighbors[: max(1, min(limit, 50))]
+    finally:
+        conn.close()
+
+
+def assign_client_location(
+    client_id: str,
+    location_id: int,
+    assigned_by: Optional[str] = None,
+) -> Dict[str, Any]:
+    conn = get_connection()
+    if not conn:
+        raise ValueError("Database unavailable.")
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT id, client_id, location_id FROM clients WHERE client_id = %s", (client_id,))
+        client = cursor.fetchone()
+        if not client:
+            raise ValueError(f"Client '{client_id}' not found.")
+        cursor.execute("SELECT * FROM locations WHERE id = %s", (location_id,))
+        location = cursor.fetchone()
+        if not location:
+            raise ValueError(f"Location '{location_id}' not found.")
+        cursor.execute(
+            "SELECT client_id, hostname FROM clients WHERE location_id = %s AND client_id <> %s",
+            (location_id, client_id),
+        )
+        occupant = cursor.fetchone()
+        if occupant:
+            occupant_name = occupant.get("hostname") or occupant["client_id"]
+            raise ValueError(f"This physical position is already assigned to {occupant_name}.")
+
+        if client["location_id"] != location_id:
+            cursor.execute(
+                "UPDATE client_location_history SET unassigned_at = CURRENT_TIMESTAMP WHERE client_id = %s AND unassigned_at IS NULL",
+                (client["id"],),
+            )
+            cursor.execute("UPDATE clients SET location_id = %s WHERE id = %s", (location_id, client["id"]))
+            cursor.execute(
+                """INSERT INTO client_location_history (client_id, location_id, assigned_by)
+                   VALUES (%s, %s, %s)""",
+                (client["id"], location_id, assigned_by),
+            )
+        conn.commit()
+        return _location_from_row({**location, "client_id": client_id}) or {}
+    finally:
+        conn.close()
+
+
+def create_location(payload: Dict[str, Any]) -> Dict[str, Any]:
+    required = ("floor", "zone_type", "label")
+    if any(payload.get(field) in (None, "") for field in required):
+        raise ValueError("Fields 'floor', 'zone_type', and 'label' are required.")
+    try:
+        floor = int(payload["floor"])
+    except (TypeError, ValueError):
+        raise ValueError("Field 'floor' must be an integer.")
+    conn = get_connection()
+    if not conn:
+        raise ValueError("Database unavailable.")
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """INSERT INTO locations
+               (floor, zone_type, zone_name, aisle, table_no, row_no, position, label)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+            (
+                floor,
+                str(payload["zone_type"]),
+                payload.get("zone_name"),
+                payload.get("aisle"),
+                payload.get("table"),
+                payload.get("row"),
+                payload.get("position"),
+                str(payload["label"]),
+            ),
+        )
+        location_id = cursor.lastrowid
+        conn.commit()
+        return get_location(location_id) or {"id": location_id, **payload}
+    except Exception as exc:
+        conn.rollback()
+        if "duplicate" in str(exc).lower() or "unique" in str(exc).lower():
+            raise ValueError("A location with this label or physical position already exists.")
+        raise
+    finally:
+        conn.close()
 
 
 def _get_isolation_info(client_id: str) -> Optional[Dict[str, Any]]:
@@ -137,6 +515,7 @@ def get_dashboard_data() -> Dict[str, Any]:
     critical_alerts = 0
     recent_alerts = []
     
+    unassigned_clients = 0
     conn = get_connection()
     if conn:
         try:
@@ -153,6 +532,10 @@ def get_dashboard_data() -> Dict[str, Any]:
             if a_counts:
                 new_alerts = a_counts["total_new"] or 0
                 critical_alerts = int(a_counts["total_critical"] or 0)
+
+            cursor.execute("SELECT COUNT(*) AS total_unassigned FROM clients WHERE location_id IS NULL")
+            unassigned_row = cursor.fetchone()
+            unassigned_clients = int((unassigned_row or {}).get("total_unassigned") or 0)
                 
             cursor.execute(
                 """
@@ -218,6 +601,7 @@ def get_dashboard_data() -> Dict[str, Any]:
             "isolated": isolated_count,
             "offline": offline_count,
             "total": total_clients,
+            "unassigned": unassigned_clients,
         },
         "alerts": {
             "new": new_alerts,
@@ -238,6 +622,7 @@ def list_clients(
     state_filter: Optional[str] = None,
     search: Optional[str] = None,
     limit: int = 50,
+    location_filter: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """List managed clients with connection state from database and in-memory registry."""
     with clients_lock:
@@ -251,10 +636,17 @@ def list_clients(
     try:
         cursor = conn.cursor(dictionary=True)
         query = """
-            SELECT id, client_id, mac, hostname, ip,
-                   os_system, os_release, os_version, os_machine,
-                   created_at, updated_at
-            FROM clients
+            SELECT c.id, c.client_id, c.mac, c.hostname, c.ip,
+                   c.os_system, c.os_release, c.os_version, c.os_machine,
+                   c.created_at, c.updated_at,
+                   c.health_cpu_percent, c.health_memory_percent,
+                   c.health_disk_percent, c.health_updated_at,
+                   l.id AS location_id, l.floor AS location_floor,
+                   l.zone_type AS location_zone_type, l.zone_name AS location_zone_name,
+                   l.aisle AS location_aisle, l.table_no AS location_table,
+                   l.row_no AS location_row, l.position AS location_position,
+                   l.label AS location_label
+            FROM clients c LEFT JOIN locations l ON l.id = c.location_id
         """
         params: List[Any] = []
         conditions = []
@@ -264,6 +656,9 @@ def list_clients(
             conditions.append("(hostname LIKE %s OR ip LIKE %s OR mac LIKE %s OR client_id LIKE %s)")
             params.extend([q, q, q, q])
 
+        if location_filter and location_filter.lower() == "unassigned":
+            conditions.append("c.location_id IS NULL")
+
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
 
@@ -271,7 +666,9 @@ def list_clients(
         params.append(limit)
 
         cursor.execute(query, params)
-        for r in cursor.fetchall():
+        rows = cursor.fetchall()
+        alert_severities = _open_alert_severity_by_client(cursor)
+        for r in rows:
             cid = r["client_id"]
             norm_mac = _format_mac(r["mac"])
             is_online = norm_mac in online_macs
@@ -308,6 +705,13 @@ def list_clients(
                     "machine": r["os_machine"],
                 },
                 "connection": conn_obj,
+                "location": _client_location_from_row(r),
+                "health": _health_from_row(
+                    r,
+                    client_id=cid,
+                    connection_state=client_state,
+                    open_alert_severity=alert_severities.get(cid),
+                ),
                 "created_at": _iso_utc(r["created_at"]),
                 "updated_at": _iso_utc(r["updated_at"]),
             })
@@ -330,11 +734,18 @@ def get_client_detail(client_id: str) -> Optional[Dict[str, Any]]:
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
             """
-            SELECT id, client_id, mac, hostname, ip,
-                   os_system, os_release, os_version, os_machine,
-                   created_at, updated_at
-            FROM clients
-            WHERE client_id = %s
+            SELECT c.id, c.client_id, c.mac, c.hostname, c.ip,
+                   c.os_system, c.os_release, c.os_version, c.os_machine,
+                   c.created_at, c.updated_at,
+                   c.health_cpu_percent, c.health_memory_percent,
+                   c.health_disk_percent, c.health_updated_at,
+                   l.id AS location_id, l.floor AS location_floor,
+                   l.zone_type AS location_zone_type, l.zone_name AS location_zone_name,
+                   l.aisle AS location_aisle, l.table_no AS location_table,
+                   l.row_no AS location_row, l.position AS location_position,
+                   l.label AS location_label
+            FROM clients c LEFT JOIN locations l ON l.id = c.location_id
+            WHERE c.client_id = %s
             """,
             (client_id,),
         )
@@ -376,6 +787,13 @@ def get_client_detail(client_id: str) -> Optional[Dict[str, Any]]:
                 "machine": r["os_machine"],
             },
             "connection": conn_obj,
+            "location": _client_location_from_row(r),
+            "health": _health_from_row(
+                r,
+                client_id=client_id,
+                connection_state=client_state,
+                open_alert_severity=_open_alert_severity_by_client(cursor).get(client_id),
+            ),
             "created_at": _iso_utc(r["created_at"]),
             "updated_at": _iso_utc(r["updated_at"]),
         }

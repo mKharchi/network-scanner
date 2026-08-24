@@ -9,6 +9,7 @@ import {
 import { Button } from "../components/Button";
 import { Skeleton, ErrorState, EmptyState, Notice } from "../components/States";
 import { formatDateTime, formatRelative } from "../utils/format";
+import { Link } from "react-router-dom";
 import "../styles/shell.css";
 
 // ── Recent alert row ──────────────────────────────────────────────
@@ -186,6 +187,18 @@ export function DashboardPage() {
           valueVariant={data.clients.offline > 0 ? "warning" : "default"}
           context="not connected"
         />
+        {(data.clients.unassigned ?? 0) > 0 && (
+          <MetricCard
+            label="Location unassigned"
+            value={data.clients.unassigned!}
+            valueVariant="warning"
+            context={
+              <Link to="/clients?location=unassigned" style={{ color: "inherit" }}>
+                Assign physical locations
+              </Link>
+            }
+          />
+        )}
         <MetricCard
           label="New alerts"
           value={data.alerts.new}

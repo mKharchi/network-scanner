@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { api, type ClientPassiveNeighbourhood } from '../api/client';
+import { api, type ClientLocation, type ClientLocationHistoryEntry, type ClientPassiveNeighbourhood, type PhysicalNeighbor } from '../api/client';
 import { useFetch } from '../hooks/useFetch';
 import { useToast } from '../hooks/useToast';
 import { ClientStatusBadge, Badge } from '../components/Badge';
@@ -8,6 +8,13 @@ import { Button } from '../components/Button';
 import { SectionCard, MetricCard } from '../components/Card';
 import { Skeleton, ErrorState, Notice } from '../components/States';
 import { formatDateTime, formatRelative } from '../utils/format';
+
+const NEIGHBOR_RELATIONSHIP_LABELS: Record<PhysicalNeighbor['relationship'], string> = {
+  same_row: 'Same row',
+  same_table: 'Same table',
+  neighboring_table: 'Neighboring table',
+  same_zone: 'Same room',
+};
 
 function DetailRow({
   label,
@@ -73,6 +80,26 @@ export function ClientDetailPage() {
   const [passiveNeighbourhoodLoading, setPassiveNeighbourhoodLoading] = useState(false);
   const [passiveNeighbourhood, setPassiveNeighbourhood] = useState<ClientPassiveNeighbourhood | null>(null);
   const [quarantineLoading, setQuarantineLoading] = useState(false);
+  const [locations, setLocations] = useState<ClientLocation[]>([]);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationSaving, setLocationSaving] = useState(false);
+  const [selectedLocationId, setSelectedLocationId] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    setLocationLoading(true);
+    api.getLocations()
+      .then((response) => {
+        if (!cancelled) setLocations(response.items);
+      })
+      .catch(() => {
+        if (!cancelled) setLocations([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLocationLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   // Process management states
   const [processList, setProcessList] = useState<ProcessItem[] | null>(null);
@@ -90,6 +117,14 @@ export function ClientDetailPage() {
     clientId ? () => api.getClient(clientId) : null,
     [clientId],
     ['app:client_status'],
+  );
+  const { state: locationHistoryState } = useFetch<{ items: ClientLocationHistoryEntry[] }>(
+    clientId ? () => api.getClientLocationHistory(clientId) : null,
+    [clientId],
+  );
+  const { state: neighborsState, refetch: refetchNeighbors } = useFetch<{ items: PhysicalNeighbor[] }>(
+    clientId ? () => api.getPhysicalNeighbors(clientId) : null,
+    [clientId],
   );
 
   const executeCommand = async (command: string, args?: any) => {
@@ -255,6 +290,30 @@ export function ClientDetailPage() {
     }
   };
 
+  const assignLocation = async () => {
+    if (!clientId || !selectedLocationId) return;
+    setLocationSaving(true);
+    try {
+      await api.assignClientLocation(clientId, Number(selectedLocationId));
+      addToast({
+        title: 'Location assigned',
+        message: `${c.hostname} is now assigned to the selected position.`,
+        severity: 'SUCCESS',
+      });
+      setSelectedLocationId('');
+      refetch();
+      refetchNeighbors();
+    } catch (err: any) {
+      addToast({
+        title: 'Location assignment failed',
+        message: err?.message || 'The selected position may already be occupied.',
+        severity: 'CRITICAL',
+      });
+    } finally {
+      setLocationSaving(false);
+    }
+  };
+
   if (state.status === 'idle' || state.status === 'loading') {
     return <ClientDetailSkeleton />;
   }
@@ -338,6 +397,103 @@ export function ClientDetailPage() {
             </div>
           </Notice>
         </div>
+      )}
+
+      <SectionCard title="Physical Location">
+        <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ color: c.location ? 'var(--text)' : 'var(--text-muted)' }}>
+            {c.location ? c.location.label : 'Location unassigned'}
+          </div>
+          <select
+            value={selectedLocationId}
+            onChange={(event) => setSelectedLocationId(event.target.value)}
+            disabled={locationLoading || locationSaving}
+            aria-label="Assign physical location"
+            style={{
+              minWidth: 220,
+              background: 'var(--surface)',
+              color: 'var(--text)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              padding: 'var(--space-2)',
+            }}
+          >
+            <option value="">{locationLoading ? 'Loading locations…' : 'Choose a location'}</option>
+            {locations.map((location) => {
+              const occupied = Boolean(location.client_id && location.client_id !== clientId);
+              return (
+              <option key={location.id} value={location.id} disabled={occupied}>
+                {location.label}{occupied ? ` — assigned to ${location.client_id}` : ''}
+              </option>
+              );
+            })}
+          </select>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={!selectedLocationId || locationSaving || locationLoading}
+            onClick={assignLocation}
+          >
+            {locationSaving ? 'Saving…' : c.location ? 'Change Location' : 'Assign Location'}
+          </Button>
+        </div>
+        {locationHistoryState.status === 'success' && locationHistoryState.data.items.length > 0 && (
+          <div style={{ marginTop: 'var(--space-4)', borderTop: '1px solid var(--border-subtle)', paddingTop: 'var(--space-3)' }}>
+            <div style={{ fontSize: 'var(--font-xs)', color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>Assignment history</div>
+            <div style={{ display: 'grid', gap: 'var(--space-2)' }}>
+              {locationHistoryState.data.items.map((entry) => (
+                <div key={entry.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-3)', fontSize: 'var(--font-xs)', flexWrap: 'wrap' }}>
+                  <span>{entry.location.label}</span>
+                  <span style={{ color: 'var(--text-muted)' }}>
+                    {formatDateTime(entry.assigned_at)} · {entry.assigned_by || 'Unknown operator'}
+                    {entry.unassigned_at ? ` · ended ${formatDateTime(entry.unassigned_at)}` : ' · current'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </SectionCard>
+
+      <SectionCard title="Health">
+        <div style={{ display: 'grid', gap: 'var(--space-2)' }}>
+          <DetailRow label="Status" value={c.health?.status ? c.health.status.replace('_', ' ') : 'Unknown'} />
+          <DetailRow label="CPU" value={typeof c.health?.cpu_percent === 'number' ? `${Math.round(c.health.cpu_percent)}%` : '—'} />
+          <DetailRow label="Memory" value={typeof c.health?.memory_percent === 'number' ? `${Math.round(c.health.memory_percent)}%` : '—'} />
+          <DetailRow label="Disk" value={typeof c.health?.disk_percent === 'number' ? `${Math.round(c.health.disk_percent)}%` : '—'} />
+          <DetailRow label="Updated" value={c.health?.updated_at ? formatDateTime(c.health.updated_at) : 'Not collected yet'} />
+        </div>
+      </SectionCard>
+
+      {c.location && (
+        <SectionCard title="Physical Neighbors">
+          {neighborsState.status === 'error' ? (
+            <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-xs)' }}>{neighborsState.error.message}</div>
+          ) : neighborsState.status !== 'success' || neighborsState.data.items.length === 0 ? (
+            <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-xs)' }}>
+              {neighborsState.status === 'loading' ? 'Loading neighbors…' : 'No assigned neighbors at adjacent positions.'}
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gap: 'var(--space-2)' }}>
+              {neighborsState.data.items.map((neighbor) => (
+                <button
+                  key={neighbor.client_id}
+                  type="button"
+                  onClick={() => navigate(`/clients/${encodeURIComponent(neighbor.client_id)}`)}
+                  style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-3)', textAlign: 'left', border: 0, padding: 'var(--space-2) 0', background: 'transparent', color: 'var(--text)', cursor: 'pointer', borderBottom: '1px solid var(--border-subtle)' }}
+                >
+                  <span>
+                    {neighbor.hostname}{' '}
+                    <span style={{ color: 'var(--text-muted)' }}>
+                      {NEIGHBOR_RELATIONSHIP_LABELS[neighbor.relationship]} · {neighbor.location.label}
+                    </span>
+                  </span>
+                  <span style={{ color: neighbor.state === 'ONLINE' ? 'var(--success)' : neighbor.state === 'ISOLATED' ? 'var(--danger)' : 'var(--text-muted)', fontSize: 'var(--font-xs)' }}>{neighbor.state}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </SectionCard>
       )}
 
       {/* Header Banner */}
@@ -486,6 +642,32 @@ export function ClientDetailPage() {
             onClick={() => executeCommand('PING')}
           >
             📡 Ping
+          </Button>
+
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={!isOnline || commandLoading}
+            onClick={() => {
+              if (window.confirm(`Restart client ${c.hostname}?`)) {
+                executeCommand('RESTART', { delay_seconds: 5 });
+              }
+            }}
+          >
+            🔄 Restart
+          </Button>
+
+          <Button
+            variant="danger"
+            size="sm"
+            disabled={!isOnline || commandLoading}
+            onClick={() => {
+              if (window.confirm(`Shut down client ${c.hostname}?`)) {
+                executeCommand('SHUTDOWN', { delay_seconds: 5 });
+              }
+            }}
+          >
+            ⏻ Shut Down
           </Button>
 
           <Button

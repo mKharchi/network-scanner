@@ -34,6 +34,43 @@ def _ensure_network_device_metadata_columns(cursor):
             )
 
 
+def _ensure_client_location_column(cursor):
+    """Add the nullable location relationship to installations with older schema."""
+    cursor.execute(
+        """
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'clients'
+        """
+    )
+    existing_columns = {row[0] for row in cursor.fetchall()}
+    if "location_id" not in existing_columns:
+        cursor.execute("ALTER TABLE clients ADD COLUMN location_id INT NULL")
+
+
+def _ensure_client_health_columns(cursor):
+    """Store the last health snapshot used by the center visualization."""
+    cursor.execute(
+        """
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'clients'
+        """
+    )
+    existing_columns = {row[0] for row in cursor.fetchall()}
+    columns = {
+        "health_cpu_percent": "DOUBLE NULL",
+        "health_memory_percent": "DOUBLE NULL",
+        "health_disk_percent": "DOUBLE NULL",
+        "health_updated_at": "DATETIME NULL",
+    }
+    for column_name, definition in columns.items():
+        if column_name not in existing_columns:
+            cursor.execute(f"ALTER TABLE clients ADD COLUMN {column_name} {definition}")
+
+
 def initiate_db():
     """
     Initialize the MySQL database schema by executing scripts.sql.
@@ -60,6 +97,8 @@ def initiate_db():
                 cursor.execute(statement)
 
         _ensure_network_device_metadata_columns(cursor)
+        _ensure_client_location_column(cursor)
+        _ensure_client_health_columns(cursor)
 
         connection.commit()
         print("Database initialized successfully.")
