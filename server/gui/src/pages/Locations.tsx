@@ -1,28 +1,35 @@
-import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   api,
   type ClientLocation,
   type FloorLayout,
   type ManagedClientSummary,
   type PhysicalNeighbor,
-} from '../api/client';
-import { useFetch } from '../hooks/useFetch';
-import { useToast } from '../hooks/useToast';
-import { Button } from '../components/Button';
-import { SectionCard } from '../components/Card';
-import { EmptyState, ErrorState, Skeleton } from '../components/States';
-import { stationVisual, STATION_VISUAL_LABEL, type StationVisual } from '../utils/stationVisual';
-import '../styles/floor-visualization.css';
+} from "../api/client";
+import { useFetch } from "../hooks/useFetch";
+import { useToast } from "../hooks/useToast";
+import { Button } from "../components/Button";
+import { SectionCard } from "../components/Card";
+import { EmptyState, ErrorState, Skeleton } from "../components/States";
+import {
+  stationVisual,
+  STATION_VISUAL_LABEL,
+  type StationVisual,
+} from "../utils/stationVisual";
+import "../styles/floor-visualization.css";
 
-const NEIGHBOR_RELATIONSHIP_LABELS: Record<PhysicalNeighbor['relationship'], string> = {
-  same_row: 'Same row',
-  same_table: 'Same table',
-  neighboring_table: 'Neighboring table',
-  same_zone: 'Same room',
+const NEIGHBOR_RELATIONSHIP_LABELS: Record<
+  PhysicalNeighbor["relationship"],
+  string
+> = {
+  same_row: "Same row",
+  same_table: "Same table",
+  neighboring_table: "Neighboring table",
+  same_zone: "Same room",
 };
 
-type StatusFilter = 'all' | StationVisual;
+type StatusFilter = "all" | StationVisual;
 
 function locationDescription(location: ClientLocation): string {
   const parts = [
@@ -32,7 +39,7 @@ function locationDescription(location: ClientLocation): string {
     location.row != null ? `Row ${location.row}` : null,
     location.position != null ? `Position ${location.position}` : null,
   ];
-  return parts.filter(Boolean).join(' · ');
+  return parts.filter(Boolean).join(" · ");
 }
 
 function stationKey(location: ClientLocation): string {
@@ -43,36 +50,39 @@ export function LocationsPage() {
   const navigate = useNavigate();
   const { addToast } = useToast();
   const [selectedFloor, setSelectedFloor] = useState(1);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [aisleFilter, setAisleFilter] = useState<number | 'all'>('all');
-  const [tableFilter, setTableFilter] = useState<number | 'all'>('all');
-  const [selectedLocationId, setSelectedLocationId] = useState<number | null>(null);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [aisleFilter, setAisleFilter] = useState<number | "all">("all");
+  const [tableFilter, setTableFilter] = useState<number | "all">("all");
+  const [selectedLocationId, setSelectedLocationId] = useState<number | null>(
+    null,
+  );
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
   const [actionLoading, setActionLoading] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({
-    floor: '1',
-    zone_type: 'training',
-    zone_name: '',
-    label: '',
-    aisle: '',
-    table: '',
-    row: '',
-    position: '',
+    floor: "1",
+    zone_type: "training",
+    zone_name: "",
+    label: "",
+    aisle: "",
+    table: "",
+    row: "",
+    position: "",
   });
 
   const { state, refetch } = useFetch<FloorLayout>(
     () => api.getLocationLayout(selectedFloor),
     [selectedFloor],
-    ['app:client_status'],
+    ["app:client_status"],
   );
 
-  const layout: FloorLayout | null = state.status === 'success'
-    ? state.data
-    : state.status === 'error'
-      ? state.staleData || null
-      : null;
+  const layout: FloorLayout | null =
+    state.status === "success"
+      ? state.data
+      : state.status === "error"
+        ? state.staleData || null
+        : null;
 
   const selectedLocation = useMemo(
     () => findLocation(layout, selectedLocationId),
@@ -80,24 +90,35 @@ export function LocationsPage() {
   );
 
   const { state: clientState } = useFetch(
-    selectedLocation?.client_id ? () => api.getClient(selectedLocation.client_id!) : null,
+    selectedLocation?.client_id
+      ? () => api.getClient(selectedLocation.client_id!)
+      : null,
     [selectedLocation?.client_id],
   );
   const { state: neighborsState } = useFetch<{ items: PhysicalNeighbor[] }>(
-    selectedLocation?.client_id ? () => api.getPhysicalNeighbors(selectedLocation.client_id!) : null,
+    selectedLocation?.client_id
+      ? () => api.getPhysicalNeighbors(selectedLocation.client_id!)
+      : null,
     [selectedLocation?.client_id],
   );
 
   const neighborIds = new Set(
-    neighborsState.status === 'success'
+    neighborsState.status === "success"
       ? neighborsState.data.items.map((neighbor) => neighbor.client_id)
       : [],
   );
 
-  const aisleOptions = layout?.aisles.map((aisle) => aisle.aisle).filter((value): value is number => value != null) || [];
-  const tableOptions = Array.from(new Set(
-    (layout?.aisles || []).flatMap((aisle) => aisle.tables.map((table) => table.table)).filter((value): value is number => value != null),
-  ));
+  const aisleOptions =
+    layout?.aisles
+      .map((aisle) => aisle.aisle)
+      .filter((value): value is number => value != null) || [];
+  const tableOptions = Array.from(
+    new Set(
+      (layout?.aisles || [])
+        .flatMap((aisle) => aisle.tables.map((table) => table.table))
+        .filter((value): value is number => value != null),
+    ),
+  );
 
   const visibleClientIds = collectVisibleClientIds(layout, {
     statusFilter,
@@ -119,7 +140,16 @@ export function LocationsPage() {
         row: form.row ? Number(form.row) : null,
         position: form.position ? Number(form.position) : null,
       });
-      setForm({ floor: form.floor, zone_type: form.zone_type, zone_name: '', label: '', aisle: '', table: '', row: '', position: '' });
+      setForm({
+        floor: form.floor,
+        zone_type: form.zone_type,
+        zone_name: "",
+        label: "",
+        aisle: "",
+        table: "",
+        row: "",
+        position: "",
+      });
       setShowCreateForm(false);
       refetch();
     } finally {
@@ -127,7 +157,10 @@ export function LocationsPage() {
     }
   };
 
-  const runBulkAction = async (actionType: string, parameters: Record<string, unknown> = {}) => {
+  const runBulkAction = async (
+    actionType: string,
+    parameters: Record<string, unknown> = {},
+  ) => {
     if (!selectedClientIds.length) return;
     setActionLoading(true);
     try {
@@ -137,124 +170,212 @@ export function LocationsPage() {
         parameters,
       });
       addToast({
-        title: 'Action queued',
-        message: `${actionType} sent to ${selectedClientIds.length} client${selectedClientIds.length === 1 ? '' : 's'} (${action.status}).`,
-        severity: 'SUCCESS',
+        title: "Action queued",
+        message: `${actionType} sent to ${selectedClientIds.length} client${selectedClientIds.length === 1 ? "" : "s"} (${action.status}).`,
+        severity: "SUCCESS",
       });
       refetch();
     } catch (err: any) {
       addToast({
-        title: 'Action failed',
-        message: err?.message || 'Unable to create the action.',
-        severity: 'CRITICAL',
+        title: "Action failed",
+        message: err?.message || "Unable to create the action.",
+        severity: "CRITICAL",
       });
     } finally {
       setActionLoading(false);
     }
   };
 
-  const runSingleAction = async (actionType: string, parameters: Record<string, unknown> = {}) => {
+  const runSingleAction = async (
+    actionType: string,
+    parameters: Record<string, unknown> = {},
+  ) => {
     if (!selectedLocation?.client_id) return;
     setActionLoading(true);
     try {
-      await api.runClientCommand(selectedLocation.client_id, actionType, parameters);
+      await api.runClientCommand(
+        selectedLocation.client_id,
+        actionType,
+        parameters,
+      );
       addToast({
-        title: 'Action queued',
+        title: "Action queued",
         message: `${actionType} sent to ${selectedLocation.client_id}.`,
-        severity: 'SUCCESS',
+        severity: "SUCCESS",
       });
       refetch();
     } catch (err: any) {
       addToast({
-        title: 'Action failed',
-        message: err?.message || 'Unable to run the action.',
-        severity: 'CRITICAL',
+        title: "Action failed",
+        message: err?.message || "Unable to run the action.",
+        severity: "CRITICAL",
       });
     } finally {
       setActionLoading(false);
     }
   };
 
-  if (state.status === 'idle' || state.status === 'loading') {
+  if (state.status === "idle" || state.status === "loading") {
     return <Skeleton />;
   }
-  if (state.status === 'error' && !layout) {
-    return <ErrorState title="Unable to load floor layout" message={state.error.message} onRetry={refetch} />;
+  if (state.status === "error" && !layout) {
+    return (
+      <ErrorState
+        title="Unable to load floor layout"
+        message={state.error.message}
+        onRetry={refetch}
+      />
+    );
   }
   if (!layout) {
-    return <EmptyState title="No layout available" body="Create physical positions before viewing the center." />;
+    return (
+      <EmptyState
+        title="No layout available"
+        body="Create physical positions before viewing the center."
+      />
+    );
   }
 
-  const client: ManagedClientSummary | null = clientState.status === 'success' ? clientState.data.client : null;
-  const floors = layout.available_floors.length ? layout.available_floors : [0, 1, 2];
+  const client: ManagedClientSummary | null =
+    clientState.status === "success" ? clientState.data.client : null;
+  const floors = layout.available_floors.length
+    ? layout.available_floors
+    : [0, 1, 2];
   const emptyFloor = !layout.rooms.length && !layout.aisles.length;
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-3)', alignItems: 'center', marginBottom: 'var(--space-5)', flexWrap: 'wrap' }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: "var(--space-3)",
+          alignItems: "center",
+          marginBottom: "var(--space-5)",
+          flexWrap: "wrap",
+        }}
+      >
         <div>
           <h1 className="page-title">Center layout</h1>
-          <p style={{ color: 'var(--text-muted)', marginTop: 'var(--space-1)' }}>
-            Physical positions come from the server. Floor 0 is shown without PCs.
+          <p
+            style={{ color: "var(--text-muted)", marginTop: "var(--space-1)" }}
+          >
+            Physical positions come from the server. Floor 0 is shown without
+            PCs.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-          <Button variant="quiet" size="sm" onClick={refetch}>Refresh</Button>
-          <Button variant="primary" size="sm" onClick={() => setShowCreateForm((visible) => !visible)}>
-            {showCreateForm ? 'Close' : 'Add Location'}
+        <div style={{ display: "flex", gap: "var(--space-2)" }}>
+          <Button variant="quiet" size="sm" onClick={refetch}>
+            Refresh
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => setShowCreateForm((visible) => !visible)}
+          >
+            {showCreateForm ? "Close" : "Add Location"}
           </Button>
         </div>
       </div>
 
       {showCreateForm && (
         <SectionCard title="Create Physical Location">
-          <form onSubmit={createLocation} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 'var(--space-3)', alignItems: 'end' }}>
-            {([
-              ['floor', 'Floor'],
-              ['zone_type', 'Zone type'],
-              ['zone_name', 'Zone name'],
-              ['label', 'Label'],
-              ['aisle', 'Aisle'],
-              ['table', 'Table'],
-              ['row', 'Row'],
-              ['position', 'Position'],
-            ] as const).map(([field, label]) => (
-              <label key={field} style={{ display: 'grid', gap: 'var(--space-1)', fontSize: 'var(--font-xs)', color: 'var(--text-muted)' }}>
+          <form
+            onSubmit={createLocation}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(4, 1fr)",
+              gap: "var(--space-3)",
+              alignItems: "end",
+            }}
+          >
+            {(
+              [
+                ["floor", "Floor"],
+                ["zone_type", "Zone type"],
+                ["zone_name", "Zone name"],
+                ["label", "Label"],
+                ["aisle", "Aisle"],
+                ["table", "Table"],
+                ["row", "Row"],
+                ["position", "Position"],
+              ] as const
+            ).map(([field, label]) => (
+              <label
+                key={field}
+                style={{
+                  display: "grid",
+                  gap: "var(--space-1)",
+                  fontSize: "var(--font-xs)",
+                  color: "var(--text-muted)",
+                }}
+              >
                 {label}
                 <input
-                  required={field === 'floor' || field === 'zone_type' || field === 'label'}
-                  type={field === 'floor' || ['aisle', 'table', 'row', 'position'].includes(field) ? 'number' : 'text'}
+                  required={
+                    field === "floor" ||
+                    field === "zone_type" ||
+                    field === "label"
+                  }
+                  type={
+                    field === "floor" ||
+                    ["aisle", "table", "row", "position"].includes(field)
+                      ? "number"
+                      : "text"
+                  }
                   value={form[field]}
-                  onChange={(event) => setForm({ ...form, [field]: event.target.value })}
-                  style={{ padding: 'var(--space-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)', color: 'var(--text)' }}
+                  onChange={(event) =>
+                    setForm({ ...form, [field]: event.target.value })
+                  }
+                  style={{
+                    padding: "var(--space-2)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "var(--radius-sm)",
+                    background: "var(--surface)",
+                    color: "var(--text)",
+                  }}
                 />
               </label>
             ))}
-            <Button type="submit" variant="primary" size="sm" disabled={creating}>
-              {creating ? 'Creating…' : 'Create Location'}
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              disabled={creating}
+            >
+              {creating ? "Creating…" : "Create Location"}
             </Button>
           </form>
         </SectionCard>
       )}
 
-      {state.status === 'error' && (
-        <div style={{ marginBottom: 'var(--space-4)' }}>
-          <div className="notice notice--warning">Showing stale layout data. {state.error.message}</div>
+      {state.status === "error" && (
+        <div style={{ marginBottom: "var(--space-4)" }}>
+          <div className="notice notice--warning">
+            Showing stale layout data. {state.error.message}
+          </div>
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-4)', flexWrap: 'wrap' }}>
+      <div
+        style={{
+          display: "flex",
+          gap: "var(--space-2)",
+          marginBottom: "var(--space-4)",
+          flexWrap: "wrap",
+        }}
+      >
         {floors.map((floor) => (
           <Button
             key={floor}
-            variant={selectedFloor === floor ? 'primary' : 'quiet'}
+            variant={selectedFloor === floor ? "primary" : "quiet"}
             size="sm"
             onClick={() => {
               setSelectedFloor(floor);
               setSelectedLocationId(null);
               setSelectedClientIds([]);
-              setAisleFilter('all');
-              setTableFilter('all');
+              setAisleFilter("all");
+              setTableFilter("all");
             }}
           >
             Floor {floor}
@@ -263,22 +384,59 @@ export function LocationsPage() {
       </div>
 
       <div className="floor-vis__filters">
-        <select aria-label="Filter by aisle" value={aisleFilter} onChange={(event) => setAisleFilter(event.target.value === 'all' ? 'all' : Number(event.target.value))}>
+        <select
+          aria-label="Filter by aisle"
+          value={aisleFilter}
+          onChange={(event) =>
+            setAisleFilter(
+              event.target.value === "all" ? "all" : Number(event.target.value),
+            )
+          }
+        >
           <option value="all">All aisles</option>
           {aisleOptions.map((aisle) => (
-            <option key={aisle} value={aisle}>Aisle {aisle}</option>
+            <option key={aisle} value={aisle}>
+              Aisle {aisle}
+            </option>
           ))}
         </select>
-        <select aria-label="Filter by table" value={tableFilter} onChange={(event) => setTableFilter(event.target.value === 'all' ? 'all' : Number(event.target.value))}>
+        <select
+          aria-label="Filter by table"
+          value={tableFilter}
+          onChange={(event) =>
+            setTableFilter(
+              event.target.value === "all" ? "all" : Number(event.target.value),
+            )
+          }
+        >
           <option value="all">All tables</option>
           {tableOptions.map((table) => (
-            <option key={table} value={table}>Table {table}</option>
+            <option key={table} value={table}>
+              Table {table}
+            </option>
           ))}
         </select>
-        <select aria-label="Filter by status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}>
+        <select
+          aria-label="Filter by status"
+          value={statusFilter}
+          onChange={(event) =>
+            setStatusFilter(event.target.value as StatusFilter)
+          }
+        >
           <option value="all">All statuses</option>
-          {(['healthy', 'warning', 'critical', 'isolated', 'offline', 'empty'] as StationVisual[]).map((status) => (
-            <option key={status} value={status}>{STATION_VISUAL_LABEL[status]}</option>
+          {(
+            [
+              "healthy",
+              "warning",
+              "critical",
+              "isolated",
+              "offline",
+              "empty",
+            ] as StationVisual[]
+          ).map((status) => (
+            <option key={status} value={status}>
+              {STATION_VISUAL_LABEL[status]}
+            </option>
           ))}
         </select>
         <Button
@@ -291,20 +449,74 @@ export function LocationsPage() {
         </Button>
         {selectedClientIds.length > 0 && (
           <>
-            <Button variant="quiet" size="sm" onClick={() => setSelectedClientIds([])}>Clear selection</Button>
-            <Button variant="secondary" size="sm" disabled={actionLoading} onClick={() => runBulkAction('SCREENSHOT', { format: 'png' })}>Screenshot</Button>
-            <Button variant="secondary" size="sm" disabled={actionLoading} onClick={() => runBulkAction('REFRESH_HEALTH')}>Refresh health</Button>
-            <Button variant="secondary" size="sm" disabled={actionLoading} onClick={() => runBulkAction('COLLECT_DIAGNOSTICS')}>Diagnostics</Button>
-            <Button variant="secondary" size="sm" disabled={actionLoading} onClick={() => runBulkAction('RESTART', { delay_seconds: 5 })}>Restart</Button>
-            <Button variant="danger" size="sm" disabled={actionLoading} onClick={() => runBulkAction('SHUTDOWN', { delay_seconds: 5 })}>Shutdown</Button>
+            <Button
+              variant="quiet"
+              size="sm"
+              onClick={() => setSelectedClientIds([])}
+            >
+              Clear selection
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={actionLoading}
+              onClick={() => runBulkAction("SCREENSHOT", { format: "png" })}
+            >
+              Screenshot
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={actionLoading}
+              onClick={() => runBulkAction("REFRESH_HEALTH")}
+            >
+              Refresh health
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={actionLoading}
+              onClick={() => runBulkAction("COLLECT_DIAGNOSTICS")}
+            >
+              Diagnostics
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={actionLoading}
+              onClick={() => runBulkAction("RESTART", { delay_seconds: 5 })}
+            >
+              Restart
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              disabled={actionLoading}
+              onClick={() => runBulkAction("SHUTDOWN", { delay_seconds: 5 })}
+            >
+              Shutdown
+            </Button>
           </>
         )}
       </div>
 
       <ul className="floor-vis__legend">
-        {(['healthy', 'warning', 'critical', 'isolated', 'offline', 'empty'] as StationVisual[]).map((status) => (
+        {(
+          [
+            "healthy",
+            "warning",
+            "critical",
+            "isolated",
+            "offline",
+            "empty",
+          ] as StationVisual[]
+        ).map((status) => (
           <li key={status} className="floor-vis__legend-item">
-            <span className={`station station--${status}`} style={{ width: '0.9rem', minHeight: '0.9rem' }} aria-hidden="true" />
+            <span
+              className={`station station--${status}`}
+              style={{ width: "0.9rem", minHeight: "0.9rem" }}
+              aria-hidden="true"
+            />
             {STATION_VISUAL_LABEL[status]}
           </li>
         ))}
@@ -312,8 +524,16 @@ export function LocationsPage() {
 
       {emptyFloor ? (
         <EmptyState
-          title={selectedFloor === 0 ? 'Floor 0 has no PCs' : 'No positions on this floor'}
-          body={selectedFloor === 0 ? 'This floor can be shown, but workstations are not visualized here.' : 'Create aisle, table, row, and position records for this floor.'}
+          title={
+            selectedFloor === 0
+              ? "Floor 0 has no PCs"
+              : "No positions on this floor"
+          }
+          body={
+            selectedFloor === 0
+              ? "This floor can be shown, but workstations are not visualized here."
+              : "Create aisle, table, row, and position records for this floor."
+          }
         />
       ) : (
         <div className="floor-vis">
@@ -335,41 +555,67 @@ export function LocationsPage() {
             <div className="floor-vis__aisles">
               {layout.aisles.map((aisle) => (
                 <section key={String(aisle.aisle)} className="floor-vis__aisle">
-                  <div className="floor-vis__aisle-label">Aisle {aisle.aisle ?? '—'}</div>
+                  <div className="floor-vis__aisle-label">
+                    Aisle {aisle.aisle ?? "—"}
+                  </div>
                   <div className="floor-vis__tables">
                     {aisle.tables.map((table) => (
-                      <div key={String(table.table)} className="floor-vis__table">
-                        <div className="floor-vis__table-label">Table {table.table ?? '—'}</div>
+                      <div
+                        key={String(table.table)}
+                        className="floor-vis__table"
+                      >
+                        <div className="floor-vis__table-label">
+                          Table {table.table ?? "—"}
+                        </div>
                         {table.rows.map((row) => (
                           <div key={String(row.row)} className="floor-vis__row">
-                            <div className="floor-vis__row-label">R{row.row ?? '—'}</div>
+                            <div className="floor-vis__row-label">
+                              R{row.row ?? "—"}
+                            </div>
                             <div className="floor-vis__stations">
                               {row.stations.map((station) => {
                                 const visual = stationVisual({
                                   client_id: station.client_id,
                                   client_state: station.client_state,
-                                  health_status: station.health_status || station.health?.status,
+                                  health_status:
+                                    station.health_status ||
+                                    station.health?.status,
                                   showsClients: layout.shows_clients,
                                 });
-                                const visible = stationMatches(station, visual, { statusFilter, aisleFilter, tableFilter });
-                                const selected = selectedLocationId === station.id || (station.client_id != null && selectedClientIds.includes(station.client_id));
-                                const neighbor = station.client_id != null && neighborIds.has(station.client_id);
+                                const visible = stationMatches(
+                                  station,
+                                  visual,
+                                  { statusFilter, aisleFilter, tableFilter },
+                                );
+                                const selected =
+                                  selectedLocationId === station.id ||
+                                  (station.client_id != null &&
+                                    selectedClientIds.includes(
+                                      station.client_id,
+                                    ));
+                                const neighbor =
+                                  station.client_id != null &&
+                                  neighborIds.has(station.client_id);
                                 return (
                                   <button
                                     key={stationKey(station)}
                                     type="button"
                                     className={[
-                                      'station',
+                                      "station",
                                       `station--${visual}`,
-                                      visible ? '' : 'station--dim',
-                                      selected ? 'station--selected' : '',
-                                      neighbor ? 'station--neighbor' : '',
-                                    ].filter(Boolean).join(' ')}
+                                      visible ? "" : "station--dim",
+                                      selected ? "station--selected" : "",
+                                      neighbor ? "station--neighbor" : "",
+                                    ]
+                                      .filter(Boolean)
+                                      .join(" ")}
                                     title={`${station.label} · ${STATION_VISUAL_LABEL[visual]}`}
                                     aria-label={`${station.label}, ${STATION_VISUAL_LABEL[visual]}`}
-                                    onClick={() => setSelectedLocationId(station.id)}
+                                    onClick={() =>
+                                      setSelectedLocationId(station.id)
+                                    }
                                   >
-                                    {station.position ?? '•'}
+                                    {station.position ?? "•"}
                                   </button>
                                 );
                               })}
@@ -384,62 +630,205 @@ export function LocationsPage() {
             </div>
           </div>
 
-          <SectionCard title={selectedLocation ? selectedLocation.label : 'Seat details'} className="floor-vis__panel">
+          <SectionCard
+            title={selectedLocation ? selectedLocation.label : "Seat details"}
+            className="floor-vis__panel"
+          >
             {!selectedLocation ? (
-              <div style={{ color: 'var(--text-muted)' }}>Select a PC position to inspect it.</div>
+              <div style={{ color: "var(--text-muted)" }}>
+                Select a PC position to inspect it.
+              </div>
             ) : (
               <div>
-                <div style={{ color: 'var(--text-muted)' }}>{locationDescription(selectedLocation)}</div>
-                <dl className="floor-vis__panel-grid" style={{ marginTop: 'var(--space-3)' }}>
-                  <PanelRow label="Hostname" value={client?.hostname || selectedLocation.client_id || 'Empty seat'} />
-                  <PanelRow label="IP" value={client?.ip_address || '—'} />
-                  <PanelRow label="MAC" value={client?.mac_address || '—'} />
-                  <PanelRow label="OS" value={client?.os.system || '—'} />
-                  <PanelRow label="Floor" value={String(selectedLocation.floor)} />
-                  <PanelRow label="Aisle" value={selectedLocation.aisle ?? '—'} />
-                  <PanelRow label="Table" value={selectedLocation.table ?? '—'} />
-                  <PanelRow label="Row" value={selectedLocation.row ?? '—'} />
-                  <PanelRow label="Position" value={selectedLocation.position ?? '—'} />
-                  <PanelRow label="Health" value={STATION_VISUAL_LABEL[stationVisual({
-                    client_id: selectedLocation.client_id,
-                    client_state: selectedLocation.client_state,
-                    health_status: selectedLocation.health_status || selectedLocation.health?.status,
-                    showsClients: layout.shows_clients,
-                  })]} />
-                  <PanelRow label="CPU" value={formatPercent(selectedLocation.health?.cpu_percent)} />
-                  <PanelRow label="Memory" value={formatPercent(selectedLocation.health?.memory_percent)} />
-                  <PanelRow label="Disk" value={formatPercent(selectedLocation.health?.disk_percent)} />
-                  <PanelRow label="Isolation" value={client?.connection.isolation?.reason || client?.connection.state || selectedLocation.client_state || '—'} />
-                  <PanelRow label="Last seen" value={client?.connection.last_connected_at || '—'} />
+                <div style={{ color: "var(--text-muted)" }}>
+                  {locationDescription(selectedLocation)}
+                </div>
+                <dl
+                  className="floor-vis__panel-grid"
+                  style={{ marginTop: "var(--space-3)" }}
+                >
+                  <PanelRow
+                    label="Hostname"
+                    value={
+                      client?.hostname ||
+                      selectedLocation.client_id ||
+                      "Empty seat"
+                    }
+                  />
+                  <PanelRow label="IP" value={client?.ip_address || "—"} />
+                  <PanelRow label="MAC" value={client?.mac_address || "—"} />
+                  <PanelRow label="OS" value={client?.os.system || "—"} />
+                  <PanelRow
+                    label="Floor"
+                    value={String(selectedLocation.floor)}
+                  />
+                  <PanelRow
+                    label="Aisle"
+                    value={selectedLocation.aisle ?? "—"}
+                  />
+                  <PanelRow
+                    label="Table"
+                    value={selectedLocation.table ?? "—"}
+                  />
+                  <PanelRow label="Row" value={selectedLocation.row ?? "—"} />
+                  <PanelRow
+                    label="Position"
+                    value={selectedLocation.position ?? "—"}
+                  />
+                  <PanelRow
+                    label="Health"
+                    value={
+                      STATION_VISUAL_LABEL[
+                        stationVisual({
+                          client_id: selectedLocation.client_id,
+                          client_state: selectedLocation.client_state,
+                          health_status:
+                            selectedLocation.health_status ||
+                            selectedLocation.health?.status,
+                          showsClients: layout.shows_clients,
+                        })
+                      ]
+                    }
+                  />
+                  <PanelRow
+                    label="CPU"
+                    value={formatPercent(selectedLocation.health?.cpu_percent)}
+                  />
+                  <PanelRow
+                    label="Memory"
+                    value={formatPercent(
+                      selectedLocation.health?.memory_percent,
+                    )}
+                  />
+                  <PanelRow
+                    label="Disk"
+                    value={formatPercent(selectedLocation.health?.disk_percent)}
+                  />
+                  <PanelRow
+                    label="Isolation"
+                    value={
+                      client?.connection.isolation?.reason ||
+                      client?.connection.state ||
+                      selectedLocation.client_state ||
+                      "—"
+                    }
+                  />
+                  <PanelRow
+                    label="Last seen"
+                    value={client?.connection.last_connected_at || "—"}
+                  />
                 </dl>
 
-                {neighborsState.status === 'success' && neighborsState.data.items.length > 0 && (
-                  <div style={{ marginTop: 'var(--space-4)' }}>
-                    <div className="floor-vis__table-label">Physical neighbors</div>
-                    <div style={{ display: 'grid', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
-                      {neighborsState.data.items.map((neighbor) => (
-                        <button
-                          key={neighbor.client_id}
-                          type="button"
-                          onClick={() => navigate(`/clients/${encodeURIComponent(neighbor.client_id)}`)}
-                          style={{ textAlign: 'left', border: 0, padding: 0, background: 'transparent', color: 'var(--primary)', cursor: 'pointer' }}
-                        >
-                          {neighbor.hostname} · {NEIGHBOR_RELATIONSHIP_LABELS[neighbor.relationship]}
-                        </button>
-                      ))}
+                {neighborsState.status === "success" &&
+                  neighborsState.data.items.length > 0 && (
+                    <div style={{ marginTop: "var(--space-4)" }}>
+                      <div className="floor-vis__table-label">
+                        Physical neighbors
+                      </div>
+                      <div
+                        style={{
+                          display: "grid",
+                          gap: "var(--space-2)",
+                          marginTop: "var(--space-2)",
+                        }}
+                      >
+                        {neighborsState.data.items.map((neighbor) => (
+                          <button
+                            key={neighbor.client_id}
+                            type="button"
+                            onClick={() =>
+                              navigate(
+                                `/clients/${encodeURIComponent(neighbor.client_id)}`,
+                              )
+                            }
+                            style={{
+                              textAlign: "left",
+                              border: 0,
+                              padding: 0,
+                              background: "transparent",
+                              color: "var(--primary)",
+                              cursor: "pointer",
+                            }}
+                          >
+                            {neighbor.hostname} ·{" "}
+                            {
+                              NEIGHBOR_RELATIONSHIP_LABELS[
+                                neighbor.relationship
+                              ]
+                            }
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
                 {selectedLocation.client_id && layout.shows_clients && (
                   <div className="floor-vis__actions">
-                    <Button variant="secondary" size="sm" disabled={actionLoading} onClick={() => runSingleAction('SCREENSHOT', { format: 'png' })}>Screenshot</Button>
-                    <Button variant="secondary" size="sm" disabled={actionLoading} onClick={() => runSingleAction('REFRESH_HEALTH')}>Refresh health</Button>
-                    <Button variant="secondary" size="sm" disabled={actionLoading} onClick={() => runSingleAction('COLLECT_DIAGNOSTICS')}>Diagnostics</Button>
-                    <Button variant="secondary" size="sm" disabled={actionLoading} onClick={() => runSingleAction('RESTART', { delay_seconds: 5 })}>Restart</Button>
-                    <Button variant="danger" size="sm" disabled={actionLoading} onClick={() => runSingleAction('SHUTDOWN', { delay_seconds: 5 })}>Shutdown</Button>
-                    <Button variant="danger" size="sm" disabled={actionLoading} onClick={() => runSingleAction('ISOLATE_DEVICE')}>Isolate</Button>
-                    <Button variant="quiet" size="sm" onClick={() => navigate(`/clients/${encodeURIComponent(selectedLocation.client_id!)}`)}>Open client</Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={actionLoading}
+                      onClick={() =>
+                        runSingleAction("SCREENSHOT", { format: "png" })
+                      }
+                    >
+                      Screenshot
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={actionLoading}
+                      onClick={() => runSingleAction("REFRESH_HEALTH")}
+                    >
+                      Refresh health
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={actionLoading}
+                      onClick={() => runSingleAction("COLLECT_DIAGNOSTICS")}
+                    >
+                      Diagnostics
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={actionLoading}
+                      onClick={() =>
+                        runSingleAction("RESTART", { delay_seconds: 5 })
+                      }
+                    >
+                      Restart
+                    </Button>
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      disabled={actionLoading}
+                      onClick={() =>
+                        runSingleAction("SHUTDOWN", { delay_seconds: 5 })
+                      }
+                    >
+                      Shutdown
+                    </Button>
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      disabled={actionLoading}
+                      onClick={() => runSingleAction("ISOLATE_DEVICE")}
+                    >
+                      Isolate
+                    </Button>
+                    <Button
+                      variant="quiet"
+                      size="sm"
+                      onClick={() =>
+                        navigate(
+                          `/clients/${encodeURIComponent(selectedLocation.client_id!)}`,
+                        )
+                      }
+                    >
+                      Open client
+                    </Button>
                   </div>
                 )}
               </div>
@@ -452,7 +841,7 @@ export function LocationsPage() {
 }
 
 function formatPercent(value: number | null | undefined): string {
-  return typeof value === 'number' ? `${Math.round(value)}%` : '—';
+  return typeof value === "number" ? `${Math.round(value)}%` : "—";
 }
 
 function PanelRow({ label, value }: { label: string; value: ReactNode }) {
@@ -464,7 +853,10 @@ function PanelRow({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
-function findLocation(layout: FloorLayout | null, locationId: number | null): ClientLocation | null {
+function findLocation(
+  layout: FloorLayout | null,
+  locationId: number | null,
+): ClientLocation | null {
   if (!layout || locationId == null) return null;
   for (const room of layout.rooms) {
     if (room.id === locationId) return room;
@@ -484,17 +876,28 @@ function findLocation(layout: FloorLayout | null, locationId: number | null): Cl
 function stationMatches(
   station: ClientLocation,
   visual: StationVisual,
-  filters: { statusFilter: StatusFilter; aisleFilter: number | 'all'; tableFilter: number | 'all' },
+  filters: {
+    statusFilter: StatusFilter;
+    aisleFilter: number | "all";
+    tableFilter: number | "all";
+  },
 ): boolean {
-  if (filters.statusFilter !== 'all' && visual !== filters.statusFilter) return false;
-  if (filters.aisleFilter !== 'all' && station.aisle !== filters.aisleFilter) return false;
-  if (filters.tableFilter !== 'all' && station.table !== filters.tableFilter) return false;
+  if (filters.statusFilter !== "all" && visual !== filters.statusFilter)
+    return false;
+  if (filters.aisleFilter !== "all" && station.aisle !== filters.aisleFilter)
+    return false;
+  if (filters.tableFilter !== "all" && station.table !== filters.tableFilter)
+    return false;
   return true;
 }
 
 function collectVisibleClientIds(
   layout: FloorLayout | null,
-  filters: { statusFilter: StatusFilter; aisleFilter: number | 'all'; tableFilter: number | 'all' },
+  filters: {
+    statusFilter: StatusFilter;
+    aisleFilter: number | "all";
+    tableFilter: number | "all";
+  },
 ): string[] {
   if (!layout?.shows_clients) return [];
   const ids: string[] = [];
@@ -509,7 +912,8 @@ function collectVisibleClientIds(
             health_status: station.health_status || station.health?.status,
             showsClients: true,
           });
-          if (stationMatches(station, visual, filters)) ids.push(station.client_id);
+          if (stationMatches(station, visual, filters))
+            ids.push(station.client_id);
         }
       }
     }
