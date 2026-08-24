@@ -16,11 +16,14 @@ import { SectionCard, MetricCard } from "../components/Card";
 import { Skeleton, ErrorState, Notice, EmptyState } from "../components/States";
 import { formatDateTime, formatRelative } from "../utils/format";
 
-const NEIGHBOR_RELATIONSHIP_LABELS: Record<PhysicalNeighbor['relationship'], string> = {
-  same_row: 'Same column',
-  same_table: 'Facing seat',
-  neighboring_table: 'Neighboring table',
-  same_zone: 'Same room',
+const NEIGHBOR_RELATIONSHIP_LABELS: Record<
+  PhysicalNeighbor["relationship"],
+  string
+> = {
+  same_row: "Same column",
+  same_table: "Facing seat",
+  neighboring_table: "Neighboring table",
+  same_zone: "Same room",
 };
 
 function DetailRow({
@@ -119,7 +122,8 @@ export function ClientDetailPage() {
   useEffect(() => {
     let cancelled = false;
     setLocationLoading(true);
-    api.getLocations({ assignable: true })
+    api
+      .getLocations({ assignable: true })
       .then((response) => {
         if (!cancelled) setLocations(response.items);
       })
@@ -129,7 +133,9 @@ export function ClientDetailPage() {
       .finally(() => {
         if (!cancelled) setLocationLoading(false);
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Process management states
@@ -157,14 +163,14 @@ export function ClientDetailPage() {
     [clientId],
     ["app:client_status"],
   );
-  const { state: locationHistoryState } = useFetch<{ items: ClientLocationHistoryEntry[] }>(
-    clientId ? () => api.getClientLocationHistory(clientId) : null,
-    [clientId],
-  );
-  const { state: neighborsState, refetch: refetchNeighbors } = useFetch<{ items: PhysicalNeighbor[] }>(
-    clientId ? () => api.getPhysicalNeighbors(clientId) : null,
-    [clientId],
-  );
+  const { state: locationHistoryState } = useFetch<{
+    items: ClientLocationHistoryEntry[];
+  }>(clientId ? () => api.getClientLocationHistory(clientId) : null, [
+    clientId,
+  ]);
+  const { state: neighborsState, refetch: refetchNeighbors } = useFetch<{
+    items: PhysicalNeighbor[];
+  }>(clientId ? () => api.getPhysicalNeighbors(clientId) : null, [clientId]);
 
   const availableSeats = useMemo(
     () =>
@@ -186,10 +192,18 @@ export function ClientDetailPage() {
     availableSeats
       .filter(
         (item) =>
-          String(item.floor) === assignFloor && String(item.aisle) === assignAisle,
+          String(item.floor) === assignFloor &&
+          String(item.aisle) === assignAisle,
       )
       .map((item) => item.table),
-  );
+  ).filter((table) => {
+    // Floor 1, Aisle 1 only contains Table 2.
+    if (assignFloor === "1" && assignAisle === "1") {
+      return table === 2;
+    }
+
+    return true;
+  });
   const columnOptions = uniqueNumbers(
     availableSeats
       .filter(
@@ -466,11 +480,15 @@ export function ClientDetailPage() {
       setAssignPosition("");
       refetch();
       refetchNeighbors();
-      api.getLocations({ assignable: true }).then((response) => setLocations(response.items)).catch(() => undefined);
+      api
+        .getLocations({ assignable: true })
+        .then((response) => setLocations(response.items))
+        .catch(() => undefined);
     } catch (err: any) {
       addToast({
         title: "Location assignment failed",
-        message: err?.message || "The selected position may already be occupied.",
+        message:
+          err?.message || "The selected position may already be occupied.",
         severity: "CRITICAL",
       });
     } finally {
@@ -569,11 +587,21 @@ export function ClientDetailPage() {
       )}
 
       <SectionCard title="Physical Location">
-        <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
-          <div style={{ color: c.location ? 'var(--text)' : 'var(--text-muted)' }}>
-            {c.location ? c.location.label : 'Location unassigned'}
+        <div style={{ display: "grid", gap: "var(--space-3)" }}>
+          <div
+            style={{ color: c.location ? "var(--text)" : "var(--text-muted)" }}
+          >
+            {c.location ? c.location.label : "Location unassigned"}
           </div>
-          <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'end', flexWrap: 'wrap' }}>
+          <div
+            style={{
+              display: "flex",
+              gap: "var(--space-3)",
+              alignItems: "end",
+              flexWrap: "wrap",
+            }}
+          >
+            {/**  floor one aisle one only has table two make sure to only display that table and not both  */}
             <LocationSelect
               label="Floor"
               value={assignFloor}
@@ -630,70 +658,175 @@ export function ClientDetailPage() {
             <Button
               variant="primary"
               size="sm"
-              disabled={!selectedLocationId || locationSaving || locationLoading}
+              disabled={
+                !selectedLocationId || locationSaving || locationLoading
+              }
               onClick={assignLocation}
             >
-              {locationSaving ? 'Saving…' : c.location ? 'Change Location' : 'Assign Location'}
+              {locationSaving
+                ? "Saving…"
+                : c.location
+                  ? "Change Location"
+                  : "Assign Location"}
             </Button>
           </div>
           {selectedSeat && (
-            <div style={{ fontSize: 'var(--font-xs)', color: 'var(--text-muted)' }}>
+            <div
+              style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}
+            >
               {selectedSeat.label}
             </div>
           )}
         </div>
-        {locationHistoryState.status === 'success' && locationHistoryState.data.items.length > 0 && (
-          <div style={{ marginTop: 'var(--space-4)', borderTop: '1px solid var(--border-subtle)', paddingTop: 'var(--space-3)' }}>
-            <div style={{ fontSize: 'var(--font-xs)', color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>Assignment history</div>
-            <div style={{ display: 'grid', gap: 'var(--space-2)' }}>
-              {locationHistoryState.data.items.map((entry) => (
-                <div key={entry.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-3)', fontSize: 'var(--font-xs)', flexWrap: 'wrap' }}>
-                  <span>{entry.location.label}</span>
-                  <span style={{ color: 'var(--text-muted)' }}>
-                    {formatDateTime(entry.assigned_at)} · {entry.assigned_by || 'Unknown operator'}
-                    {entry.unassigned_at ? ` · ended ${formatDateTime(entry.unassigned_at)}` : ' · current'}
-                  </span>
-                </div>
-              ))}
+        {locationHistoryState.status === "success" &&
+          locationHistoryState.data.items.length > 0 && (
+            <div
+              style={{
+                marginTop: "var(--space-4)",
+                borderTop: "1px solid var(--border-subtle)",
+                paddingTop: "var(--space-3)",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: "var(--font-xs)",
+                  color: "var(--text-muted)",
+                  marginBottom: "var(--space-2)",
+                }}
+              >
+                Assignment history
+              </div>
+              <div style={{ display: "grid", gap: "var(--space-2)" }}>
+                {locationHistoryState.data.items.map((entry) => (
+                  <div
+                    key={entry.id}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: "var(--space-3)",
+                      fontSize: "var(--font-xs)",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <span>{entry.location.label}</span>
+                    <span style={{ color: "var(--text-muted)" }}>
+                      {formatDateTime(entry.assigned_at)} ·{" "}
+                      {entry.assigned_by || "Unknown operator"}
+                      {entry.unassigned_at
+                        ? ` · ended ${formatDateTime(entry.unassigned_at)}`
+                        : " · current"}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          )}
       </SectionCard>
 
       <SectionCard title="Health">
-        <div style={{ display: 'grid', gap: 'var(--space-2)' }}>
-          <DetailRow label="Status" value={c.health?.status ? c.health.status.replace('_', ' ') : 'Unknown'} />
-          <DetailRow label="CPU" value={typeof c.health?.cpu_percent === 'number' ? `${Math.round(c.health.cpu_percent)}%` : '—'} />
-          <DetailRow label="Memory" value={typeof c.health?.memory_percent === 'number' ? `${Math.round(c.health.memory_percent)}%` : '—'} />
-          <DetailRow label="Disk" value={typeof c.health?.disk_percent === 'number' ? `${Math.round(c.health.disk_percent)}%` : '—'} />
-          <DetailRow label="Updated" value={c.health?.updated_at ? formatDateTime(c.health.updated_at) : 'Not collected yet'} />
+        <div style={{ display: "grid", gap: "var(--space-2)" }}>
+          <DetailRow
+            label="Status"
+            value={
+              c.health?.status ? c.health.status.replace("_", " ") : "Unknown"
+            }
+          />
+          <DetailRow
+            label="CPU"
+            value={
+              typeof c.health?.cpu_percent === "number"
+                ? `${Math.round(c.health.cpu_percent)}%`
+                : "—"
+            }
+          />
+          <DetailRow
+            label="Memory"
+            value={
+              typeof c.health?.memory_percent === "number"
+                ? `${Math.round(c.health.memory_percent)}%`
+                : "—"
+            }
+          />
+          <DetailRow
+            label="Disk"
+            value={
+              typeof c.health?.disk_percent === "number"
+                ? `${Math.round(c.health.disk_percent)}%`
+                : "—"
+            }
+          />
+          <DetailRow
+            label="Updated"
+            value={
+              c.health?.updated_at
+                ? formatDateTime(c.health.updated_at)
+                : "Not collected yet"
+            }
+          />
         </div>
       </SectionCard>
 
       {c.location && (
         <SectionCard title="Physical Neighbors">
-          {neighborsState.status === 'error' ? (
-            <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-xs)' }}>{neighborsState.error.message}</div>
-          ) : neighborsState.status !== 'success' || neighborsState.data.items.length === 0 ? (
-            <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-xs)' }}>
-              {neighborsState.status === 'loading' ? 'Loading neighbors…' : 'No assigned neighbors at adjacent positions.'}
+          {neighborsState.status === "error" ? (
+            <div
+              style={{ color: "var(--text-muted)", fontSize: "var(--font-xs)" }}
+            >
+              {neighborsState.error.message}
+            </div>
+          ) : neighborsState.status !== "success" ||
+            neighborsState.data.items.length === 0 ? (
+            <div
+              style={{ color: "var(--text-muted)", fontSize: "var(--font-xs)" }}
+            >
+              {neighborsState.status === "loading"
+                ? "Loading neighbors…"
+                : "No assigned neighbors at adjacent positions."}
             </div>
           ) : (
-            <div style={{ display: 'grid', gap: 'var(--space-2)' }}>
+            <div style={{ display: "grid", gap: "var(--space-2)" }}>
               {neighborsState.data.items.map((neighbor) => (
                 <button
                   key={neighbor.client_id}
                   type="button"
-                  onClick={() => navigate(`/clients/${encodeURIComponent(neighbor.client_id)}`)}
-                  style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-3)', textAlign: 'left', border: 0, padding: 'var(--space-2) 0', background: 'transparent', color: 'var(--text)', cursor: 'pointer', borderBottom: '1px solid var(--border-subtle)' }}
+                  onClick={() =>
+                    navigate(
+                      `/clients/${encodeURIComponent(neighbor.client_id)}`,
+                    )
+                  }
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: "var(--space-3)",
+                    textAlign: "left",
+                    border: 0,
+                    padding: "var(--space-2) 0",
+                    background: "transparent",
+                    color: "var(--text)",
+                    cursor: "pointer",
+                    borderBottom: "1px solid var(--border-subtle)",
+                  }}
                 >
                   <span>
-                    {neighbor.hostname}{' '}
-                    <span style={{ color: 'var(--text-muted)' }}>
-                      {NEIGHBOR_RELATIONSHIP_LABELS[neighbor.relationship]} · {neighbor.location.label}
+                    {neighbor.hostname}{" "}
+                    <span style={{ color: "var(--text-muted)" }}>
+                      {NEIGHBOR_RELATIONSHIP_LABELS[neighbor.relationship]} ·{" "}
+                      {neighbor.location.label}
                     </span>
                   </span>
-                  <span style={{ color: neighbor.state === 'ONLINE' ? 'var(--success)' : neighbor.state === 'ISOLATED' ? 'var(--danger)' : 'var(--text-muted)', fontSize: 'var(--font-xs)' }}>{neighbor.state}</span>
+                  <span
+                    style={{
+                      color:
+                        neighbor.state === "ONLINE"
+                          ? "var(--success)"
+                          : neighbor.state === "ISOLATED"
+                            ? "var(--danger)"
+                            : "var(--text-muted)",
+                      fontSize: "var(--font-xs)",
+                    }}
+                  >
+                    {neighbor.state}
+                  </span>
                 </button>
               ))}
             </div>
@@ -1816,7 +1949,8 @@ export function ClientDetailPage() {
                   />
                 ) : (
                   <Notice variant="info" title="Preparing screenshot preview">
-                    The screenshot was captured. Refresh the history to load its preview.
+                    The screenshot was captured. Refresh the history to load its
+                    preview.
                   </Notice>
                 )}
                 <div
@@ -1841,7 +1975,9 @@ export function ClientDetailPage() {
                     <strong>{commandResult.filename ?? "Unavailable"}</strong>
                   </span>
                   <span>
-                    <span style={{ color: "var(--text-muted)" }}>Captured: </span>
+                    <span style={{ color: "var(--text-muted)" }}>
+                      Captured:{" "}
+                    </span>
                     <strong>
                       {commandResult.captured_at
                         ? formatRelative(commandResult.captured_at)
@@ -1856,7 +1992,10 @@ export function ClientDetailPage() {
                         refetchScreenshots();
                         document
                           .getElementById("screenshot-history")
-                          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                          ?.scrollIntoView({
+                            behavior: "smooth",
+                            block: "start",
+                          });
                       }}
                     >
                       Show in history
@@ -2028,7 +2167,14 @@ function LocationSelect({
   onChange: (value: string) => void;
 }) {
   return (
-    <label style={{ display: "grid", gap: "var(--space-1)", fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>
+    <label
+      style={{
+        display: "grid",
+        gap: "var(--space-1)",
+        fontSize: "var(--font-xs)",
+        color: "var(--text-muted)",
+      }}
+    >
       {label}
       <select
         aria-label={label}
