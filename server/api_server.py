@@ -14,6 +14,7 @@ import re
 import threading
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 # Load the same server-local database configuration when the REST API is
@@ -246,6 +247,17 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 self.send_data(detail)
                 return
 
+            m = re.match(r"^/api/v1/clients/([^/]+)/screenshots$", path)
+            if m:
+                client_id = urllib.parse.unquote(m.group(1))
+                limit = get_int_param("limit", 12)
+                screenshots = api_service.list_client_screenshots(client_id, limit=limit)
+                if screenshots is None:
+                    self.send_error_response(404, "NOT_FOUND", f"Client '{client_id}' not found.")
+                    return
+                self.send_data({"items": screenshots, "next_cursor": None})
+                return
+
             # Client quarantine status GET
             m = re.match(r"^/api/v1/clients/([^/]+)/quarantine$", path)
             if m:
@@ -404,6 +416,29 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     self.send_error_response(404, "NOT_FOUND", f"Alert #{alert_id} not found.")
                     return
                 self.send_data(alert_data)
+                return
+
+            m = re.match(r"^/api/v1/screenshots/(\d+)/file$", path)
+            if m:
+                screenshot_id = int(m.group(1))
+                screenshot = api_service.get_screenshot_record(screenshot_id)
+                if not screenshot:
+                    self.send_error_response(404, "NOT_FOUND", f"Screenshot #{screenshot_id} not found.")
+                    return
+
+                file_path = Path(screenshot["storage_path"])
+                if not file_path.is_file():
+                    self.send_error_response(404, "NOT_FOUND", "Screenshot file is no longer available.")
+                    return
+
+                payload = file_path.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", screenshot.get("mime_type") or "application/octet-stream")
+                self.send_header("Content-Length", str(len(payload)))
+                self.send_header("Content-Disposition", f'inline; filename="{screenshot["filename"]}"')
+                self._send_cors_headers()
+                self.end_headers()
+                self.wfile.write(payload)
                 return
 
             # 9. Activity Logs
