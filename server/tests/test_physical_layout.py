@@ -54,8 +54,8 @@ class PhysicalLayoutTests(unittest.TestCase):
         self.assertTrue(layout["shows_clients"])
         self.assertEqual(layout["rooms"][0]["label"], "F1-RM1")
         self.assertEqual([aisle["aisle"] for aisle in layout["aisles"]], [1, 2])
-        first_row = layout["aisles"][0]["tables"][0]["rows"][0]
-        self.assertEqual([station["position"] for station in first_row["stations"]], [1, 2])
+        first_column = layout["aisles"][0]["tables"][0]["columns"][0]
+        self.assertEqual([station["position"] for station in first_column["stations"]], [1, 2])
 
     def test_floor_zero_hides_assigned_clients(self):
         locations = [
@@ -65,7 +65,7 @@ class PhysicalLayoutTests(unittest.TestCase):
         layout = build_floor_layout(locations, 0)
 
         self.assertFalse(layout["shows_clients"])
-        station = layout["aisles"][0]["tables"][0]["rows"][0]["stations"][0]
+        station = layout["aisles"][0]["tables"][0]["columns"][0]["stations"][0]
         self.assertNotIn("client_id", station)
         self.assertNotIn("health", station)
         self.assertNotIn("health_status", station)
@@ -85,14 +85,14 @@ class PhysicalLayoutTests(unittest.TestCase):
         self.assertTrue(layout["shows_clients"])
         self.assertEqual(layout["aisles"][0]["aisle"], 2)
         self.assertEqual(layout["aisles"][0]["tables"][0]["table"], 3)
-        station = layout["aisles"][0]["tables"][0]["rows"][0]["stations"][0]
+        station = layout["aisles"][0]["tables"][0]["columns"][0]["stations"][0]
         self.assertEqual(station["label"], "F2-A2-T3-R1-P4")
         self.assertEqual(station["client_id"], "c-f2")
 
     def test_empty_seats_remain_visible_without_a_client(self):
         locations = [loc(id=3, client_id=None, client_state=None, label="F1-A1-T1-R1-P3")]
 
-        station = build_floor_layout(locations, 1)["aisles"][0]["tables"][0]["rows"][0]["stations"][0]
+        station = build_floor_layout(locations, 1)["aisles"][0]["tables"][0]["columns"][0]["stations"][0]
 
         self.assertIsNone(station.get("client_id"))
         self.assertEqual(station["position"], 1)
@@ -110,7 +110,7 @@ class PhysicalLayoutTests(unittest.TestCase):
             loc(id=3, position=3, label="isolated", client_id="pc-iso", client_state="ISOLATED", health_status="isolated"),
         ]
 
-        stations = build_floor_layout(locations, 1)["aisles"][0]["tables"][0]["rows"][0]["stations"]
+        stations = build_floor_layout(locations, 1)["aisles"][0]["tables"][0]["columns"][0]["stations"]
         by_id = {station["client_id"]: station["health_status"] for station in stations}
 
         self.assertEqual(by_id["pc-critical"], "critical")

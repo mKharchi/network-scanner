@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   api,
@@ -17,8 +17,8 @@ import { Skeleton, ErrorState, Notice, EmptyState } from "../components/States";
 import { formatDateTime, formatRelative } from "../utils/format";
 
 const NEIGHBOR_RELATIONSHIP_LABELS: Record<PhysicalNeighbor['relationship'], string> = {
-  same_row: 'Same row',
-  same_table: 'Same table',
+  same_row: 'Same column',
+  same_table: 'Facing seat',
   neighboring_table: 'Neighboring table',
   same_zone: 'Same room',
 };
@@ -110,12 +110,16 @@ export function ClientDetailPage() {
   const [locations, setLocations] = useState<ClientLocation[]>([]);
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationSaving, setLocationSaving] = useState(false);
-  const [selectedLocationId, setSelectedLocationId] = useState('');
+  const [assignFloor, setAssignFloor] = useState("");
+  const [assignAisle, setAssignAisle] = useState("");
+  const [assignTable, setAssignTable] = useState("");
+  const [assignColumn, setAssignColumn] = useState("");
+  const [assignPosition, setAssignPosition] = useState("");
 
   useEffect(() => {
     let cancelled = false;
     setLocationLoading(true);
-    api.getLocations()
+    api.getLocations({ assignable: true })
       .then((response) => {
         if (!cancelled) setLocations(response.items);
       })
@@ -161,6 +165,62 @@ export function ClientDetailPage() {
     clientId ? () => api.getPhysicalNeighbors(clientId) : null,
     [clientId],
   );
+
+  const availableSeats = useMemo(
+    () =>
+      locations.filter(
+        (location) =>
+          location.assignable !== false &&
+          (!location.client_id || location.client_id === clientId),
+      ),
+    [locations, clientId],
+  );
+
+  const floorOptions = uniqueNumbers(availableSeats.map((item) => item.floor));
+  const aisleOptions = uniqueNumbers(
+    availableSeats
+      .filter((item) => String(item.floor) === assignFloor)
+      .map((item) => item.aisle),
+  );
+  const tableOptions = uniqueNumbers(
+    availableSeats
+      .filter(
+        (item) =>
+          String(item.floor) === assignFloor && String(item.aisle) === assignAisle,
+      )
+      .map((item) => item.table),
+  );
+  const columnOptions = uniqueNumbers(
+    availableSeats
+      .filter(
+        (item) =>
+          String(item.floor) === assignFloor &&
+          String(item.aisle) === assignAisle &&
+          String(item.table) === assignTable,
+      )
+      .map((item) => item.column ?? item.row),
+  );
+  const positionOptions = uniqueNumbers(
+    availableSeats
+      .filter(
+        (item) =>
+          String(item.floor) === assignFloor &&
+          String(item.aisle) === assignAisle &&
+          String(item.table) === assignTable &&
+          String(item.column ?? item.row) === assignColumn,
+      )
+      .map((item) => item.position),
+  );
+
+  const selectedSeat = availableSeats.find(
+    (item) =>
+      String(item.floor) === assignFloor &&
+      String(item.aisle) === assignAisle &&
+      String(item.table) === assignTable &&
+      String(item.column ?? item.row) === assignColumn &&
+      String(item.position) === assignPosition,
+  );
+  const selectedLocationId = selectedSeat ? String(selectedSeat.id) : "";
 
   const executeCommand = async (command: string, args?: any) => {
     if (!clientId) return;
@@ -399,9 +459,14 @@ export function ClientDetailPage() {
         message: `${c.hostname} is now assigned to the selected position.`,
         severity: "SUCCESS",
       });
-      setSelectedLocationId("");
+      setAssignFloor("");
+      setAssignAisle("");
+      setAssignTable("");
+      setAssignColumn("");
+      setAssignPosition("");
       refetch();
       refetchNeighbors();
+      api.getLocations({ assignable: true }).then((response) => setLocations(response.items)).catch(() => undefined);
     } catch (err: any) {
       addToast({
         title: "Location assignment failed",
@@ -504,42 +569,78 @@ export function ClientDetailPage() {
       )}
 
       <SectionCard title="Physical Location">
-        <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
           <div style={{ color: c.location ? 'var(--text)' : 'var(--text-muted)' }}>
             {c.location ? c.location.label : 'Location unassigned'}
           </div>
-          <select
-            value={selectedLocationId}
-            onChange={(event) => setSelectedLocationId(event.target.value)}
-            disabled={locationLoading || locationSaving}
-            aria-label="Assign physical location"
-            style={{
-              minWidth: 220,
-              background: 'var(--surface)',
-              color: 'var(--text)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              padding: 'var(--space-2)',
-            }}
-          >
-            <option value="">{locationLoading ? 'Loading locations…' : 'Choose a location'}</option>
-            {locations.map((location) => {
-              const occupied = Boolean(location.client_id && location.client_id !== clientId);
-              return (
-              <option key={location.id} value={location.id} disabled={occupied}>
-                {location.label}{occupied ? ` — assigned to ${location.client_id}` : ''}
-              </option>
-              );
-            })}
-          </select>
-          <Button
-            variant="primary"
-            size="sm"
-            disabled={!selectedLocationId || locationSaving || locationLoading}
-            onClick={assignLocation}
-          >
-            {locationSaving ? 'Saving…' : c.location ? 'Change Location' : 'Assign Location'}
-          </Button>
+          <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'end', flexWrap: 'wrap' }}>
+            <LocationSelect
+              label="Floor"
+              value={assignFloor}
+              options={floorOptions}
+              disabled={locationLoading || locationSaving}
+              onChange={(value) => {
+                setAssignFloor(value);
+                setAssignAisle("");
+                setAssignTable("");
+                setAssignColumn("");
+                setAssignPosition("");
+              }}
+            />
+            <LocationSelect
+              label="Aisle"
+              value={assignAisle}
+              options={aisleOptions}
+              disabled={!assignFloor || locationLoading || locationSaving}
+              onChange={(value) => {
+                setAssignAisle(value);
+                setAssignTable("");
+                setAssignColumn("");
+                setAssignPosition("");
+              }}
+            />
+            <LocationSelect
+              label="Table"
+              value={assignTable}
+              options={tableOptions}
+              disabled={!assignAisle || locationLoading || locationSaving}
+              onChange={(value) => {
+                setAssignTable(value);
+                setAssignColumn("");
+                setAssignPosition("");
+              }}
+            />
+            <LocationSelect
+              label="Column"
+              value={assignColumn}
+              options={columnOptions}
+              disabled={!assignTable || locationLoading || locationSaving}
+              onChange={(value) => {
+                setAssignColumn(value);
+                setAssignPosition("");
+              }}
+            />
+            <LocationSelect
+              label="Position"
+              value={assignPosition}
+              options={positionOptions}
+              disabled={!assignColumn || locationLoading || locationSaving}
+              onChange={setAssignPosition}
+            />
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={!selectedLocationId || locationSaving || locationLoading}
+              onClick={assignLocation}
+            >
+              {locationSaving ? 'Saving…' : c.location ? 'Change Location' : 'Assign Location'}
+            </Button>
+          </div>
+          {selectedSeat && (
+            <div style={{ fontSize: 'var(--font-xs)', color: 'var(--text-muted)' }}>
+              {selectedSeat.label}
+            </div>
+          )}
         </div>
         {locationHistoryState.status === 'success' && locationHistoryState.data.items.length > 0 && (
           <div style={{ marginTop: 'var(--space-4)', borderTop: '1px solid var(--border-subtle)', paddingTop: 'var(--space-3)' }}>
@@ -1904,6 +2005,53 @@ export function ClientDetailPage() {
         )}
       </div>
     </div>
+  );
+}
+
+function uniqueNumbers(values: Array<number | null | undefined>): number[] {
+  return Array.from(
+    new Set(values.filter((value): value is number => value != null)),
+  ).sort((left, right) => left - right);
+}
+
+function LocationSelect({
+  label,
+  value,
+  options,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: number[];
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label style={{ display: "grid", gap: "var(--space-1)", fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>
+      {label}
+      <select
+        aria-label={label}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        style={{
+          minWidth: 90,
+          background: "var(--surface)",
+          color: "var(--text)",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--radius-sm)",
+          padding: "var(--space-2)",
+        }}
+      >
+        <option value="">Select</option>
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 

@@ -37,10 +37,11 @@ class PhysicalNeighborClassificationTests(unittest.TestCase):
         self.assertEqual(classify_physical_neighbor(ORIGIN, left), (SAME_ROW, 1))
         self.assertEqual(classify_physical_neighbor(ORIGIN, right), (SAME_ROW, 1))
 
-    def test_same_table_other_row_same_position(self):
-        other_row = {**ORIGIN, "row_no": 2}
+    def test_column_alias_is_treated_as_row_for_facing_seats(self):
+        origin = {**ORIGIN, "column": 1, "row_no": None}
+        facing = {**ORIGIN, "column": 2, "row_no": None}
 
-        self.assertEqual(classify_physical_neighbor(ORIGIN, other_row), (SAME_TABLE, 1))
+        self.assertEqual(classify_physical_neighbor(origin, facing), (SAME_TABLE, 1))
 
     def test_neighboring_table_same_row_and_position(self):
         other_table = {**ORIGIN, "table_no": 1}

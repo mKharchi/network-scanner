@@ -1,9 +1,10 @@
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   api,
   type ClientLocation,
   type FloorLayout,
+  type FloorTable,
   type ManagedClientSummary,
   type PhysicalNeighbor,
 } from "../api/client";
@@ -23,8 +24,8 @@ const NEIGHBOR_RELATIONSHIP_LABELS: Record<
   PhysicalNeighbor["relationship"],
   string
 > = {
-  same_row: "Same row",
-  same_table: "Same table",
+  same_row: "Same column",
+  same_table: "Facing seat",
   neighboring_table: "Neighboring table",
   same_zone: "Same room",
 };
@@ -36,7 +37,9 @@ function locationDescription(location: ClientLocation): string {
     location.zone_name || location.zone_type,
     location.aisle != null ? `Aisle ${location.aisle}` : null,
     location.table != null ? `Table ${location.table}` : null,
-    location.row != null ? `Row ${location.row}` : null,
+    (location.column ?? location.row) != null
+      ? `Column ${location.column ?? location.row}`
+      : null,
     location.position != null ? `Position ${location.position}` : null,
   ];
   return parts.filter(Boolean).join(" · ");
@@ -58,18 +61,6 @@ export function LocationsPage() {
   );
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
   const [actionLoading, setActionLoading] = useState(false);
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({
-    floor: "1",
-    zone_type: "training",
-    zone_name: "",
-    label: "",
-    aisle: "",
-    table: "",
-    row: "",
-    position: "",
-  });
 
   const { state, refetch } = useFetch<FloorLayout>(
     () => api.getLocationLayout(selectedFloor),
@@ -125,37 +116,6 @@ export function LocationsPage() {
     aisleFilter,
     tableFilter,
   });
-
-  const createLocation = async (event: FormEvent) => {
-    event.preventDefault();
-    setCreating(true);
-    try {
-      await api.createLocation({
-        floor: Number(form.floor),
-        zone_type: form.zone_type,
-        zone_name: form.zone_name || null,
-        label: form.label,
-        aisle: form.aisle ? Number(form.aisle) : null,
-        table: form.table ? Number(form.table) : null,
-        row: form.row ? Number(form.row) : null,
-        position: form.position ? Number(form.position) : null,
-      });
-      setForm({
-        floor: form.floor,
-        zone_type: form.zone_type,
-        zone_name: "",
-        label: "",
-        aisle: "",
-        table: "",
-        row: "",
-        position: "",
-      });
-      setShowCreateForm(false);
-      refetch();
-    } finally {
-      setCreating(false);
-    }
-  };
 
   const runBulkAction = async (
     actionType: string,
@@ -260,94 +220,17 @@ export function LocationsPage() {
           <p
             style={{ color: "var(--text-muted)", marginTop: "var(--space-1)" }}
           >
-            Physical positions come from the server. Floor 0 is shown without
-            PCs.
+            Floors, rooms, aisles, tables, and the 56 PC seats are seeded
+            automatically. Assign clients to empty positions from a client
+            page.
           </p>
         </div>
         <div style={{ display: "flex", gap: "var(--space-2)" }}>
           <Button variant="quiet" size="sm" onClick={refetch}>
             Refresh
           </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => setShowCreateForm((visible) => !visible)}
-          >
-            {showCreateForm ? "Close" : "Add Location"}
-          </Button>
         </div>
       </div>
-
-      {showCreateForm && (
-        <SectionCard title="Create Physical Location">
-          <form
-            onSubmit={createLocation}
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(4, 1fr)",
-              gap: "var(--space-3)",
-              alignItems: "end",
-            }}
-          >
-            {(
-              [
-                ["floor", "Floor"],
-                ["zone_type", "Zone type"],
-                ["zone_name", "Zone name"],
-                ["label", "Label"],
-                ["aisle", "Aisle"],
-                ["table", "Table"],
-                ["row", "Row"],
-                ["position", "Position"],
-              ] as const
-            ).map(([field, label]) => (
-              <label
-                key={field}
-                style={{
-                  display: "grid",
-                  gap: "var(--space-1)",
-                  fontSize: "var(--font-xs)",
-                  color: "var(--text-muted)",
-                }}
-              >
-                {label}
-                <input
-                  required={
-                    field === "floor" ||
-                    field === "zone_type" ||
-                    field === "label"
-                  }
-                  type={
-                    field === "floor" ||
-                    ["aisle", "table", "row", "position"].includes(field)
-                      ? "number"
-                      : "text"
-                  }
-                  value={form[field]}
-                  onChange={(event) =>
-                    setForm({ ...form, [field]: event.target.value })
-                  }
-                  style={{
-                    padding: "var(--space-2)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "var(--radius-sm)",
-                    background: "var(--surface)",
-                    color: "var(--text)",
-                  }}
-                />
-              </label>
-            ))}
-            <Button
-              type="submit"
-              variant="primary"
-              size="sm"
-              disabled={creating}
-            >
-              {creating ? "Creating…" : "Create Location"}
-            </Button>
-          </form>
-        </SectionCard>
-      )}
 
       {state.status === "error" && (
         <div style={{ marginBottom: "var(--space-4)" }}>
@@ -532,7 +415,7 @@ export function LocationsPage() {
           body={
             selectedFloor === 0
               ? "This floor can be shown, but workstations are not visualized here."
-              : "Create aisle, table, row, and position records for this floor."
+              : "This floor has no seeded aisles or PC positions."
           }
         />
       ) : (
@@ -561,67 +444,100 @@ export function LocationsPage() {
                   <div className="floor-vis__tables">
                     {aisle.tables.map((table) => (
                       <div
-                        key={String(table.table)}
-                        className="floor-vis__table"
+                        key={`${table.kind || "table"}-${String(table.table)}`}
+                        className={`floor-vis__table${table.kind === "stairs" ? " floor-vis__table--stairs" : ""}`}
                       >
-                        <div className="floor-vis__table-label">
-                          Table {table.table ?? "—"}
-                        </div>
-                        {table.rows.map((row) => (
-                          <div key={String(row.row)} className="floor-vis__row">
-                            <div className="floor-vis__row-label">
-                              R{row.row ?? "—"}
+                        {table.kind === "stairs" ? (
+                          <button
+                            type="button"
+                            className="floor-vis__stairs"
+                            onClick={() =>
+                              table.location &&
+                              setSelectedLocationId(table.location.id)
+                            }
+                          >
+                            <span className="floor-vis__table-label">
+                              {table.label || "Stairs"}
+                            </span>
+                            <span>Not a PC position</span>
+                          </button>
+                        ) : (
+                          <>
+                            <div className="floor-vis__table-label">
+                              Table {table.table ?? "—"}
                             </div>
-                            <div className="floor-vis__stations">
-                              {row.stations.map((station) => {
-                                const visual = stationVisual({
-                                  client_id: station.client_id,
-                                  client_state: station.client_state,
-                                  health_status:
-                                    station.health_status ||
-                                    station.health?.status,
-                                  showsClients: layout.shows_clients,
-                                });
-                                const visible = stationMatches(
-                                  station,
-                                  visual,
-                                  { statusFilter, aisleFilter, tableFilter },
-                                );
-                                const selected =
-                                  selectedLocationId === station.id ||
-                                  (station.client_id != null &&
-                                    selectedClientIds.includes(
-                                      station.client_id,
-                                    ));
-                                const neighbor =
-                                  station.client_id != null &&
-                                  neighborIds.has(station.client_id);
-                                return (
-                                  <button
-                                    key={stationKey(station)}
-                                    type="button"
-                                    className={[
-                                      "station",
-                                      `station--${visual}`,
-                                      visible ? "" : "station--dim",
-                                      selected ? "station--selected" : "",
-                                      neighbor ? "station--neighbor" : "",
-                                    ]
-                                      .filter(Boolean)
-                                      .join(" ")}
-                                    title={`${station.label} · ${STATION_VISUAL_LABEL[visual]}`}
-                                    aria-label={`${station.label}, ${STATION_VISUAL_LABEL[visual]}`}
-                                    onClick={() =>
-                                      setSelectedLocationId(station.id)
-                                    }
-                                  >
-                                    {station.position ?? "•"}
-                                  </button>
-                                );
-                              })}
+                            <div className="floor-vis__columns">
+                              {tableColumns(table).map((column, index) => (
+                                <div
+                                  key={String(column.column ?? column.row ?? index)}
+                                  className="floor-vis__column"
+                                >
+                                  <div className="floor-vis__row-label">
+                                    C{column.column ?? column.row ?? "—"}
+                                  </div>
+                                  <div className="floor-vis__stations">
+                                    {column.stations.map((station) => {
+                                      const visual = stationVisual({
+                                        client_id: station.client_id,
+                                        client_state: station.client_state,
+                                        health_status:
+                                          station.health_status ||
+                                          station.health?.status,
+                                        showsClients: layout.shows_clients,
+                                      });
+                                      const visible = stationMatches(
+                                        station,
+                                        visual,
+                                        { statusFilter, aisleFilter, tableFilter },
+                                      );
+                                      const selected =
+                                        selectedLocationId === station.id ||
+                                        (station.client_id != null &&
+                                          selectedClientIds.includes(
+                                            station.client_id,
+                                          ));
+                                      const neighbor =
+                                        station.client_id != null &&
+                                        neighborIds.has(station.client_id);
+                                      return (
+                                        <button
+                                          key={stationKey(station)}
+                                          type="button"
+                                          className={[
+                                            "station",
+                                            `station--${visual}`,
+                                            visible ? "" : "station--dim",
+                                            selected ? "station--selected" : "",
+                                            neighbor ? "station--neighbor" : "",
+                                          ]
+                                            .filter(Boolean)
+                                            .join(" ")}
+                                          title={`${station.label} · ${STATION_VISUAL_LABEL[visual]}`}
+                                          aria-label={`${station.label}, ${STATION_VISUAL_LABEL[visual]}`}
+                                          onClick={() =>
+                                            setSelectedLocationId(station.id)
+                                          }
+                                        >
+                                          <span className="station__name">
+                                            {stationSeatLabel(
+                                              station,
+                                              layout.shows_clients,
+                                            )}
+                                          </span>
+                                          <span className="station__meta">
+                                            {layout.shows_clients && station.client_id
+                                              ? STATION_VISUAL_LABEL[visual]
+                                              : `P${station.position ?? "—"}`}
+                                          </span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ))}
                             </div>
-                          </div>
-                        ))}
+                          </>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -670,7 +586,10 @@ export function LocationsPage() {
                     label="Table"
                     value={selectedLocation.table ?? "—"}
                   />
-                  <PanelRow label="Row" value={selectedLocation.row ?? "—"} />
+                  <PanelRow
+                    label="Column"
+                    value={selectedLocation.column ?? selectedLocation.row ?? "—"}
+                  />
                   <PanelRow
                     label="Position"
                     value={selectedLocation.position ?? "—"}
@@ -853,6 +772,18 @@ function PanelRow({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
+function tableColumns(table: FloorTable) {
+  return table.columns?.length ? table.columns : table.rows || [];
+}
+
+function stationSeatLabel(
+  station: ClientLocation,
+  showsClients: boolean,
+): string {
+  if (!showsClients || !station.client_id) return "EMPTY";
+  return station.hostname || station.client_id;
+}
+
 function findLocation(
   layout: FloorLayout | null,
   locationId: number | null,
@@ -863,8 +794,9 @@ function findLocation(
   }
   for (const aisle of layout.aisles) {
     for (const table of aisle.tables) {
-      for (const row of table.rows) {
-        for (const station of row.stations) {
+      if (table.location?.id === locationId) return table.location;
+      for (const column of tableColumns(table)) {
+        for (const station of column.stations) {
           if (station.id === locationId) return station;
         }
       }
@@ -903,8 +835,8 @@ function collectVisibleClientIds(
   const ids: string[] = [];
   for (const aisle of layout.aisles) {
     for (const table of aisle.tables) {
-      for (const row of table.rows) {
-        for (const station of row.stations) {
+      for (const column of tableColumns(table)) {
+        for (const station of column.stations) {
           if (!station.client_id) continue;
           const visual = stationVisual({
             client_id: station.client_id,
