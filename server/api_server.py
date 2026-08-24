@@ -148,7 +148,8 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/api/locations":
-                self.send_data({"items": api_service.list_locations()})
+                assignable = (get_param("assignable") or "").lower() in {"1", "true", "yes"}
+                self.send_data({"items": api_service.list_locations(assignable_only=assignable)})
                 return
 
             if path == "/api/locations/layout":

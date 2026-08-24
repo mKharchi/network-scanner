@@ -225,13 +225,17 @@ export interface ClientHealth {
 export interface ClientLocation {
   id: number;
   floor: number;
+  location_type?: string;
   zone_type: string;
   zone_name: string | null;
   aisle: number | null;
   table: number | null;
   row: number | null;
+  column?: number | null;
   position: number | null;
   label: string;
+  assignable?: boolean;
+  hostname?: string | null;
   client_id?: string;
   client_state?: 'ONLINE' | 'OFFLINE' | 'ISOLATED';
   health?: ClientHealth;
@@ -252,14 +256,19 @@ export type PhysicalNeighborRelationship =
   | 'neighboring_table'
   | 'same_zone';
 
-export interface FloorRow {
-  row: number | null;
+export interface FloorColumn {
+  column: number | null;
+  row?: number | null;
   stations: ClientLocation[];
 }
 
 export interface FloorTable {
   table: number | null;
-  rows: FloorRow[];
+  kind?: "table" | "stairs";
+  label?: string;
+  location?: ClientLocation;
+  columns: FloorColumn[];
+  rows?: FloorColumn[];
 }
 
 export interface FloorAisle {
@@ -471,8 +480,10 @@ export const api = {
       latest_activity_log: ActivityLogRecord | null;
     }>(`/clients/${encodeURIComponent(clientId)}`),
 
-  getLocations: () =>
-    getAction<{ items: ClientLocation[] }>("/api/locations"),
+  getLocations: (params?: { assignable?: boolean }) =>
+    getAction<{ items: ClientLocation[] }>(
+      params?.assignable ? "/api/locations?assignable=1" : "/api/locations",
+    ),
 
   getLocationLayout: (floor: number) =>
     getAction<FloorLayout>(`/api/locations/layout?floor=${floor}`),

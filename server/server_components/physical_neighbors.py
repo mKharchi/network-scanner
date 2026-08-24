@@ -35,7 +35,7 @@ def location_coords(location: Dict[str, Any]) -> Dict[str, Any]:
         "zone_name": location.get("zone_name"),
         "aisle": _coord(location, "aisle"),
         "table": _coord(location, "table", "table_no"),
-        "row": _coord(location, "row", "row_no"),
+        "row": _coord(location, "column", "row", "row_no"),
         "position": _coord(location, "position"),
     }
 
