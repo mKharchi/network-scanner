@@ -241,6 +241,13 @@ function Sidebar({ isOpen = false, newAlertCount = 0, onClose }: SidebarProps) {
           <IconClients />
           Clients
         </NavLink>
+        <NavLink
+          to="/locations"
+          className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
+        >
+          <span className="nav-item__icon" aria-hidden="true">⌖</span>
+          Locations
+        </NavLink>
 
         <span
           className="sidebar__section-label"

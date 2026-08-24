@@ -1,3 +1,20 @@
+CREATE TABLE IF NOT EXISTS locations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    floor INT NOT NULL,
+    zone_type VARCHAR(64) NOT NULL,
+    zone_name VARCHAR(255) NULL,
+    aisle INT NULL,
+    table_no INT NULL,
+    row_no INT NULL,
+    position INT NULL,
+    label VARCHAR(255) NOT NULL UNIQUE,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_location_position
+        (floor, zone_type, zone_name, aisle, table_no, row_no, position),
+    INDEX idx_locations_floor (floor),
+    INDEX idx_locations_zone (zone_type, zone_name)
+);
+
 CREATE TABLE IF NOT EXISTS clients (
     id INT AUTO_INCREMENT PRIMARY KEY,
     client_id VARCHAR(50) NOT NULL UNIQUE,
@@ -8,9 +25,30 @@ CREATE TABLE IF NOT EXISTS clients (
     os_release VARCHAR(100),
     os_version VARCHAR(255),
     os_machine VARCHAR(100),
+    location_id INT NULL,
+    health_cpu_percent DOUBLE NULL,
+    health_memory_percent DOUBLE NULL,
+    health_disk_percent DOUBLE NULL,
+    health_updated_at DATETIME NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-        ON UPDATE CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (location_id)
+        REFERENCES locations(id)
+        ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS client_location_history (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    client_id INT NOT NULL,
+    location_id INT NOT NULL,
+    assigned_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    unassigned_at DATETIME NULL,
+    assigned_by VARCHAR(255) NULL,
+    FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+    FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE RESTRICT,
+    INDEX idx_location_history_client (client_id, assigned_at),
+    INDEX idx_location_history_location (location_id, assigned_at)
 );
 
 CREATE TABLE IF NOT EXISTS connections (
@@ -53,6 +91,48 @@ CREATE TABLE IF NOT EXISTS screenshots (
     FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
     INDEX idx_screenshots_client_time (client_id, uploaded_at),
     INDEX idx_screenshots_command (command_id)
+);
+
+CREATE TABLE IF NOT EXISTS actions (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    action_id VARCHAR(100) NOT NULL UNIQUE,
+    action_type VARCHAR(64) NOT NULL,
+    requested_by VARCHAR(255) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    started_at DATETIME NULL,
+    completed_at DATETIME NULL,
+    expires_at DATETIME NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+    parameters LONGTEXT NULL,
+    result LONGTEXT NULL,
+    error LONGTEXT NULL,
+    INDEX idx_actions_action_type (action_type),
+    INDEX idx_actions_status (status),
+    INDEX idx_actions_created_at (created_at)
+);
+
+CREATE TABLE IF NOT EXISTS action_targets (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    action_id BIGINT NOT NULL,
+    client_id INT NOT NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+    sent_at DATETIME NULL,
+    acknowledged_at DATETIME NULL,
+    started_at DATETIME NULL,
+    completed_at DATETIME NULL,
+    result LONGTEXT NULL,
+    error LONGTEXT NULL,
+    target_order INT NOT NULL DEFAULT 0,
+    FOREIGN KEY (action_id)
+        REFERENCES actions(id)
+        ON DELETE CASCADE,
+    FOREIGN KEY (client_id)
+        REFERENCES clients(id)
+        ON DELETE CASCADE,
+    UNIQUE KEY uq_action_targets_action_client (action_id, client_id),
+    INDEX idx_action_targets_action (action_id),
+    INDEX idx_action_targets_client (client_id),
+    INDEX idx_action_targets_status (status)
 );
 
 CREATE TABLE IF NOT EXISTS alerts (
