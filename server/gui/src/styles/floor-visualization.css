@@ -113,7 +113,7 @@
 
 .floor-vis__stairs {
   width: 100%;
-  min-height: 8rem;
+  min-height: 18.5rem;
   display: grid;
   place-items: center;
   gap: var(--space-1);

@@ -459,7 +459,9 @@ export function LocationsPage() {
                             <span className="floor-vis__table-label">
                               {table.label || "Stairs"}
                             </span>
-                            <span>Not a PC position</span>
+                            <span style={{
+                              marginBottom:"1rem"
+                            }}>Not a PC position</span>
                           </button>
                         ) : (
                           <>
