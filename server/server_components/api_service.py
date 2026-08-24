@@ -20,6 +20,7 @@ except ImportError:
     from server_components.network_scan_storage import DEFAULT_STORAGE_DIR
     NETWORK_SCAN_STORAGE_DIR = Path(os.getenv("NETWORK_SCAN_STORAGE_DIR", DEFAULT_STORAGE_DIR))
 
+from server_components.center_layout import ASSIGNABLE_LOCATION_TYPES, LOCATION_TYPE_PC_POSITION
 from server_components.physical_layout import available_floors, build_floor_layout
 from server_components.physical_neighbors import classify_physical_neighbor, neighbor_sort_key
 from server_components.client_health import health_payload
@@ -47,17 +48,24 @@ def _format_mac(mac: Optional[str]) -> Optional[str]:
 def _location_from_row(row: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     if not row:
         return None
+    location_type = row.get("location_type") or LOCATION_TYPE_PC_POSITION
+    column = row.get("row_no")
     location = {
         "id": row.get("id"),
         "floor": row.get("floor"),
+        "location_type": location_type,
         "zone_type": row.get("zone_type"),
         "zone_name": row.get("zone_name"),
         "aisle": row.get("aisle"),
         "table": row.get("table_no"),
-        "row": row.get("row_no"),
+        "row": column,
+        "column": column,
         "position": row.get("position"),
         "label": row.get("label"),
+        "assignable": location_type in ASSIGNABLE_LOCATION_TYPES,
     }
+    if row.get("hostname") is not None:
+        location["hostname"] = row["hostname"]
     if row.get("client_id") is not None:
         location["client_id"] = row["client_id"]
         location["client_state"] = row.get("client_state", "OFFLINE")
@@ -127,6 +135,7 @@ def _client_location_from_row(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             "floor": row.get("location_floor"),
             "zone_type": row.get("location_zone_type"),
             "zone_name": row.get("location_zone_name"),
+            "location_type": row.get("location_type") or LOCATION_TYPE_PC_POSITION,
             "aisle": row.get("location_aisle"),
             "table_no": row.get("location_table"),
             "row_no": row.get("location_row"),
@@ -137,14 +146,14 @@ def _client_location_from_row(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     )
 
 
-def list_locations() -> List[Dict[str, Any]]:
+def list_locations(*, assignable_only: bool = False) -> List[Dict[str, Any]]:
     conn = get_connection()
     if not conn:
         return []
     try:
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
-            """SELECT l.*, c.client_id, c.mac,
+            """SELECT l.*, c.client_id, c.hostname, c.mac,
                       c.health_cpu_percent, c.health_memory_percent,
                       c.health_disk_percent, c.health_updated_at
                FROM locations l LEFT JOIN clients c ON c.location_id = l.id
@@ -168,6 +177,8 @@ def list_locations() -> List[Dict[str, Any]]:
                     open_alert_severity=alert_severities.get(row["client_id"]),
                 )
             locations.append(_location_from_row(row))
+        if assignable_only:
+            return [item for item in locations if item and item.get("assignable")]
         return locations
     finally:
         conn.close()
@@ -187,7 +198,7 @@ def get_location(location_id: int) -> Optional[Dict[str, Any]]:
     try:
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
-            """SELECT l.*, c.client_id, c.mac,
+            """SELECT l.*, c.client_id, c.hostname, c.mac,
                       c.health_cpu_percent, c.health_memory_percent,
                       c.health_disk_percent, c.health_updated_at
                FROM locations l LEFT JOIN clients c ON c.location_id = l.id
@@ -353,6 +364,10 @@ def assign_client_location(
         location = cursor.fetchone()
         if not location:
             raise ValueError(f"Location '{location_id}' not found.")
+        if (location.get("location_type") or LOCATION_TYPE_PC_POSITION) not in ASSIGNABLE_LOCATION_TYPES:
+            raise ValueError(
+                f"Location '{location.get('label') or location_id}' is not an assignable PC position."
+            )
         cursor.execute(
             "SELECT client_id, hostname FROM clients WHERE location_id = %s AND client_id <> %s",
             (location_id, client_id),
@@ -387,6 +402,7 @@ def create_location(payload: Dict[str, Any]) -> Dict[str, Any]:
         floor = int(payload["floor"])
     except (TypeError, ValueError):
         raise ValueError("Field 'floor' must be an integer.")
+    location_type = str(payload.get("location_type") or LOCATION_TYPE_PC_POSITION)
     conn = get_connection()
     if not conn:
         raise ValueError("Database unavailable.")
@@ -394,17 +410,18 @@ def create_location(payload: Dict[str, Any]) -> Dict[str, Any]:
         cursor = conn.cursor()
         cursor.execute(
             """INSERT INTO locations
-               (floor, zone_type, zone_name, aisle, table_no, row_no, position, label)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+               (floor, zone_type, zone_name, aisle, table_no, row_no, position, label, location_type)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             (
                 floor,
                 str(payload["zone_type"]),
                 payload.get("zone_name"),
                 payload.get("aisle"),
                 payload.get("table"),
-                payload.get("row"),
+                payload.get("column", payload.get("row")),
                 payload.get("position"),
                 str(payload["label"]),
+                location_type,
             ),
         )
         location_id = cursor.lastrowid
@@ -643,6 +660,7 @@ def list_clients(
                    c.health_disk_percent, c.health_updated_at,
                    l.id AS location_id, l.floor AS location_floor,
                    l.zone_type AS location_zone_type, l.zone_name AS location_zone_name,
+                   l.location_type AS location_type,
                    l.aisle AS location_aisle, l.table_no AS location_table,
                    l.row_no AS location_row, l.position AS location_position,
                    l.label AS location_label
@@ -741,6 +759,7 @@ def get_client_detail(client_id: str) -> Optional[Dict[str, Any]]:
                    c.health_disk_percent, c.health_updated_at,
                    l.id AS location_id, l.floor AS location_floor,
                    l.zone_type AS location_zone_type, l.zone_name AS location_zone_name,
+                   l.location_type AS location_type,
                    l.aisle AS location_aisle, l.table_no AS location_table,
                    l.row_no AS location_row, l.position AS location_position,
                    l.label AS location_label

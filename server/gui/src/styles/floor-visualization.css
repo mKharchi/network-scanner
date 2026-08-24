@@ -29,8 +29,16 @@
 .floor-vis__rooms,
 .floor-vis__aisles {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-4);
   margin-bottom: var(--space-5);
+}
+
+@media (max-width: 720px) {
+  .floor-vis__rooms,
+  .floor-vis__aisles {
+    grid-template-columns: 1fr;
+  }
 }
 
 .floor-vis__room,
@@ -71,32 +79,80 @@
   background: var(--surface-muted);
 }
 
-.floor-vis__row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
+.floor-vis__columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-5);
   margin-top: var(--space-2);
+  position: relative;
+}
+
+.floor-vis__columns::before {
+  content: "⇄";
+  position: absolute;
+  left: 50%;
+  top: 52%;
+  transform: translate(-50%, -50%);
+  color: var(--text-faint);
+  font-size: var(--font-sm);
+  pointer-events: none;
+}
+
+.floor-vis__column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
 }
 
 .floor-vis__stations {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: var(--space-2);
 }
 
+.floor-vis__stairs {
+  width: 100%;
+  min-height: 8rem;
+  display: grid;
+  place-items: center;
+  gap: var(--space-1);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: var(--font-xs);
+}
+
 .station {
-  width: 2.75rem;
-  min-height: 2.75rem;
+  width: 100%;
+  min-height: 3.4rem;
   border-radius: var(--radius-sm);
   border: 1px solid var(--station-empty-border);
   background: var(--station-empty);
   color: var(--text);
   cursor: pointer;
   display: grid;
-  place-items: center;
+  align-content: center;
+  justify-items: center;
   font-size: var(--font-xs);
   font-weight: 600;
   padding: var(--space-1);
+}
+
+.station__name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.station__meta {
+  font-size: 0.65rem;
+  font-weight: 500;
+  color: inherit;
+  opacity: 0.8;
 }
 
 .station--healthy {

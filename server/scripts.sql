@@ -8,11 +8,13 @@ CREATE TABLE IF NOT EXISTS locations (
     row_no INT NULL,
     position INT NULL,
     label VARCHAR(255) NOT NULL UNIQUE,
+    location_type VARCHAR(32) NOT NULL DEFAULT 'pc_position',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uq_location_position
         (floor, zone_type, zone_name, aisle, table_no, row_no, position),
     INDEX idx_locations_floor (floor),
-    INDEX idx_locations_zone (zone_type, zone_name)
+    INDEX idx_locations_zone (zone_type, zone_name),
+    INDEX idx_locations_type (location_type)
 );
 
 CREATE TABLE IF NOT EXISTS clients (

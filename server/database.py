@@ -71,6 +71,23 @@ def _ensure_client_health_columns(cursor):
             cursor.execute(f"ALTER TABLE clients ADD COLUMN {column_name} {definition}")
 
 
+def _ensure_location_type_column(cursor):
+    """Distinguish assignable PC seats from rooms, aisles, tables, and stairs."""
+    cursor.execute(
+        """
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'locations'
+        """
+    )
+    existing_columns = {row[0] for row in cursor.fetchall()}
+    if "location_type" not in existing_columns:
+        cursor.execute(
+            "ALTER TABLE locations ADD COLUMN location_type VARCHAR(32) NOT NULL DEFAULT 'pc_position'"
+        )
+
+
 def initiate_db():
     """
     Initialize the MySQL database schema by executing scripts.sql.
@@ -99,8 +116,21 @@ def initiate_db():
         _ensure_network_device_metadata_columns(cursor)
         _ensure_client_location_column(cursor)
         _ensure_client_health_columns(cursor)
+        _ensure_location_type_column(cursor)
 
         connection.commit()
+        try:
+            from server_components.center_layout import seed_center_layout
+
+            seed_result = seed_center_layout(connection)
+            print(
+                "Center layout seed: "
+                f"{seed_result['created']} new records, "
+                f"{seed_result['pc_positions']} PC positions."
+            )
+        except Exception as seed_error:
+            print(f"Center layout seed skipped: {seed_error}")
+
         print("Database initialized successfully.")
 
     except mysql.connector.Error as error:
