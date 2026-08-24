@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, type ManagedClientSummary } from "../api/client";
 import { useFetch } from "../hooks/useFetch";
 import { ClientStatusBadge } from "../components/Badge";
@@ -17,6 +17,8 @@ import { formatRelative } from "../utils/format";
 interface FilterBarProps {
   stateFilter: string;
   onStateFilter: (v: string) => void;
+  locationFilter: string;
+  onLocationFilter: (v: string) => void;
   search: string;
   onSearch: (v: string) => void;
 }
@@ -24,6 +26,8 @@ interface FilterBarProps {
 function FilterBar({
   stateFilter,
   onStateFilter,
+  locationFilter,
+  onLocationFilter,
   search,
   onSearch,
 }: FilterBarProps) {
@@ -69,6 +73,41 @@ function FilterBar({
               cursor: "pointer",
               transition:
                 "background var(--transition-fast), color var(--transition-fast)",
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          borderRadius: "var(--radius)",
+          border: "1px solid var(--border)",
+          overflow: "hidden",
+          background: "var(--surface)",
+        }}
+      >
+        {[
+          { value: "", label: "All locations" },
+          { value: "unassigned", label: "Unassigned" },
+        ].map(({ value, label }) => (
+          <button
+            key={value || "all-locations"}
+            onClick={() => onLocationFilter(value)}
+            aria-pressed={locationFilter === value}
+            style={{
+              padding: "0 var(--space-4)",
+              minHeight: 36,
+              border: "none",
+              background:
+                locationFilter === value ? "var(--primary)" : "transparent",
+              color: locationFilter === value ? "#fff" : "var(--text-muted)",
+              fontFamily: "var(--font-sans)",
+              fontSize: "var(--font-sm)",
+              fontWeight: locationFilter === value ? 600 : 400,
+              cursor: "pointer",
             }}
           >
             {label}
@@ -126,6 +165,15 @@ const columns: Column<ManagedClientSummary>[] = [
     render: (c) => <ClientStatusBadge state={c.connection.state} />,
   },
   {
+    key: "location",
+    label: "Location",
+    render: (c) => (
+      <span style={{ color: c.location ? "var(--text)" : "var(--warning)" }}>
+        {c.location?.label || "Location not assigned"}
+      </span>
+    ),
+  },
+  {
     key: "os",
     label: "OS",
     render: (c) =>
@@ -152,7 +200,9 @@ const columns: Column<ManagedClientSummary>[] = [
 // ── Clients page ──────────────────────────────────────────────────
 export function ClientsPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [stateFilter, setStateFilter] = useState("");
+  const [locationFilter, setLocationFilter] = useState(searchParams.get("location") || "");
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState("hostname");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -162,8 +212,9 @@ export function ClientsPage() {
       api.getClients({
         state: stateFilter || undefined,
         search: search || undefined,
+        location: locationFilter || undefined,
       }),
-    [stateFilter, search],
+    [stateFilter, search, locationFilter],
     ['app:client_status', 'client_status'],
   );
 
@@ -222,6 +273,14 @@ export function ClientsPage() {
       <FilterBar
         stateFilter={stateFilter}
         onStateFilter={setStateFilter}
+        locationFilter={locationFilter}
+        onLocationFilter={(value) => {
+          setLocationFilter(value);
+          const next = new URLSearchParams(searchParams);
+          if (value) next.set("location", value);
+          else next.delete("location");
+          setSearchParams(next, { replace: true });
+        }}
         search={search}
         onSearch={setSearch}
       />
@@ -237,8 +296,10 @@ export function ClientsPage() {
       ) : items.length === 0 ? (
         <EmptyState
           icon="💻"
-          title="No managed clients registered"
-          body="Monitoring agents will appear here once they connect to the server."
+          title={locationFilter === "unassigned" ? "No unassigned clients" : "No managed clients registered"}
+          body={locationFilter === "unassigned"
+            ? "Newly registered agents appear here until an administrator assigns a physical location."
+            : "Monitoring agents will appear here once they connect to the server."}
         />
       ) : (
         <DataTable

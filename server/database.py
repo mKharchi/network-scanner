@@ -34,6 +34,60 @@ def _ensure_network_device_metadata_columns(cursor):
             )
 
 
+def _ensure_client_location_column(cursor):
+    """Add the nullable location relationship to installations with older schema."""
+    cursor.execute(
+        """
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'clients'
+        """
+    )
+    existing_columns = {row[0] for row in cursor.fetchall()}
+    if "location_id" not in existing_columns:
+        cursor.execute("ALTER TABLE clients ADD COLUMN location_id INT NULL")
+
+
+def _ensure_client_health_columns(cursor):
+    """Store the last health snapshot used by the center visualization."""
+    cursor.execute(
+        """
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'clients'
+        """
+    )
+    existing_columns = {row[0] for row in cursor.fetchall()}
+    columns = {
+        "health_cpu_percent": "DOUBLE NULL",
+        "health_memory_percent": "DOUBLE NULL",
+        "health_disk_percent": "DOUBLE NULL",
+        "health_updated_at": "DATETIME NULL",
+    }
+    for column_name, definition in columns.items():
+        if column_name not in existing_columns:
+            cursor.execute(f"ALTER TABLE clients ADD COLUMN {column_name} {definition}")
+
+
+def _ensure_location_type_column(cursor):
+    """Distinguish assignable PC seats from rooms, aisles, tables, and stairs."""
+    cursor.execute(
+        """
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'locations'
+        """
+    )
+    existing_columns = {row[0] for row in cursor.fetchall()}
+    if "location_type" not in existing_columns:
+        cursor.execute(
+            "ALTER TABLE locations ADD COLUMN location_type VARCHAR(32) NOT NULL DEFAULT 'pc_position'"
+        )
+
+
 def initiate_db():
     """
     Initialize the MySQL database schema by executing scripts.sql.
@@ -60,8 +114,23 @@ def initiate_db():
                 cursor.execute(statement)
 
         _ensure_network_device_metadata_columns(cursor)
+        _ensure_client_location_column(cursor)
+        _ensure_client_health_columns(cursor)
+        _ensure_location_type_column(cursor)
 
         connection.commit()
+        try:
+            from server_components.center_layout import seed_center_layout
+
+            seed_result = seed_center_layout(connection)
+            print(
+                "Center layout seed: "
+                f"{seed_result['created']} new records, "
+                f"{seed_result['pc_positions']} PC positions."
+            )
+        except Exception as seed_error:
+            print(f"Center layout seed skipped: {seed_error}")
+
         print("Database initialized successfully.")
 
     except mysql.connector.Error as error:

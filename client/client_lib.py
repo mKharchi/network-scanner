@@ -9,10 +9,13 @@ import select
 import sqlite3
 import subprocess
 import tempfile
+import threading
 import uuid
 from datetime import datetime, timedelta
 
 import psutil
+
+from action_framework import ActionManager, ActionType, normalize_action_name
 
 # ============================================================
 # SYSTEM INFORMATION
@@ -817,6 +820,233 @@ def get_activity_log(period="1d"):
 # ============================================================
 
 
+def _handle_get_system_info(_message, **_context):
+    return get_system_info()
+
+
+def _handle_get_network_info(_message, **_context):
+    return get_network_info()
+
+
+def _handle_get_cpu_info(_message, **_context):
+    return get_cpu_info()
+
+
+def _handle_get_memory_info(_message, **_context):
+    return get_memory_info()
+
+
+def _handle_get_disk_info(_message, **_context):
+    return get_disk_info()
+
+
+def _handle_get_processes(_message, **_context):
+    return get_processes()
+
+
+def _handle_kill_process(message, **_context):
+    process_name = message.get("args")
+    if not process_name:
+        return {"error": "Process name parameter missing"}
+    return kill_process(process_name)
+
+
+def _handle_start_process(message, **_context):
+    path = message.get("args")
+    if not path:
+        return {"error": "Process path parameter missing"}
+    return start_process(path)
+
+
+def _handle_power_action(message, *, action_type, **_context):
+    """Schedule a power action after its acknowledgement can be sent."""
+    args = message.get("args") or {}
+    if not isinstance(args, dict):
+        args = {}
+    try:
+        delay = max(1, min(int(args.get("delay_seconds", 5)), 60))
+    except (TypeError, ValueError):
+        return {"status": "error", "message": "delay_seconds must be an integer between 1 and 60."}
+
+    system = platform.system()
+    if system == "Windows":
+        command = ["shutdown", "/s" if action_type == ActionType.SHUTDOWN.value else "/r", "/t", str(delay)]
+    elif system in {"Linux", "Darwin"}:
+        command = ["shutdown", "-h" if action_type == ActionType.SHUTDOWN.value else "-r", f"+{max(1, delay // 60)}"]
+    else:
+        return {"status": "error", "message": f"Power actions are not supported on {system}."}
+
+    def run_power_command():
+        try:
+            subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except (OSError, ValueError) as error:
+            print(f"[ACTION] Could not schedule {action_type}: {error}")
+
+    timer = threading.Timer(0.25, run_power_command)
+    timer.daemon = True
+    timer.start()
+    return {
+        "status": "ok",
+        "action": action_type,
+        "state": "scheduled",
+        "delay_seconds": delay,
+    }
+
+
+def _handle_shutdown(message, **context):
+    return _handle_power_action(message, action_type=ActionType.SHUTDOWN.value, **context)
+
+
+def _handle_restart(message, **context):
+    return _handle_power_action(message, action_type=ActionType.RESTART.value, **context)
+
+
+def _handle_refresh_health(_message, **_context):
+    payload = {
+        "status": "ok",
+        "health": {
+            "cpu_percent": psutil.cpu_percent(interval=0.1),
+            "memory_percent": psutil.virtual_memory().percent,
+            "disk_percent": psutil.disk_usage("/").percent,
+        },
+    }
+    location = load_client_location()
+    if location:
+        payload["location"] = location
+    return payload
+
+
+def _handle_collect_diagnostics(_message, **_context):
+    return {
+        "status": "ok",
+        "system": get_system_info(),
+        "health": _handle_refresh_health(_message)["health"],
+        "process_count": len(get_processes()),
+    }
+
+
+def _handle_update_location(message, **_context):
+    location = message.get("args")
+    if not isinstance(location, dict) or not location.get("id") or not location.get("label"):
+        return {"status": "error", "message": "A valid location object is required."}
+    location_path = os.path.join(os.path.dirname(__file__), "client_location.json")
+    temporary_path = f"{location_path}.tmp"
+    try:
+        with open(temporary_path, "w", encoding="utf-8") as location_file:
+            json.dump(location, location_file, ensure_ascii=False, sort_keys=True)
+        os.replace(temporary_path, location_path)
+    except OSError as error:
+        return {"status": "error", "message": f"Could not persist location: {error}"}
+    return {"status": "ok", "location": location}
+
+
+def _handle_get_activity_log(message, **_context):
+    period = message.get("args", "1d")
+    return get_activity_log(period)
+
+
+def _handle_quarantine_client(message, *, quarantine_manager=None, **_context):
+    args = message.get("args") or {}
+    reason = (
+        args.get("reason", "Administrator requested network isolation")
+        if isinstance(args, dict)
+        else str(args)
+    )
+    duration = args.get("duration_minutes") if isinstance(args, dict) else None
+    cmd_id = args.get("command_id") if isinstance(args, dict) else None
+    if quarantine_manager:
+        return quarantine_manager.quarantine_endpoint(
+            reason=reason, duration_minutes=duration, command_id=cmd_id
+        )
+    return {"status": "error", "message": "Quarantine manager is not initialized"}
+
+
+def _handle_release_client(message, *, quarantine_manager=None, **_context):
+    args = message.get("args") or {}
+    reason = (
+        args.get("reason", "Administrator released network isolation")
+        if isinstance(args, dict)
+        else str(args)
+    )
+    cmd_id = args.get("command_id") if isinstance(args, dict) else None
+    if quarantine_manager:
+        return quarantine_manager.release_quarantine(reason=reason, command_id=cmd_id)
+    return {"status": "error", "message": "Quarantine manager is not initialized"}
+
+
+def _handle_get_quarantine_status(_message, *, quarantine_manager=None, **_context):
+    if quarantine_manager:
+        return quarantine_manager.get_status()
+    return {"status": "error", "message": "Quarantine manager is not initialized"}
+
+
+def _handle_isolate_device(message, *, network_state_manager=None, **_context):
+    args = message.get("args") or {}
+    reason = (
+        args.get("reason", "Administrator requested static device isolation")
+        if isinstance(args, dict)
+        else str(args)
+    )
+    if network_state_manager:
+        # The command intentionally removes the active route and may prevent
+        # this response from reaching the server.
+        return network_state_manager.isolate_static_ip(reason=reason, enabled=True)
+    return {"status": "error", "message": "Network state manager is not initialized"}
+
+
+def _handle_get_device_isolation_status(_message, *, network_state_manager=None, **_context):
+    if network_state_manager:
+        return {"status": "ok", "data": network_state_manager.get_lifecycle_state()}
+    return {"status": "error", "message": "Network state manager is not initialized"}
+
+
+def _handle_update_forbidden_process_policy(message, *, process_monitor=None, **_context):
+    rules = message.get("args", [])
+    if process_monitor and isinstance(rules, list):
+        process_monitor.set_rules(rules)
+        return {"status": "ok", "rules_loaded": len(rules)}
+    return {"status": "error", "message": "Process monitor not initialized or invalid rules format"}
+
+
+def _handle_ping(_message, **_context):
+    return {"status": "ok"}
+
+
+def _handle_disconnect(_message, **_context):
+    return {"status": "OK"}
+
+
+ACTION_MANAGER = ActionManager()
+ACTION_MANAGER.register(ActionType.GET_SYSTEM_INFO.value, _handle_get_system_info)
+ACTION_MANAGER.register(ActionType.GET_NETWORK_INFO.value, _handle_get_network_info)
+ACTION_MANAGER.register(ActionType.GET_CPU_INFO.value, _handle_get_cpu_info)
+ACTION_MANAGER.register(ActionType.GET_MEMORY_INFO.value, _handle_get_memory_info)
+ACTION_MANAGER.register(ActionType.GET_DISK_INFO.value, _handle_get_disk_info)
+ACTION_MANAGER.register(ActionType.GET_PROCESSES.value, _handle_get_processes)
+ACTION_MANAGER.register(ActionType.KILL_PROCESS.value, _handle_kill_process)
+ACTION_MANAGER.register(ActionType.START_PROCESS.value, _handle_start_process)
+ACTION_MANAGER.register(ActionType.SHUTDOWN.value, _handle_shutdown)
+ACTION_MANAGER.register(ActionType.RESTART.value, _handle_restart)
+ACTION_MANAGER.register(ActionType.REFRESH_HEALTH.value, _handle_refresh_health)
+ACTION_MANAGER.register(ActionType.COLLECT_DIAGNOSTICS.value, _handle_collect_diagnostics)
+ACTION_MANAGER.register(ActionType.GET_ACTIVITY_LOG.value, _handle_get_activity_log)
+ACTION_MANAGER.register(ActionType.QUARANTINE_CLIENT.value, _handle_quarantine_client)
+ACTION_MANAGER.register(ActionType.RELEASE_CLIENT.value, _handle_release_client)
+ACTION_MANAGER.register(ActionType.GET_QUARANTINE_STATUS.value, _handle_get_quarantine_status)
+ACTION_MANAGER.register(ActionType.ISOLATE_DEVICE.value, _handle_isolate_device)
+ACTION_MANAGER.register(
+    ActionType.GET_DEVICE_ISOLATION_STATUS.value,
+    _handle_get_device_isolation_status,
+)
+ACTION_MANAGER.register(
+    ActionType.UPDATE_FORBIDDEN_PROCESS_POLICY.value,
+    _handle_update_forbidden_process_policy,
+)
+ACTION_MANAGER.register(ActionType.PING.value, _handle_ping)
+ACTION_MANAGER.register(ActionType.DISCONNECT.value, _handle_disconnect)
+ACTION_MANAGER.register(ActionType.UPDATE_LOCATION.value, _handle_update_location)
+
+
 def handle_command(
     message,
     *,
@@ -827,104 +1057,29 @@ def handle_command(
     if not isinstance(message, dict):
         return {"error": "Invalid message format"}
 
-    command = message.get("command")
-
-    if command == "GET_SYSTEM_INFO":
-        return get_system_info()
-
-    elif command == "GET_NETWORK_INFO":
-        return get_network_info()
-
-    elif command == "GET_CPU_INFO":
-        return get_cpu_info()
-
-    elif command == "GET_MEMORY_INFO":
-        return get_memory_info()
-
-    elif command == "GET_DISK_INFO":
-        return get_disk_info()
-
-    elif command == "GET_PROCESSES":
-        return get_processes()
-
-    elif command == "KILL_PROCESS":
-        process_name = message.get("args")
-        if not process_name:
-            return {"error": "Process name parameter missing"}
-        return kill_process(process_name)
-
-    elif command == "START_PROCESS":
-        path = message.get("args")
-        if not path:
-            return {"error": "Process path parameter missing"}
-        return start_process(path)
-
-    elif command == "GET_ACTIVITY_LOG":
-        period = message.get("args", "1d")
-        return get_activity_log(period)
-
-    elif command == "QUARANTINE_CLIENT":
-        args = message.get("args") or {}
-        reason = args.get("reason", "Administrator requested network isolation") if isinstance(args, dict) else str(args)
-        duration = args.get("duration_minutes") if isinstance(args, dict) else None
-        cmd_id = args.get("command_id") if isinstance(args, dict) else None
-        if quarantine_manager:
-            return quarantine_manager.quarantine_endpoint(reason=reason, duration_minutes=duration, command_id=cmd_id)
-        return {"status": "error", "message": "Quarantine manager is not initialized"}
-
-    elif command == "RELEASE_CLIENT":
-        args = message.get("args") or {}
-        reason = args.get("reason", "Administrator released network isolation") if isinstance(args, dict) else str(args)
-        cmd_id = args.get("command_id") if isinstance(args, dict) else None
-        if quarantine_manager:
-            return quarantine_manager.release_quarantine(reason=reason, command_id=cmd_id)
-        return {"status": "error", "message": "Quarantine manager is not initialized"}
-
-    elif command == "GET_QUARANTINE_STATUS":
-        if quarantine_manager:
-            return quarantine_manager.get_status()
-        return {"status": "error", "message": "Quarantine manager is not initialized"}
-
-    elif command == "ISOLATE_DEVICE":
-        args = message.get("args") or {}
-        reason = (
-            args.get("reason", "Administrator requested static device isolation")
-            if isinstance(args, dict)
-            else str(args)
-        )
-        if network_state_manager:
-            # The command intentionally removes the active route and may prevent
-            # this response from reaching the server.
-            return network_state_manager.isolate_static_ip(reason=reason, enabled=True)
-        return {"status": "error", "message": "Network state manager is not initialized"}
-
-    elif command == "GET_DEVICE_ISOLATION_STATUS":
-        if network_state_manager:
-            return {
-                "status": "ok",
-                "data": network_state_manager.get_lifecycle_state(),
-            }
-        return {"status": "error", "message": "Network state manager is not initialized"}
-
-    elif command == "UPDATE_FORBIDDEN_PROCESS_POLICY":
-        rules = message.get("args", [])
-        if process_monitor and isinstance(rules, list):
-            process_monitor.set_rules(rules)
-            return {"status": "ok", "rules_loaded": len(rules)}
-        return {"status": "error", "message": "Process monitor not initialized or invalid rules format"}
-
-    elif command == "PING":
-        return {"status": "ok"}
-
-    elif command == "DISCONNECT":
-        return {"status": "OK"}
-
-    return {"error": f"Unknown command: {command}"}
+    command = normalize_action_name(message.get("command"))
+    return ACTION_MANAGER.dispatch(
+        {**message, "command": command},
+        quarantine_manager=quarantine_manager,
+        process_monitor=process_monitor,
+        network_state_manager=network_state_manager,
+    )
 
 
 # ============================================================
 # REGISTRATION MESSAGE
 # ============================================================
+
+
+def load_client_location():
+    """Load the last server-assigned physical location, if one is cached."""
+    location_path = os.path.join(os.path.dirname(__file__), "client_location.json")
+    try:
+        with open(location_path, "r", encoding="utf-8") as location_file:
+            location = json.load(location_file)
+        return location if isinstance(location, dict) else None
+    except (OSError, json.JSONDecodeError):
+        return None
 
 
 def create_registration_message(ip_address=None, *, agent_role="service"):
@@ -936,6 +1091,9 @@ def create_registration_message(ip_address=None, *, agent_role="service"):
     """
     data = get_system_info(ip_address)
     data["agent_role"] = agent_role
+    location = load_client_location()
+    if location:
+        data["location"] = location
     return {"type": "REGISTER", "data": data}
 
 
