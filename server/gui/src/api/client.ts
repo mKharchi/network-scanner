@@ -99,6 +99,39 @@ async function post<T>(path: string, payload: unknown = {}): Promise<T> {
   return body?.data as T;
 }
 
+async function postAction<T>(path: string, payload: unknown = {}): Promise<T> {
+  const fullUrl = API_ORIGIN.replace(/\/+$/, "") + path;
+  const response = await fetch(fullUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new ApiError(
+      body?.error?.code ?? "UNKNOWN_ERROR",
+      body?.error?.message ?? `HTTP ${response.status}`,
+      response.status,
+    );
+  }
+  return body?.data as T;
+}
+
+async function getAction<T>(path: string): Promise<T> {
+  const response = await fetch(API_ORIGIN.replace(/\/+$/, "") + path, {
+    headers: { Accept: "application/json" },
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new ApiError(
+      body?.error?.code ?? "UNKNOWN_ERROR",
+      body?.error?.message ?? `HTTP ${response.status}`,
+      response.status,
+    );
+  }
+  return body?.data as T;
+}
+
 async function mutate<T>(method: "PUT" | "DELETE", path: string, payload?: unknown): Promise<T> {
   const fullUrl = API_ORIGIN.replace(/\/+$/, "") + BASE + path;
   const response = await fetch(fullUrl, {
@@ -180,6 +213,88 @@ export interface ClientPassiveNeighbourhood {
   observation_count: number;
 }
 
+export interface ClientHealth {
+  status: 'healthy' | 'warning' | 'critical' | 'isolated' | 'offline' | 'empty';
+  cpu_percent: number | null;
+  memory_percent: number | null;
+  disk_percent: number | null;
+  open_alert_severity: string | null;
+  updated_at: string | null;
+}
+
+export interface ClientLocation {
+  id: number;
+  floor: number;
+  location_type?: string;
+  zone_type: string;
+  zone_name: string | null;
+  aisle: number | null;
+  table: number | null;
+  row: number | null;
+  column?: number | null;
+  position: number | null;
+  label: string;
+  assignable?: boolean;
+  hostname?: string | null;
+  client_id?: string;
+  client_state?: 'ONLINE' | 'OFFLINE' | 'ISOLATED';
+  health?: ClientHealth;
+  health_status?: ClientHealth['status'];
+}
+
+export interface ClientLocationHistoryEntry {
+  id: number;
+  assigned_at: string;
+  unassigned_at: string | null;
+  assigned_by: string | null;
+  location: ClientLocation;
+}
+
+export type PhysicalNeighborRelationship =
+  | 'same_row'
+  | 'same_table'
+  | 'neighboring_table'
+  | 'same_zone';
+
+export interface FloorColumn {
+  column: number | null;
+  row?: number | null;
+  stations: ClientLocation[];
+}
+
+export interface FloorTable {
+  table: number | null;
+  kind?: "table" | "stairs";
+  label?: string;
+  location?: ClientLocation;
+  columns: FloorColumn[];
+  rows?: FloorColumn[];
+}
+
+export interface FloorAisle {
+  aisle: number | null;
+  tables: FloorTable[];
+}
+
+export interface FloorLayout {
+  floor: number;
+  available_floors: number[];
+  rooms: ClientLocation[];
+  aisles: FloorAisle[];
+  shows_clients: boolean;
+}
+
+export interface PhysicalNeighbor {
+  client_id: string;
+  hostname: string;
+  ip_address: string | null;
+  mac_address: string | null;
+  state: 'ONLINE' | 'OFFLINE' | 'ISOLATED';
+  relationship: PhysicalNeighborRelationship;
+  distance: number;
+  location: ClientLocation;
+}
+
 export interface ManagedClientSummary {
   id: string;
   database_id: number;
@@ -188,6 +303,8 @@ export interface ManagedClientSummary {
   mac_address: string;
   os: ClientOS;
   connection: ClientConnection;
+  location: ClientLocation | null;
+  health?: ClientHealth;
   created_at: string;
   updated_at: string;
 }
@@ -317,7 +434,7 @@ export interface ClientScreenshotCaptureResult {
 
 export interface DashboardData {
   generated_at: string;
-  clients: { online: number; isolated?: number; offline: number; total: number };
+  clients: { online: number; isolated?: number; offline: number; total: number; unassigned?: number };
   alerts: { new: number; critical: number };
   latest_scan: {
     completed_at: string;
@@ -337,6 +454,7 @@ export const api = {
   getClients: (params?: {
     state?: string;
     search?: string;
+    location?: string;
     limit?: number;
     cursor?: string;
   }) =>
@@ -345,6 +463,7 @@ export const api = {
       {
         state: params?.state ?? "",
         search: params?.search ?? "",
+        location: params?.location ?? "",
         limit: String(params?.limit ?? 50),
         cursor: params?.cursor ?? "",
       },
@@ -360,6 +479,48 @@ export const api = {
       alert_counts: { new: number; total: number };
       latest_activity_log: ActivityLogRecord | null;
     }>(`/clients/${encodeURIComponent(clientId)}`),
+
+  getLocations: (params?: { assignable?: boolean }) =>
+    getAction<{ items: ClientLocation[] }>(
+      params?.assignable ? "/api/locations?assignable=1" : "/api/locations",
+    ),
+
+  getLocationLayout: (floor: number) =>
+    getAction<FloorLayout>(`/api/locations/layout?floor=${floor}`),
+
+  createLocation: (payload: Omit<ClientLocation, "id" | "client_id">) =>
+    postAction<ClientLocation>("/api/locations", payload),
+
+  assignClientLocation: (clientId: string, locationId: number) =>
+    (async () => {
+      const response = await fetch(
+        `${API_ORIGIN.replace(/\/+$/, "")}/api/clients/${encodeURIComponent(clientId)}/location`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ location_id: locationId }),
+        },
+      );
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new ApiError(
+          body?.error?.code ?? "UNKNOWN_ERROR",
+          body?.error?.message ?? `HTTP ${response.status}`,
+          response.status,
+        );
+      }
+      return body?.data as ClientLocation;
+    })(),
+
+  getClientLocationHistory: (clientId: string) =>
+    getAction<{ items: ClientLocationHistoryEntry[] }>(
+      `/api/clients/${encodeURIComponent(clientId)}/location-history`,
+    ),
+
+  getPhysicalNeighbors: (clientId: string) =>
+    getAction<{ items: PhysicalNeighbor[] }>(
+      `/api/clients/${encodeURIComponent(clientId)}/physical-neighbors`,
+    ),
 
   getClientScreenshots: (clientId: string, params?: { limit?: number }) =>
     get<{ items: ClientScreenshot[]; next_cursor: string | null }>(
@@ -556,25 +717,29 @@ export const api = {
 
   runClientCommand: (clientId: string, command: string, args?: any) =>
     (async () => {
-      const baseWithApi = API_ORIGIN.replace(/\/+$/, "") + BASE;
-      const url =
-        baseWithApi + `/clients/${encodeURIComponent(clientId)}/commands`;
-      const resp = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify({ command, args }),
+      const actionId = typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `action-${Date.now()}`;
+      const action = await api.createAction({
+        action_id: actionId,
+        action_type: command === 'REQUEST_SCREENSHOT' ? 'SCREENSHOT' : command,
+        targets: [clientId],
+        parameters: args ?? {},
       });
-      if (!resp.ok) {
-        const body = await resp.json().catch(() => null);
-        const code = body?.error?.code ?? "UNKNOWN_ERROR";
-        const message = body?.error?.message ?? `HTTP ${resp.status}`;
-        throw new ApiError(code, message, resp.status);
-      }
-      return (await resp.json()).data;
+      return (action.result?.targets?.[0]?.result ?? action) as any;
     })(),
+
+  createAction: (payload: {
+    action_type: string;
+    targets: string[];
+    parameters?: any;
+    action_id?: string;
+  }) =>
+    postAction<{
+      action_id: string;
+      status: string;
+      result?: { targets?: { result?: any }[] };
+    }>('/api/actions', payload),
 
   requestClientScreenshot: (clientId: string) =>
     (async () => {

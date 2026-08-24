@@ -1,9 +1,12 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   api,
+  type ClientLocation,
+  type ClientLocationHistoryEntry,
   type ClientPassiveNeighbourhood,
   type ClientScreenshot,
+  type PhysicalNeighbor,
 } from "../api/client";
 import { useFetch } from "../hooks/useFetch";
 import { useToast } from "../hooks/useToast";
@@ -12,6 +15,16 @@ import { Button } from "../components/Button";
 import { SectionCard, MetricCard } from "../components/Card";
 import { Skeleton, ErrorState, Notice, EmptyState } from "../components/States";
 import { formatDateTime, formatRelative } from "../utils/format";
+
+const NEIGHBOR_RELATIONSHIP_LABELS: Record<
+  PhysicalNeighbor["relationship"],
+  string
+> = {
+  same_row: "Same column",
+  same_table: "Facing seat",
+  neighboring_table: "Neighboring table",
+  same_zone: "Same room",
+};
 
 function DetailRow({
   label,
@@ -97,6 +110,33 @@ export function ClientDetailPage() {
     useState<ClientPassiveNeighbourhood | null>(null);
   const [screenshotLoading, setScreenshotLoading] = useState(false);
   const [quarantineLoading, setQuarantineLoading] = useState(false);
+  const [locations, setLocations] = useState<ClientLocation[]>([]);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationSaving, setLocationSaving] = useState(false);
+  const [assignFloor, setAssignFloor] = useState("");
+  const [assignAisle, setAssignAisle] = useState("");
+  const [assignTable, setAssignTable] = useState("");
+  const [assignColumn, setAssignColumn] = useState("");
+  const [assignPosition, setAssignPosition] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    setLocationLoading(true);
+    api
+      .getLocations({ assignable: true })
+      .then((response) => {
+        if (!cancelled) setLocations(response.items);
+      })
+      .catch(() => {
+        if (!cancelled) setLocations([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLocationLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Process management states
   const [processList, setProcessList] = useState<ProcessItem[] | null>(null);
@@ -123,6 +163,78 @@ export function ClientDetailPage() {
     [clientId],
     ["app:client_status"],
   );
+  const { state: locationHistoryState } = useFetch<{
+    items: ClientLocationHistoryEntry[];
+  }>(clientId ? () => api.getClientLocationHistory(clientId) : null, [
+    clientId,
+  ]);
+  const { state: neighborsState, refetch: refetchNeighbors } = useFetch<{
+    items: PhysicalNeighbor[];
+  }>(clientId ? () => api.getPhysicalNeighbors(clientId) : null, [clientId]);
+
+  const availableSeats = useMemo(
+    () =>
+      locations.filter(
+        (location) =>
+          location.assignable !== false &&
+          (!location.client_id || location.client_id === clientId),
+      ),
+    [locations, clientId],
+  );
+
+  const floorOptions = uniqueNumbers(availableSeats.map((item) => item.floor));
+  const aisleOptions = uniqueNumbers(
+    availableSeats
+      .filter((item) => String(item.floor) === assignFloor)
+      .map((item) => item.aisle),
+  );
+  const tableOptions = uniqueNumbers(
+    availableSeats
+      .filter(
+        (item) =>
+          String(item.floor) === assignFloor &&
+          String(item.aisle) === assignAisle,
+      )
+      .map((item) => item.table),
+  ).filter((table) => {
+    // Floor 1, Aisle 1 only contains Table 2.
+    if (assignFloor === "1" && assignAisle === "1") {
+      return table === 2;
+    }
+
+    return true;
+  });
+  const columnOptions = uniqueNumbers(
+    availableSeats
+      .filter(
+        (item) =>
+          String(item.floor) === assignFloor &&
+          String(item.aisle) === assignAisle &&
+          String(item.table) === assignTable,
+      )
+      .map((item) => item.column ?? item.row),
+  );
+  const positionOptions = uniqueNumbers(
+    availableSeats
+      .filter(
+        (item) =>
+          String(item.floor) === assignFloor &&
+          String(item.aisle) === assignAisle &&
+          String(item.table) === assignTable &&
+          String(item.column ?? item.row) === assignColumn,
+      )
+      .map((item) => item.position),
+  );
+
+  const selectedSeat = availableSeats.find(
+    (item) =>
+      String(item.floor) === assignFloor &&
+      String(item.aisle) === assignAisle &&
+      String(item.table) === assignTable &&
+      String(item.column ?? item.row) === assignColumn &&
+      String(item.position) === assignPosition,
+  );
+  const selectedLocationId = selectedSeat ? String(selectedSeat.id) : "";
 
   const executeCommand = async (command: string, args?: any) => {
     if (!clientId) return;
@@ -351,6 +463,39 @@ export function ClientDetailPage() {
   const isOnline = c.connection.state === "ONLINE";
   const isIsolated = c.connection.state === "ISOLATED";
 
+  const assignLocation = async () => {
+    if (!clientId || !selectedLocationId) return;
+    setLocationSaving(true);
+    try {
+      await api.assignClientLocation(clientId, Number(selectedLocationId));
+      addToast({
+        title: "Location assigned",
+        message: `${c.hostname} is now assigned to the selected position.`,
+        severity: "SUCCESS",
+      });
+      setAssignFloor("");
+      setAssignAisle("");
+      setAssignTable("");
+      setAssignColumn("");
+      setAssignPosition("");
+      refetch();
+      refetchNeighbors();
+      api
+        .getLocations({ assignable: true })
+        .then((response) => setLocations(response.items))
+        .catch(() => undefined);
+    } catch (err: any) {
+      addToast({
+        title: "Location assignment failed",
+        message:
+          err?.message || "The selected position may already be occupied.",
+        severity: "CRITICAL",
+      });
+    } finally {
+      setLocationSaving(false);
+    }
+  };
+
   const filteredProcesses = (processList || []).filter((p) => {
     if (!processFilter) return true;
     const term = processFilter.toLowerCase();
@@ -439,6 +584,254 @@ export function ClientDetailPage() {
             </div>
           </Notice>
         </div>
+      )}
+
+      <SectionCard title="Physical Location">
+        <div style={{ display: "grid", gap: "var(--space-3)" }}>
+          <div
+            style={{ color: c.location ? "var(--text)" : "var(--text-muted)" }}
+          >
+            {c.location ? c.location.label : "Location unassigned"}
+          </div>
+          <div
+            style={{
+              display: "flex",
+              gap: "var(--space-3)",
+              alignItems: "end",
+              flexWrap: "wrap",
+            }}
+          >
+            {/**  floor one aisle one only has table two make sure to only display that table and not both  */}
+            <LocationSelect
+              label="Floor"
+              value={assignFloor}
+              options={floorOptions}
+              disabled={locationLoading || locationSaving}
+              onChange={(value) => {
+                setAssignFloor(value);
+                setAssignAisle("");
+                setAssignTable("");
+                setAssignColumn("");
+                setAssignPosition("");
+              }}
+            />
+            <LocationSelect
+              label="Aisle"
+              value={assignAisle}
+              options={aisleOptions}
+              disabled={!assignFloor || locationLoading || locationSaving}
+              onChange={(value) => {
+                setAssignAisle(value);
+                setAssignTable("");
+                setAssignColumn("");
+                setAssignPosition("");
+              }}
+            />
+            <LocationSelect
+              label="Table"
+              value={assignTable}
+              options={tableOptions}
+              disabled={!assignAisle || locationLoading || locationSaving}
+              onChange={(value) => {
+                setAssignTable(value);
+                setAssignColumn("");
+                setAssignPosition("");
+              }}
+            />
+            <LocationSelect
+              label="Column"
+              value={assignColumn}
+              options={columnOptions}
+              disabled={!assignTable || locationLoading || locationSaving}
+              onChange={(value) => {
+                setAssignColumn(value);
+                setAssignPosition("");
+              }}
+            />
+            <LocationSelect
+              label="Position"
+              value={assignPosition}
+              options={positionOptions}
+              disabled={!assignColumn || locationLoading || locationSaving}
+              onChange={setAssignPosition}
+            />
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={
+                !selectedLocationId || locationSaving || locationLoading
+              }
+              onClick={assignLocation}
+            >
+              {locationSaving
+                ? "Saving…"
+                : c.location
+                  ? "Change Location"
+                  : "Assign Location"}
+            </Button>
+          </div>
+          {selectedSeat && (
+            <div
+              style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}
+            >
+              {selectedSeat.label}
+            </div>
+          )}
+        </div>
+        {locationHistoryState.status === "success" &&
+          locationHistoryState.data.items.length > 0 && (
+            <div
+              style={{
+                marginTop: "var(--space-4)",
+                borderTop: "1px solid var(--border-subtle)",
+                paddingTop: "var(--space-3)",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: "var(--font-xs)",
+                  color: "var(--text-muted)",
+                  marginBottom: "var(--space-2)",
+                }}
+              >
+                Assignment history
+              </div>
+              <div style={{ display: "grid", gap: "var(--space-2)" }}>
+                {locationHistoryState.data.items.map((entry) => (
+                  <div
+                    key={entry.id}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: "var(--space-3)",
+                      fontSize: "var(--font-xs)",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <span>{entry.location.label}</span>
+                    <span style={{ color: "var(--text-muted)" }}>
+                      {formatDateTime(entry.assigned_at)} ·{" "}
+                      {entry.assigned_by || "Unknown operator"}
+                      {entry.unassigned_at
+                        ? ` · ended ${formatDateTime(entry.unassigned_at)}`
+                        : " · current"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+      </SectionCard>
+
+      <SectionCard title="Health">
+        <div style={{ display: "grid", gap: "var(--space-2)" }}>
+          <DetailRow
+            label="Status"
+            value={
+              c.health?.status ? c.health.status.replace("_", " ") : "Unknown"
+            }
+          />
+          <DetailRow
+            label="CPU"
+            value={
+              typeof c.health?.cpu_percent === "number"
+                ? `${Math.round(c.health.cpu_percent)}%`
+                : "—"
+            }
+          />
+          <DetailRow
+            label="Memory"
+            value={
+              typeof c.health?.memory_percent === "number"
+                ? `${Math.round(c.health.memory_percent)}%`
+                : "—"
+            }
+          />
+          <DetailRow
+            label="Disk"
+            value={
+              typeof c.health?.disk_percent === "number"
+                ? `${Math.round(c.health.disk_percent)}%`
+                : "—"
+            }
+          />
+          <DetailRow
+            label="Updated"
+            value={
+              c.health?.updated_at
+                ? formatDateTime(c.health.updated_at)
+                : "Not collected yet"
+            }
+          />
+        </div>
+      </SectionCard>
+
+      {c.location && (
+        <SectionCard title="Physical Neighbors">
+          {neighborsState.status === "error" ? (
+            <div
+              style={{ color: "var(--text-muted)", fontSize: "var(--font-xs)" }}
+            >
+              {neighborsState.error.message}
+            </div>
+          ) : neighborsState.status !== "success" ||
+            neighborsState.data.items.length === 0 ? (
+            <div
+              style={{ color: "var(--text-muted)", fontSize: "var(--font-xs)" }}
+            >
+              {neighborsState.status === "loading"
+                ? "Loading neighbors…"
+                : "No assigned neighbors at adjacent positions."}
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: "var(--space-2)" }}>
+              {neighborsState.data.items.map((neighbor) => (
+                <button
+                  key={neighbor.client_id}
+                  type="button"
+                  onClick={() =>
+                    navigate(
+                      `/clients/${encodeURIComponent(neighbor.client_id)}`,
+                    )
+                  }
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: "var(--space-3)",
+                    textAlign: "left",
+                    border: 0,
+                    padding: "var(--space-2) 0",
+                    background: "transparent",
+                    color: "var(--text)",
+                    cursor: "pointer",
+                    borderBottom: "1px solid var(--border-subtle)",
+                  }}
+                >
+                  <span>
+                    {neighbor.hostname}{" "}
+                    <span style={{ color: "var(--text-muted)" }}>
+                      {NEIGHBOR_RELATIONSHIP_LABELS[neighbor.relationship]} ·{" "}
+                      {neighbor.location.label}
+                    </span>
+                  </span>
+                  <span
+                    style={{
+                      color:
+                        neighbor.state === "ONLINE"
+                          ? "var(--success)"
+                          : neighbor.state === "ISOLATED"
+                            ? "var(--danger)"
+                            : "var(--text-muted)",
+                      fontSize: "var(--font-xs)",
+                    }}
+                  >
+                    {neighbor.state}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </SectionCard>
       )}
 
       {/* Header Banner */}
@@ -775,6 +1168,32 @@ export function ClientDetailPage() {
                 onClick={() => setShowStartModal(true)}
               >
                 Start Process
+              </Button>
+
+              <Button
+                variant="secondary"
+                size="md"
+                disabled={!isOnline || commandLoading}
+                onClick={() => {
+                  if (window.confirm(`Restart client ${c.hostname}?`)) {
+                    executeCommand("RESTART", { delay_seconds: 5 });
+                  }
+                }}
+              >
+                Restart
+              </Button>
+
+              <Button
+                variant="danger"
+                size="md"
+                disabled={!isOnline || commandLoading}
+                onClick={() => {
+                  if (window.confirm(`Shut down client ${c.hostname}?`)) {
+                    executeCommand("SHUTDOWN", { delay_seconds: 5 });
+                  }
+                }}
+              >
+                Shut Down
               </Button>
             </div>
           </div>
@@ -1530,7 +1949,8 @@ export function ClientDetailPage() {
                   />
                 ) : (
                   <Notice variant="info" title="Preparing screenshot preview">
-                    The screenshot was captured. Refresh the history to load its preview.
+                    The screenshot was captured. Refresh the history to load its
+                    preview.
                   </Notice>
                 )}
                 <div
@@ -1555,7 +1975,9 @@ export function ClientDetailPage() {
                     <strong>{commandResult.filename ?? "Unavailable"}</strong>
                   </span>
                   <span>
-                    <span style={{ color: "var(--text-muted)" }}>Captured: </span>
+                    <span style={{ color: "var(--text-muted)" }}>
+                      Captured:{" "}
+                    </span>
                     <strong>
                       {commandResult.captured_at
                         ? formatRelative(commandResult.captured_at)
@@ -1570,7 +1992,10 @@ export function ClientDetailPage() {
                         refetchScreenshots();
                         document
                           .getElementById("screenshot-history")
-                          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                          ?.scrollIntoView({
+                            behavior: "smooth",
+                            block: "start",
+                          });
                       }}
                     >
                       Show in history
@@ -1719,6 +2144,60 @@ export function ClientDetailPage() {
         )}
       </div>
     </div>
+  );
+}
+
+function uniqueNumbers(values: Array<number | null | undefined>): number[] {
+  return Array.from(
+    new Set(values.filter((value): value is number => value != null)),
+  ).sort((left, right) => left - right);
+}
+
+function LocationSelect({
+  label,
+  value,
+  options,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: number[];
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label
+      style={{
+        display: "grid",
+        gap: "var(--space-1)",
+        fontSize: "var(--font-xs)",
+        color: "var(--text-muted)",
+      }}
+    >
+      {label}
+      <select
+        aria-label={label}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        style={{
+          minWidth: 90,
+          background: "var(--surface)",
+          color: "var(--text)",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--radius-sm)",
+          padding: "var(--space-2)",
+        }}
+      >
+        <option value="">Select</option>
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 

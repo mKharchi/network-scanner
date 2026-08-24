@@ -22,6 +22,12 @@ from typing import Callable, Optional
 SAFE_FILENAME_CHARS = re.compile(r"[^A-Za-z0-9._-]+")
 DEFAULT_MAX_TEMP_FILES = 10
 DEFAULT_MAX_TEMP_AGE_SECONDS = 3_600
+USER_SESSION_AGENT_ROLES = ("interactive", "combined")
+
+
+def screenshot_capture_enabled(agent_role: Optional[str]) -> bool:
+    """Desktop capture is available to user-session agents, including combined mode."""
+    return agent_role in USER_SESSION_AGENT_ROLES
 
 
 @dataclass(frozen=True)

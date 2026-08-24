@@ -15,6 +15,7 @@ from screenshot_manager import (  # noqa: E402
     ScreenshotManager,
     build_screenshot_filename,
     sanitize_device_name,
+    screenshot_capture_enabled,
 )
 
 
@@ -28,6 +29,11 @@ class FakeImage:
 
 
 class ScreenshotManagerTests(unittest.TestCase):
+    def test_user_session_roles_can_capture_screenshots(self):
+        self.assertTrue(screenshot_capture_enabled("interactive"))
+        self.assertTrue(screenshot_capture_enabled("combined"))
+        self.assertFalse(screenshot_capture_enabled("service"))
+
     def test_sanitize_device_name_removes_path_characters(self):
         self.assertEqual(sanitize_device_name(r"DESKTOP/ABC\\.."), "DESKTOP_ABC")
         self.assertEqual(sanitize_device_name("   "), "unknown-device")

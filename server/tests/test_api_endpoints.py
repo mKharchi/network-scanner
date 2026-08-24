@@ -6,6 +6,7 @@ import threading
 import types
 import unittest
 import tempfile
+import urllib.error
 import urllib.request
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -80,6 +81,7 @@ class ApiEndpointsTestCase(unittest.TestCase):
         mock_cursor.fetchone.side_effect = [
             {"total": 2},  # clients count
             {"total_new": 1, "total_critical": 0},  # alerts count
+            {"total_unassigned": 0},
         ]
         mock_cursor.fetchall.return_value = []
 
@@ -98,20 +100,28 @@ class ApiEndpointsTestCase(unittest.TestCase):
         mock_db.return_value = mock_conn
         mock_conn.cursor.return_value = mock_cursor
 
-        mock_cursor.fetchall.return_value = [
-            {
-                "id": 1,
-                "client_id": "client-1234567890ab",
-                "mac": "12-34-56-78-90-AB",
-                "hostname": "TEST-HOST",
-                "ip": "192.168.1.50",
-                "os_system": "Linux",
-                "os_release": "6.8.0",
-                "os_version": "#1",
-                "os_machine": "x86_64",
-                "created_at": None,
-                "updated_at": None,
-            }
+        mock_cursor.fetchall.side_effect = [
+            [
+                {
+                    "id": 1,
+                    "client_id": "client-1234567890ab",
+                    "mac": "12-34-56-78-90-AB",
+                    "hostname": "TEST-HOST",
+                    "ip": "192.168.1.50",
+                    "os_system": "Linux",
+                    "os_release": "6.8.0",
+                    "os_version": "#1",
+                    "os_machine": "x86_64",
+                    "created_at": None,
+                    "updated_at": None,
+                    "health_cpu_percent": None,
+                    "health_memory_percent": None,
+                    "health_disk_percent": None,
+                    "health_updated_at": None,
+                    "location_id": None,
+                }
+            ],
+            [],  # open alerts
         ]
 
         status, body = self._fetch("/api/v1/clients")
@@ -119,6 +129,21 @@ class ApiEndpointsTestCase(unittest.TestCase):
         self.assertEqual(len(body["data"]["items"]), 1)
         self.assertEqual(body["data"]["items"][0]["mac_address"], "12:34:56:78:90:AB")
         self.assertEqual(body["data"]["items"][0]["hostname"], "TEST-HOST")
+
+    @patch("server_components.api_service.list_clients")
+    def test_clients_list_unassigned_filter(self, list_clients):
+        list_clients.return_value = []
+
+        status, body = self._fetch("/api/v1/clients?location=unassigned")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(body["data"]["items"], [])
+        list_clients.assert_called_once_with(
+            state_filter=None,
+            search=None,
+            limit=50,
+            location_filter="unassigned",
+        )
 
     @patch("server_components.api_service.get_connection")
     def test_client_detail_not_found(self, mock_db):
@@ -153,6 +178,8 @@ class ApiEndpointsTestCase(unittest.TestCase):
         }
         mock_cursor.fetchall.side_effect = [
             [row],  # for list_clients
+            [],     # open alerts for list_clients
+            [],     # open alerts for get_client_detail
             [],     # for connections query in get_client_detail
             [],     # for activity logs in get_client_detail
         ]
@@ -646,6 +673,228 @@ class ApiEndpointsTestCase(unittest.TestCase):
 
         self.assertEqual(status, 200)
         self.assertEqual(body["data"]["status"], "CONNECTION_LOST_AFTER_ISOLATION")
+
+    @patch("server_components.action_service.execute_action")
+    @patch("server_components.action_service.create_action")
+    @patch("server_components.action_service.get_action", return_value=None)
+    def test_create_unified_action(self, get_action, create_action, execute_action):
+        create_action.return_value = {
+            "action_id": "action-1",
+            "action_type": "PING",
+            "status": "PENDING",
+            "targets": ["client-a", "client-b"],
+        }
+        execute_action.return_value = {
+            **create_action.return_value,
+            "status": "PARTIAL_SUCCESS",
+            "result": {"targets": []},
+        }
+        payload = json.dumps({
+            "action_type": "PING",
+            "targets": ["client-a", "client-b"],
+            "action_id": "action-1",
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            f"{self.base_url}/api/actions",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req) as resp:
+            self.assertEqual(resp.status, 201)
+            body = json.loads(resp.read().decode("utf-8"))
+        self.assertEqual(body["data"]["status"], "PARTIAL_SUCCESS")
+        create_action.assert_called_once()
+        execute_action.assert_called_once()
+
+    @patch("server_components.action_service.get_action")
+    def test_replaying_unified_action_is_idempotent(self, get_action):
+        get_action.return_value = {
+            "action_id": "action-1",
+            "action_type": "PING",
+            "status": "SUCCESS",
+            "targets": [],
+        }
+        payload = json.dumps({"action_type": "PING", "targets": ["client-a"], "action_id": "action-1"}).encode("utf-8")
+        req = urllib.request.Request(
+            f"{self.base_url}/api/actions",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req) as resp:
+            self.assertEqual(resp.status, 200)
+            body = json.loads(resp.read().decode("utf-8"))
+        self.assertEqual(body["data"]["status"], "SUCCESS")
+        get_action.assert_called_once_with("action-1")
+
+    @patch("server_components.server_lib.request_client_screenshot")
+    def test_screenshot_endpoint_requests_interactive_capture(self, request_screenshot):
+        request_screenshot.return_value = {
+            "status": "completed",
+            "client_id": "client-a",
+            "filename": "capture.png",
+        }
+        req = urllib.request.Request(
+            f"{self.base_url}/api/v1/clients/client-a/screenshot",
+            data=b"{}",
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req) as resp:
+            self.assertEqual(resp.status, 200)
+            body = json.loads(resp.read().decode("utf-8"))
+        self.assertEqual(body["data"]["filename"], "capture.png")
+        request_screenshot.assert_called_once_with(
+            "client-a", requested_by="local-network-operator"
+        )
+
+    @patch("server_components.api_service.list_locations")
+    def test_list_locations_endpoint(self, list_locations):
+        list_locations.return_value = [{"id": 1, "floor": 1, "label": "F1-A1-T1-P1"}]
+
+        status, body = self._fetch("/api/locations")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(body["data"]["items"][0]["label"], "F1-A1-T1-P1")
+
+    @patch("server_components.api_service.create_location")
+    def test_create_location_endpoint(self, create_location):
+        create_location.return_value = {
+            "id": 7,
+            "floor": 1,
+            "zone_type": "training",
+            "label": "F1-A1-T1-P2",
+        }
+        payload = json.dumps({
+            "floor": 1,
+            "zone_type": "training",
+            "label": "F1-A1-T1-P2",
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            f"{self.base_url}/api/locations",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+
+        with urllib.request.urlopen(req) as resp:
+            self.assertEqual(resp.status, 201)
+            body = json.loads(resp.read().decode("utf-8"))
+
+        self.assertEqual(body["data"]["label"], "F1-A1-T1-P2")
+        create_location.assert_called_once_with({
+            "floor": 1,
+            "zone_type": "training",
+            "label": "F1-A1-T1-P2",
+        })
+
+    @patch("server_components.action_service.execute_action")
+    @patch("server_components.action_service.create_action")
+    @patch("server_components.api_service.assign_client_location")
+    def test_assign_client_location_endpoint(self, assign_location, create_action, execute_action):
+        assign_location.return_value = {
+            "id": 4,
+            "floor": 1,
+            "zone_type": "training",
+            "label": "F1-A1-T1-P1",
+            "client_id": "client-a",
+        }
+        create_action.return_value = {"action_id": "location-sync-1", "status": "PENDING"}
+        execute_action.return_value = {"action_id": "location-sync-1", "status": "SUCCESS"}
+        payload = json.dumps({"location_id": 4}).encode("utf-8")
+        req = urllib.request.Request(
+            f"{self.base_url}/api/clients/client-a/location",
+            data=payload,
+            headers={"Content-Type": "application/json", "X-Operator-Id": "admin"},
+            method="PATCH",
+        )
+
+        with urllib.request.urlopen(req) as resp:
+            self.assertEqual(resp.status, 200)
+            body = json.loads(resp.read().decode("utf-8"))
+
+        self.assertEqual(body["data"]["location"]["client_id"], "client-a")
+        self.assertEqual(body["data"]["location_sync"]["status"], "SUCCESS")
+        assign_location.assert_called_once_with("client-a", 4, assigned_by="admin")
+        create_action.assert_called_once()
+        self.assertEqual(create_action.call_args[0][0], "UPDATE_LOCATION")
+        self.assertEqual(create_action.call_args[0][1], ["client-a"])
+
+    @patch("server_components.api_service.assign_client_location")
+    def test_assign_occupied_location_returns_clear_error(self, assign_location):
+        assign_location.side_effect = ValueError(
+            "This physical position is already assigned to DESKTOP-ABC."
+        )
+        payload = json.dumps({"location_id": 4}).encode("utf-8")
+        req = urllib.request.Request(
+            f"{self.base_url}/api/clients/client-b/location",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="PATCH",
+        )
+
+        with self.assertRaises(urllib.error.HTTPError) as raised:
+            urllib.request.urlopen(req)
+
+        self.assertEqual(raised.exception.code, 400)
+        body = json.loads(raised.exception.read().decode("utf-8"))
+        self.assertEqual(body["error"]["code"], "INVALID_LOCATION")
+        self.assertIn("DESKTOP-ABC", body["error"]["message"])
+
+    @patch("server_components.api_service.get_client_location")
+    def test_unassigned_client_location_endpoint(self, get_client_location):
+        get_client_location.return_value = None
+
+        status, body = self._fetch("/api/clients/client-a/location")
+
+        self.assertEqual(status, 200)
+        self.assertIsNone(body["data"])
+
+    @patch("server_components.api_service.get_client_location_history")
+    def test_client_location_history_endpoint(self, get_history):
+        get_history.return_value = [
+            {"id": 1, "assigned_by": "admin", "location": {"label": "F1-A1-T1-R1-P1"}}
+        ]
+
+        status, body = self._fetch("/api/clients/client-a/location-history")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(body["data"]["items"][0]["assigned_by"], "admin")
+        get_history.assert_called_once_with("client-a")
+
+    @patch("server_components.api_service.get_physical_neighbors")
+    def test_physical_neighbors_endpoint(self, get_physical_neighbors):
+        get_physical_neighbors.return_value = [
+            {
+                "client_id": "client-b",
+                "hostname": "PC-B",
+                "relationship": "same_row",
+                "distance": 1,
+            }
+        ]
+
+        status, body = self._fetch("/api/clients/client-a/physical-neighbors")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(body["data"]["items"][0]["relationship"], "same_row")
+        get_physical_neighbors.assert_called_once_with("client-a")
+
+    @patch("server_components.api_service.get_location_layout")
+    def test_location_layout_endpoint(self, get_location_layout):
+        get_location_layout.return_value = {
+            "floor": 1,
+            "available_floors": [0, 1, 2],
+            "rooms": [],
+            "aisles": [],
+            "shows_clients": True,
+        }
+
+        status, body = self._fetch("/api/locations/layout?floor=1")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(body["data"]["floor"], 1)
+        get_location_layout.assert_called_once_with(1)
 
 
 if __name__ == "__main__":

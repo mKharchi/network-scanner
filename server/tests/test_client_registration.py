@@ -65,6 +65,29 @@ class ClientRegistrationTests(unittest.TestCase):
         self.assertIsNone(client_id)
         self.assertEqual(server_lib.clients, {})
 
+    def test_registration_insert_does_not_guess_a_location(self):
+        from unittest.mock import MagicMock, patch
+
+        server_lib.update_client_db = self.original_update
+        cursor = MagicMock()
+        conn = MagicMock()
+        conn.cursor.return_value = cursor
+        conn.is_connected.return_value = True
+
+        with patch.object(server_lib, "get_connection", return_value=conn):
+            stored = server_lib.update_client_db(
+                "E4:FD:45:BA:8B:96",
+                "client-e4fd45ba8b96",
+                "DESKTOP-DJP05CM",
+                "172.16.0.102",
+                {"system": "Windows"},
+            )
+
+        self.assertTrue(stored)
+        sql = cursor.execute.call_args[0][0]
+        self.assertIn("INSERT INTO clients", sql)
+        self.assertNotIn("location_id", sql)
+
     def test_combined_registration_supports_commands_and_screenshots(self):
         connection = type("Connection", (), {"close": lambda self: None})()
         info = self.client_info()
