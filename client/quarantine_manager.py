@@ -177,6 +177,30 @@ class NetworkQuarantineManager:
         )
         return code == 0, output
 
+    @staticmethod
+    def _firewall_rule_missing(output: str) -> bool:
+        """Recognize netsh's localized 'rule not found' responses.
+
+        ``netsh`` emits localized text and Windows subprocess decoding can
+        produce mojibake for non-ASCII locales. Cleanup is intentionally
+        idempotent, so an absent named rule must never make quarantine fail.
+        """
+        normalized = " ".join(str(output or "").lower().split())
+        if any(
+            marker in normalized
+            for marker in (
+                "no rules match",
+                "0 rule(s) deleted",
+                "keine regel",
+                "ninguna regla",
+                "nenhuma regra",
+            )
+        ):
+            return True
+        # Match French regardless of whether the accented characters were
+        # decoded correctly (e.g. ``rÃ¨gle`` / ``règle``).
+        return "aucune" in normalized and "correspond" in normalized
+
     def _delete_windows_firewall_rules(self, rule_names) -> Tuple[bool, str]:
         """Remove only this agent's named rules, tolerating absent rules."""
         errors = []
@@ -191,7 +215,7 @@ class NetworkQuarantineManager:
                     f"name={rule_name}",
                 ]
             )
-            if code != 0 and "No rules match" not in output and "0 rule(s) deleted" not in output:
+            if code != 0 and not self._firewall_rule_missing(output):
                 errors.append(f"{rule_name}: {output}")
         return (not errors, "; ".join(errors) if errors else "")
 

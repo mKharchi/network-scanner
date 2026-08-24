@@ -1236,7 +1236,7 @@ export function ClientDetailPage() {
               <Button
                 variant="secondary"
                 size="md"
-                disabled={!isOnline || commandLoading || quarantineLoading}
+                disabled={!isIsolated || commandLoading || quarantineLoading}
                 onClick={handleReleaseQuarantine}
               >
                 Release Quarantine
