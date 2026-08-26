@@ -71,6 +71,30 @@ def _ensure_client_health_columns(cursor):
             cursor.execute(f"ALTER TABLE clients ADD COLUMN {column_name} {definition}")
 
 
+def _ensure_location_type_column(cursor):
+    """Add location_type and physical layout hierarchy columns to locations."""
+    cursor.execute(
+        """
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'locations'
+        """
+    )
+    existing_columns = {row[0] for row in cursor.fetchall()}
+    columns = {
+        "location_type": "VARCHAR(32) NOT NULL DEFAULT 'pc_position'",
+        "aisle": "INT NULL",
+        "table_no": "INT NULL",
+        "row_no": "INT NULL",
+        "position": "INT NULL",
+        "label": "VARCHAR(64) NOT NULL DEFAULT ''",
+    }
+    for column_name, definition in columns.items():
+        if column_name not in existing_columns:
+            cursor.execute(f"ALTER TABLE locations ADD COLUMN {column_name} {definition}")
+
+
 def _ensure_location_spatial_columns(cursor):
     """Add spatial coordinates and hierarchy columns to locations."""
     cursor.execute(

@@ -88,6 +88,17 @@ def normalise_neighbourhood_observation(record, *, source, observed_at=None):
         "sources": [source],
         "observed_at": timestamp,
     }
+    if "rssi" in record and record["rssi"] is not None:
+        try:
+            rssi_val = int(record["rssi"])
+            if -130 <= rssi_val <= 30:
+                normalized["rssi"] = rssi_val
+        except (TypeError, ValueError):
+            pass
+    switch_port = _normalise_text(record.get("switch_port"))
+    if switch_port:
+        normalized["switch_port"] = switch_port
+
     if source == "dhcp":
         message_type = record.get("dhcp_message_type")
         if isinstance(message_type, int) and 1 <= message_type <= 8:
@@ -139,10 +150,12 @@ def merge_neighbourhood_observations(observations):
             continue
         for field in (
             "hostname", "vendor", "os", "interface", "dhcp_message_type",
-            "dhcp_vendor_class", "dhcp_client_id",
+            "dhcp_vendor_class", "dhcp_client_id", "switch_port",
         ):
             if normalized.get(field) and not existing.get(field):
                 existing[field] = normalized[field]
+        if normalized.get("rssi") is not None:
+            existing["rssi"] = normalized["rssi"]
         for source in normalized["sources"]:
             if source not in existing["sources"]:
                 existing["sources"].append(source)
