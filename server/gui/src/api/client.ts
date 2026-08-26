@@ -327,6 +327,141 @@ export interface SpatialLocationEvent {
   timestamp: string;
 }
 
+export interface SpatialScenePosition {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export interface SpatialSceneBounds {
+  width: number;
+  length: number;
+  height: number;
+}
+
+export interface SpatialSceneLocation {
+  id: number;
+  name: string;
+  label: string;
+  type: string;
+  floor: number;
+  parent_id?: number | null;
+  position: SpatialScenePosition;
+  bounds: SpatialSceneBounds;
+  is_restricted: boolean;
+  zone_type: string;
+  aisle?: string | null;
+  table_no?: string | null;
+  position_no?: string | null;
+}
+
+export interface SpatialSceneNode {
+  id: string;
+  name: string;
+  label: string;
+  type: 'workstation' | 'server' | 'switch' | 'gateway' | 'sensor' | 'printer' | 'rogue' | 'unknown';
+  position: SpatialScenePosition;
+  status: 'online' | 'offline' | 'suspicious' | 'rogue' | 'isolated';
+  risk: 'low' | 'medium' | 'high' | 'critical';
+  confidence: number;
+  ip?: string | null;
+  mac?: string | null;
+  vendor?: string | null;
+  location_label?: string | null;
+  is_sensor: boolean;
+  is_rogue: boolean;
+  quarantined: boolean;
+  metadata?: Record<string, any>;
+}
+
+export interface SpatialSceneEdge {
+  id: string;
+  source: string;
+  target: string;
+  type: 'physical' | 'logical' | 'wireless' | 'threat';
+  status: 'active' | 'inactive' | 'isolated';
+  traffic_rate?: string;
+  latency?: number;
+  risk?: 'low' | 'medium' | 'high' | 'critical';
+}
+
+export interface SpatialThreatMarker {
+  id: string;
+  device_id: number;
+  node_id: string;
+  name: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  score: number;
+  position: SpatialScenePosition;
+  confidence: number;
+  reasons: string[];
+  detected_at: string;
+  is_restricted_zone?: boolean;
+}
+
+export interface SpatialSceneMeta {
+  version: number;
+  floors: number[];
+  total_locations: number;
+  total_nodes: number;
+  total_edges: number;
+  total_threats: number;
+  bounds: {
+    min_x: number;
+    max_x: number;
+    min_y: number;
+    max_y: number;
+    min_z: number;
+    max_z: number;
+  };
+}
+
+export interface SpatialSceneResponse {
+  version: number;
+  timestamp: string;
+  locations: SpatialSceneLocation[];
+  nodes: SpatialSceneNode[];
+  edges: SpatialSceneEdge[];
+  threats: SpatialThreatMarker[];
+  meta: SpatialSceneMeta;
+}
+
+export interface SpatialTopologyResponse {
+  nodes: SpatialSceneNode[];
+  edges: SpatialSceneEdge[];
+  summary: {
+    total_nodes: number;
+    total_edges: number;
+    physical_links: number;
+    wireless_links: number;
+    threat_links: number;
+  };
+}
+
+export interface SpatialReplayTriggerEvent {
+  device_id: number;
+  hostname?: string | null;
+  mac_address?: string | null;
+  reason?: string | null;
+  from_location?: string | null;
+  to_location?: string | null;
+}
+
+export interface SpatialReplayFrame {
+  frame_index: number;
+  timestamp: string;
+  trigger_event: SpatialReplayTriggerEvent | null;
+  active_nodes_count: number;
+}
+
+export interface SpatialReplayResponse {
+  interval_seconds: number;
+  total_frames: number;
+  events: SpatialLocationEvent[];
+  frames: SpatialReplayFrame[];
+  base_scene: SpatialSceneResponse;
+}
+
 export interface ClientLocationHistoryEntry {
   id: number;
   assigned_at: string;
@@ -1043,4 +1178,27 @@ export const api = {
 
   triggerSpatialEvaluation: () =>
     post<{ status: string; evaluated_devices: number; items: any[] }>("/spatial/evaluate"),
+
+  // ── 3D Digital Twin & AR Scene Visualization ────────────────────
+  getSpatialScene: (params?: { floor?: number }) =>
+    get<SpatialSceneResponse>("/spatial/scene", {
+      ...(params?.floor != null ? { floor: String(params.floor) } : {}),
+    }),
+
+  getSpatialTopology: () =>
+    get<SpatialTopologyResponse>("/spatial/topology"),
+
+  getSpatialThreats: () =>
+    get<{ items: SpatialThreatMarker[] }>("/spatial/threats"),
+
+  getSpatialReplay: (params?: { from?: string; to?: string; interval?: number }) =>
+    get<SpatialReplayResponse>("/spatial/replay", {
+      ...(params?.from ? { from: params.from } : {}),
+      ...(params?.to ? { to: params.to } : {}),
+      ...(params?.interval ? { interval: String(params.interval) } : {}),
+    }),
 };
+
+export const apiClient = api;
+
+
