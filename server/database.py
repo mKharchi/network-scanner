@@ -71,8 +71,8 @@ def _ensure_client_health_columns(cursor):
             cursor.execute(f"ALTER TABLE clients ADD COLUMN {column_name} {definition}")
 
 
-def _ensure_location_type_column(cursor):
-    """Distinguish assignable PC seats from rooms, aisles, tables, and stairs."""
+def _ensure_location_spatial_columns(cursor):
+    """Add spatial coordinates and hierarchy columns to locations."""
     cursor.execute(
         """
         SELECT COLUMN_NAME
@@ -82,10 +82,41 @@ def _ensure_location_type_column(cursor):
         """
     )
     existing_columns = {row[0] for row in cursor.fetchall()}
-    if "location_type" not in existing_columns:
-        cursor.execute(
-            "ALTER TABLE locations ADD COLUMN location_type VARCHAR(32) NOT NULL DEFAULT 'pc_position'"
-        )
+    columns = {
+        "parent_id": "INT NULL",
+        "x": "DOUBLE NULL",
+        "y": "DOUBLE NULL",
+        "z": "DOUBLE NULL",
+        "is_restricted": "BOOLEAN NOT NULL DEFAULT FALSE",
+        "metadata": "TEXT NULL",
+    }
+    for column_name, definition in columns.items():
+        if column_name not in existing_columns:
+            cursor.execute(f"ALTER TABLE locations ADD COLUMN {column_name} {definition}")
+
+
+def _ensure_observation_spatial_columns(cursor):
+    """Add spatial sensor and signal columns to network_device_observations."""
+    cursor.execute(
+        """
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'network_device_observations'
+        """
+    )
+    existing_columns = {row[0] for row in cursor.fetchall()}
+    columns = {
+        "sensor_id": "INT NULL",
+        "rssi": "INT NULL",
+        "switch_port": "VARCHAR(64) NULL",
+        "raw_data": "TEXT NULL",
+    }
+    for column_name, definition in columns.items():
+        if column_name not in existing_columns:
+            cursor.execute(
+                f"ALTER TABLE network_device_observations ADD COLUMN {column_name} {definition}"
+            )
 
 
 def initiate_db():
@@ -117,6 +148,8 @@ def initiate_db():
         _ensure_client_location_column(cursor)
         _ensure_client_health_columns(cursor)
         _ensure_location_type_column(cursor)
+        _ensure_location_spatial_columns(cursor)
+        _ensure_observation_spatial_columns(cursor)
 
         connection.commit()
         try:

@@ -54,6 +54,10 @@ def _record(
     table: Optional[int] = None,
     column: Optional[int] = None,
     position: Optional[int] = None,
+    x: Optional[float] = None,
+    y: Optional[float] = None,
+    z: Optional[float] = None,
+    is_restricted: bool = False,
 ) -> Dict[str, Any]:
     return {
         "floor": floor,
@@ -66,22 +70,33 @@ def _record(
         "column": column,
         "position": position,
         "label": label,
+        "x": x,
+        "y": y,
+        "z": z,
+        "is_restricted": is_restricted,
     }
 
 
 def generate_center_locations() -> List[Dict[str, Any]]:
-    """Return the complete center structure without touching the database."""
+    """Return the complete center structure with spatial coordinates without touching the database."""
     records: List[Dict[str, Any]] = []
     for floor, spec in CENTER_LAYOUT.items():
+        floor_z = float(floor * 3.0)
         records.append(
             _record(
                 floor=floor,
                 location_type=LOCATION_TYPE_FLOOR,
                 label=f"F{floor}",
                 zone_type=LOCATION_TYPE_FLOOR,
+                x=15.0,
+                y=15.0,
+                z=floor_z,
+                is_restricted=False,
             )
         )
         for room_index, room_name in enumerate(spec.get("rooms") or [], start=1):
+            room_x = 5.0 if room_index == 1 else 25.0
+            room_y = 5.0
             records.append(
                 _record(
                     floor=floor,
@@ -89,9 +104,14 @@ def generate_center_locations() -> List[Dict[str, Any]]:
                     label=f"F{floor}-Room-{room_index}",
                     zone_type=LOCATION_TYPE_FORMATION_ROOM,
                     zone_name=room_name,
+                    x=room_x,
+                    y=room_y,
+                    z=floor_z,
+                    is_restricted=True,
                 )
             )
         for aisle_no, aisle_spec in (spec.get("aisles") or {}).items():
+            aisle_x = float(aisle_no * 10.0)
             records.append(
                 _record(
                     floor=floor,
@@ -99,6 +119,10 @@ def generate_center_locations() -> List[Dict[str, Any]]:
                     label=f"F{floor}-A{aisle_no}",
                     zone_type="training",
                     aisle=aisle_no,
+                    x=aisle_x,
+                    y=15.0,
+                    z=floor_z,
+                    is_restricted=False,
                 )
             )
             if aisle_spec.get("stairs"):
@@ -110,9 +134,14 @@ def generate_center_locations() -> List[Dict[str, Any]]:
                         zone_type="training",
                         aisle=aisle_no,
                         table=1,
+                        x=aisle_x,
+                        y=8.0,
+                        z=floor_z,
+                        is_restricted=False,
                     )
                 )
             for table_no in aisle_spec.get("tables") or []:
+                table_y = 8.0 if table_no == 1 else 20.0
                 records.append(
                     _record(
                         floor=floor,
@@ -121,10 +150,17 @@ def generate_center_locations() -> List[Dict[str, Any]]:
                         zone_type="training",
                         aisle=aisle_no,
                         table=table_no,
+                        x=aisle_x,
+                        y=table_y,
+                        z=floor_z,
+                        is_restricted=False,
                     )
                 )
                 for column in COLUMNS_PER_TABLE:
+                    col_y_offset = -1.5 if column == 1 else 1.5
                     for position in POSITIONS_PER_COLUMN:
+                        pos_x = aisle_x - 1.5 + float(position - 1) * 1.0
+                        pos_y = table_y + col_y_offset
                         records.append(
                             _record(
                                 floor=floor,
@@ -135,6 +171,10 @@ def generate_center_locations() -> List[Dict[str, Any]]:
                                 table=table_no,
                                 column=column,
                                 position=position,
+                                x=round(pos_x, 2),
+                                y=round(pos_y, 2),
+                                z=floor_z,
+                                is_restricted=False,
                             )
                         )
     return records
@@ -164,12 +204,28 @@ def layout_counts(records: Optional[Iterable[Dict[str, Any]]] = None) -> Dict[st
 
 def _insert_location(cursor, record: Dict[str, Any]) -> bool:
     cursor.execute("SELECT id FROM locations WHERE label = %s", (record["label"],))
-    if cursor.fetchone():
+    row = cursor.fetchone()
+    if row:
+        cursor.execute(
+            """UPDATE locations
+               SET x = COALESCE(x, %s),
+                   y = COALESCE(y, %s),
+                   z = COALESCE(z, %s),
+                   is_restricted = %s
+               WHERE id = %s""",
+            (
+                record.get("x"),
+                record.get("y"),
+                record.get("z"),
+                1 if record.get("is_restricted") else 0,
+                row[0],
+            ),
+        )
         return False
     cursor.execute(
         """INSERT INTO locations
-           (floor, zone_type, zone_name, aisle, table_no, row_no, position, label, location_type)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+           (floor, zone_type, zone_name, aisle, table_no, row_no, position, label, location_type, x, y, z, is_restricted)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
         (
             record["floor"],
             record["zone_type"],
@@ -180,6 +236,10 @@ def _insert_location(cursor, record: Dict[str, Any]) -> bool:
             record.get("position"),
             record["label"],
             record["location_type"],
+            record.get("x"),
+            record.get("y"),
+            record.get("z"),
+            1 if record.get("is_restricted") else 0,
         ),
     )
     return True

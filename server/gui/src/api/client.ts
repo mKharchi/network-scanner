@@ -234,12 +234,97 @@ export interface ClientLocation {
   column?: number | null;
   position: number | null;
   label: string;
+  parent_id?: number | null;
+  x?: number | null;
+  y?: number | null;
+  z?: number | null;
+  is_restricted?: boolean;
   assignable?: boolean;
   hostname?: string | null;
   client_id?: string;
   client_state?: 'ONLINE' | 'OFFLINE' | 'ISOLATED';
   health?: ClientHealth;
-  health_status?: ClientHealth['status'];
+  health_status?: string;
+}
+
+export interface SpatialSensor {
+  id: number;
+  sensor_id: string;
+  name: string;
+  type: string;
+  client_id?: number | null;
+  client_code?: string | null;
+  client_hostname?: string | null;
+  location_id?: number | null;
+  location_label?: string | null;
+  floor?: number | null;
+  x?: number | null;
+  y?: number | null;
+  z?: number | null;
+  capabilities: string[];
+  status: "ONLINE" | "OFFLINE" | "DEGRADED";
+  last_seen?: string | null;
+  created_at?: string | null;
+}
+
+export interface SpatialLocationEstimate {
+  location_id?: number | null;
+  label?: string | null;
+  floor?: number | null;
+  zone_name?: string | null;
+  is_restricted?: boolean;
+  x?: number | null;
+  y?: number | null;
+  z?: number | null;
+  confidence: number;
+  method: string;
+  supporting_sensors: string[];
+  calculated_at?: string | null;
+}
+
+export interface RogueDeviceSummary {
+  device_id: number;
+  mac_address: string;
+  ip_address?: string | null;
+  hostname?: string | null;
+  vendor?: string | null;
+  first_seen?: string | null;
+  last_seen?: string | null;
+  rogue_score: number;
+  is_rogue: boolean;
+  classification: string;
+  risk_level: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  reasons: string[];
+  location?: SpatialLocationEstimate | null;
+}
+
+export interface SpatialLocationEvent {
+  id: number;
+  device_id: number;
+  mac_address?: string;
+  hostname?: string | null;
+  ip_address?: string | null;
+  vendor?: string | null;
+  previous_location?: {
+    id?: number | null;
+    label?: string | null;
+    floor?: number | null;
+    x?: number | null;
+    y?: number | null;
+    z?: number | null;
+  } | null;
+  new_location?: {
+    id?: number | null;
+    label?: string | null;
+    floor?: number | null;
+    x?: number | null;
+    y?: number | null;
+    z?: number | null;
+  } | null;
+  confidence: number;
+  method: string;
+  reason?: string | null;
+  timestamp: string;
 }
 
 export interface ClientLocationHistoryEntry {
@@ -923,4 +1008,39 @@ export const api = {
 
   getClientIsolationStatus: (clientId: string) =>
     get<any>(`/clients/${encodeURIComponent(clientId)}/isolation`),
+
+  // ── Spatial & Rogue Device Triangulation ────────────────────────
+  listSensors: () =>
+    get<{ items: SpatialSensor[] }>("/sensors"),
+
+  createSensor: (payload: Partial<SpatialSensor>) =>
+    post<SpatialSensor>("/sensors", payload),
+
+  listRogueDevices: (params?: { min_score?: number }) =>
+    get<{ items: RogueDeviceSummary[]; total: number }>("/rogue-devices", {
+      ...(params?.min_score != null ? { min_score: String(params.min_score) } : {}),
+    }),
+
+  getRogueDeviceDetail: (deviceId: string | number) =>
+    get<RogueDeviceSummary & { movement_history: SpatialLocationEvent[] }>(
+      `/rogue-devices/${encodeURIComponent(String(deviceId))}`,
+    ),
+
+  getDeviceSpatialLocation: (deviceId: string | number) =>
+    get<any>(`/devices/${encodeURIComponent(String(deviceId))}/location`),
+
+  getDeviceSpatialHistory: (deviceId: string | number, limit?: number) =>
+    get<{ items: SpatialLocationEvent[] }>(
+      `/devices/${encodeURIComponent(String(deviceId))}/location-history`,
+      limit ? { limit: String(limit) } : undefined,
+    ),
+
+  listSpatialEvents: (limit?: number) =>
+    get<{ items: SpatialLocationEvent[] }>(
+      "/spatial/events",
+      limit ? { limit: String(limit) } : undefined,
+    ),
+
+  triggerSpatialEvaluation: () =>
+    post<{ status: string; evaluated_devices: number; items: any[] }>("/spatial/evaluate"),
 };
