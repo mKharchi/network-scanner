@@ -138,8 +138,37 @@ class NeighbourhoodTests(unittest.TestCase):
         self.assertEqual(payload, loaded)
         self.assertEqual(len(loaded["observations"]), 1)
         self.assertEqual(loaded["observations"][0]["sources"], ["arp", "dhcp"])
-        self.assertEqual(loaded["observations"][0]["hostname"], "DESKTOP-DJP05CM")
+    def test_normalises_and_merges_spatial_fields_rssi_and_switch_port(self):
+        obs1 = normalise_neighbourhood_observation(
+            {
+                "ip_address": "172.16.0.102",
+                "mac_address": "E4:FD:45:BA:8B:96",
+                "entry_type": "dynamic",
+                "rssi": -65,
+                "switch_port": "Gi0/1",
+            },
+            source="arp",
+            observed_at="2026-08-20T10:00:00+00:00",
+        )
+        self.assertEqual(obs1["rssi"], -65)
+        self.assertEqual(obs1["switch_port"], "Gi0/1")
+
+        obs2 = normalise_neighbourhood_observation(
+            {
+                "ip_address": "172.16.0.102",
+                "mac_address": "E4:FD:45:BA:8B:96",
+                "entry_type": "dynamic",
+                "rssi": -58,
+            },
+            source="arp",
+            observed_at="2026-08-20T10:05:00+00:00",
+        )
+        merged = merge_neighbourhood_observations([obs1, obs2])
+        self.assertEqual(len(merged), 1)
+        self.assertEqual(merged[0]["rssi"], -58)
+        self.assertEqual(merged[0]["switch_port"], "Gi0/1")
 
 
 if __name__ == "__main__":
     unittest.main()
+

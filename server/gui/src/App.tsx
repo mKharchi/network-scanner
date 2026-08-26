@@ -15,6 +15,7 @@ import { AlertsPage } from './pages/Alerts';
 import { ActivityLogsPage } from './pages/ActivityLogs';
 import { SettingsPage } from './pages/Settings';
 import { LocationsPage } from './pages/Locations';
+import { RogueDevicesPage } from './pages/RogueDevices';
 
 function AppContent() {
   const { unreadAlerts } = useRealTimeEvents();
@@ -28,6 +29,8 @@ function AppContent() {
         <Route path="/clients" element={<ClientsPage />} />
         <Route path="/clients/:clientId" element={<ClientDetailPage />} />
         <Route path="/locations" element={<LocationsPage />} />
+        <Route path="/rogue-devices" element={<RogueDevicesPage />} />
+        <Route path="/spatial/rogue" element={<Navigate to="/rogue-devices" replace />} />
 
         {/* Network */}
         <Route path="/network" element={<Navigate to="/network/devices" replace />} />
