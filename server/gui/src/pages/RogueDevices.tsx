@@ -84,18 +84,20 @@ export function RogueDevicesPage() {
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "var(--space-4)" }}>
         <div>
-          <h1 style={{ fontSize: "var(--font-2xl)", fontWeight: 700, margin: 0 }}>
-            🛰️ Spatial-Temporal Rogue Device Triangulation
+          <h1 className="page-title">
+             Spatial-Temporal Rogue Device Triangulation
           </h1>
-          <p style={{ color: "var(--text-muted)", marginTop: "var(--space-1)", marginBottom: 0 }}>
+           <p
+            style={{ color: "var(--text-muted)", marginTop: "var(--space-1)" }}
+          > 
             Real-time multilateration, physical location estimation, and explainable threat scoring.
           </p>
         </div>
         <div style={{ display: "flex", gap: "var(--space-2)" }}>
-          <Button variant="secondary" onClick={fetchData} disabled={loading}>
+          <Button size="sm" variant="secondary" onClick={fetchData} disabled={loading}>
             Refresh
           </Button>
-          <Button variant="primary" onClick={handleEvaluate} disabled={evaluating}>
+          <Button size="sm" variant="primary" onClick={handleEvaluate} disabled={evaluating}>
             {evaluating ? "Triangulating…" : "⚡ Re-evaluate Spatial Grid"}
           </Button>
         </div>

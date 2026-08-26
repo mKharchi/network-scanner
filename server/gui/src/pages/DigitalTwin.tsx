@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   api,
@@ -53,6 +53,8 @@ export function DigitalTwinPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('physical');
   const [zoneFilter, setZoneFilter] = useState<ZoneFilter>('all');
   const [selectedFloor, setSelectedFloor] = useState<number | 'all'>('all');
+  const CENTER_FLOORS = [0, 1, 2] as const;
+  const FLOOR_HEIGHT = 3;
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -66,6 +68,7 @@ export function DigitalTwinPage() {
   const [panX, setPanX] = useState<number>(0);
   const [panY, setPanY] = useState<number>(0);
   const isDraggingRef = useRef(false);
+  const didDragRef = useRef(false);
   const dragModeRef = useRef<'rotate' | 'pan'>('rotate');
   const lastMousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
@@ -119,7 +122,7 @@ export function DigitalTwinPage() {
   const loadSceneData = async () => {
     try {
       setLoading(true);
-      const [, replayData, rogueData, sensorData, eventData] = await Promise.all([
+      const [spatialData, replayData, rogueData, sensorData, eventData] = await Promise.all([
         api.getSpatialScene(selectedFloor !== 'all' ? { floor: selectedFloor } : undefined).catch(() => null),
         api.getSpatialReplay().catch(() => null),
         api.listRogueDevices({ min_score: 20 }).catch(() => ({ items: [], total: 0 })),
@@ -136,7 +139,18 @@ export function DigitalTwinPage() {
       setEventsList(events);
       setReplay(replayData);
 
-      // Clean Structured Spatial Environment with 4 Well-Defined Zones
+      // Prefer the backend's real scene. The previous implementation fetched it
+      // but discarded it, making the fallback scene (floor 1 only) the only view.
+      if (spatialData && spatialData.locations?.length > 0) {
+        setScene(spatialData);
+        setSelectedNodeId((current) =>
+          current && spatialData.nodes.some((node) => node.id === current) ? current : null,
+        );
+        return;
+      }
+
+      // Ground floor 0 is the entrance/common level; floors 1 and 2 are the
+      // two training levels shown in the Locations page.
       const baseScene: SpatialSceneResponse = {
         version: 1,
         timestamp: new Date().toISOString(),
@@ -200,6 +214,32 @@ export function DigitalTwinPage() {
         },
       };
 
+      // Keep a useful three-floor fallback when the backend has no scene yet.
+      // Floor 0 is intentionally an open ground/entrance level; floors 1 and
+      // 2 reuse the center's training-zone footprint at their real elevations.
+      const floorOneLocations = [...baseScene.locations];
+      baseScene.locations = baseScene.locations.map((location) => ({
+        ...location,
+        floor: 1,
+        position: { ...location.position, z: FLOOR_HEIGHT },
+      }));
+      [0, 2].forEach((floor) => {
+        const floorOffset = floor * FLOOR_HEIGHT;
+        floorOneLocations.forEach((location) => {
+          baseScene.locations.push({
+            ...location,
+            id: location.id + (floor + 1) * 100,
+            floor,
+            name: floor === 0 ? `${location.name} · Ground Floor` : `${location.name} · Floor ${floor}`,
+            label: floor === 0 ? `${location.label} · F0` : `${location.label} · F${floor}`,
+            position: { ...location.position, z: floorOffset },
+          });
+        });
+      });
+      baseScene.meta.floors = [...CENTER_FLOORS];
+      baseScene.meta.total_locations = baseScene.locations.length;
+      baseScene.meta.bounds.max_z = FLOOR_HEIGHT * 2 + 4;
+
       // 1. Add Gateway & Core Switch in Server Room
       const gatewayNode: SpatialSceneNode = {
         id: 'node-gateway',
@@ -261,6 +301,8 @@ export function DigitalTwinPage() {
 
       sensors.forEach((s, idx) => {
         const sPos = sensorPositions[idx % sensorPositions.length];
+        const sensorFloor = s.floor != null ? Number(s.floor) : 1;
+        const sensorFloorZ = sensorFloor * FLOOR_HEIGHT;
         const sNodeId = `sensor-${s.id}`;
         baseScene.nodes.push({
           id: sNodeId,
@@ -270,7 +312,7 @@ export function DigitalTwinPage() {
           position: {
             x: s.x != null ? Number(s.x) : sPos.x,
             y: s.y != null ? Number(s.y) : sPos.y,
-            z: s.z != null ? Number(s.z) : sPos.z,
+            z: sensorFloorZ + 2.4,
           },
           status: s.status === 'ONLINE' ? 'online' : 'offline',
           risk: 'low',
@@ -282,6 +324,7 @@ export function DigitalTwinPage() {
           metadata: {
             capabilities: s.capabilities || ['arp', 'dhcp', 'rssi_triangulation'],
             sensor_type: s.type,
+            floor: sensorFloor,
           },
         });
 
@@ -483,9 +526,26 @@ export function DigitalTwinPage() {
   }, [viewMode]);
 
   // Filtered nodes based on search and zoneFilter tab
+  const nodeFloor = useCallback((node: SpatialSceneNode) => {
+    const declaredFloor = Number(node.metadata?.floor);
+    if (Number.isFinite(declaredFloor) && CENTER_FLOORS.includes(declaredFloor as 0 | 1 | 2)) return declaredFloor;
+    if (node.position.z >= FLOOR_HEIGHT * 2) return 2;
+    if (node.position.z >= FLOOR_HEIGHT) return 1;
+    return 0;
+  }, []);
+
+  const visibleLocations = useMemo(() => {
+    if (!scene) return [];
+    return selectedFloor === 'all'
+      ? scene.locations
+      : scene.locations.filter((location) => location.floor === selectedFloor);
+  }, [scene, selectedFloor]);
+
   const displayedNodes = useMemo(() => {
     if (!scene) return [];
-    let list = scene.nodes;
+    let list = selectedFloor === 'all'
+      ? scene.nodes
+      : scene.nodes.filter((node) => nodeFloor(node) === selectedFloor);
 
     if (zoneFilter === 'threats') {
       list = list.filter((n) => n.risk === 'critical' || n.risk === 'high' || n.is_rogue);
@@ -511,7 +571,7 @@ export function DigitalTwinPage() {
       );
     }
     return list;
-  }, [scene, zoneFilter, searchQuery]);
+  }, [scene, selectedFloor, nodeFloor, zoneFilter, searchQuery]);
 
   const displayedThreats = useMemo(() => {
     if (!scene) return [];
@@ -618,7 +678,7 @@ export function DigitalTwinPage() {
       ctx.stroke();
 
       // 2. Draw Distinct Zone Floor Pads & Glass Enclosures
-      scene.locations.forEach((loc) => {
+      visibleLocations.forEach((loc) => {
         const lx = loc.position.x;
         const ly = loc.position.y;
         const lz = loc.position.z;
@@ -690,7 +750,7 @@ export function DigitalTwinPage() {
 
       // 3. Draw Sensor Radar Coverage Radii
       scene.nodes.filter((n) => n.is_sensor).forEach((sNode) => {
-        const sBase = project(sNode.position.x, sNode.position.y, 0);
+        const sBase = project(sNode.position.x, sNode.position.y, sNode.position.z);
         const pulseRadius = (26 + ((Math.sin(tick * 3) + 1) * 8)) * zoom;
 
         ctx.beginPath();
@@ -908,12 +968,13 @@ export function DigitalTwinPage() {
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, [scene, displayedNodes, selectedNodeId, hoveredNodeId, hoveredNode, yaw, pitch, zoom, panX, panY, viewMode, showLinks, showLabels, arCameraActive]);
+  }, [scene, visibleLocations, displayedNodes, selectedNodeId, hoveredNodeId, hoveredNode, yaw, pitch, zoom, panX, panY, viewMode, showLinks, showLabels, arCameraActive]);
 
   // Mouse interaction handlers
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     isDraggingRef.current = true;
-    dragModeRef.current = e.button === 2 ? 'pan' : 'rotate';
+    didDragRef.current = false;
+    dragModeRef.current = e.button === 2 || e.shiftKey ? 'pan' : 'rotate';
     lastMousePosRef.current = { x: e.clientX, y: e.clientY };
   };
 
@@ -921,12 +982,15 @@ export function DigitalTwinPage() {
     const canvas = canvasRef.current;
     if (!canvas || !scene) return;
     const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
+    const canvasScaleX = canvas.width / Math.max(rect.width, 1);
+    const canvasScaleY = canvas.height / Math.max(rect.height, 1);
+    const mouseX = (e.clientX - rect.left) * canvasScaleX;
+    const mouseY = (e.clientY - rect.top) * canvasScaleY;
 
     if (isDraggingRef.current) {
       const dx = e.clientX - lastMousePosRef.current.x;
       const dy = e.clientY - lastMousePosRef.current.y;
+      if (Math.abs(dx) > 1 || Math.abs(dy) > 1) didDragRef.current = true;
       lastMousePosRef.current = { x: e.clientX, y: e.clientY };
 
       if (dragModeRef.current === 'rotate') {
@@ -975,8 +1039,10 @@ export function DigitalTwinPage() {
   };
 
   const handleClick = () => {
+    if (didDragRef.current) return;
     if (hoveredNodeId) {
-      setSelectedNodeId(hoveredNodeId);
+      const target = displayedNodes.find((node) => node.id === hoveredNodeId);
+      if (target) focusOnNode(target);
     }
   };
 
@@ -987,10 +1053,28 @@ export function DigitalTwinPage() {
   };
 
   const focusOnNode = (node: SpatialSceneNode) => {
+    const floor = nodeFloor(node);
+    if (selectedFloor !== 'all' && floor !== selectedFloor) {
+      setSelectedFloor(floor);
+    }
     setSelectedNodeId(node.id);
     setPanX((28 - node.position.x) * 16 * zoom);
     setPanY((node.position.y - 19) * 16 * zoom);
   };
+
+  // Typing an exact device identifier is still supported, but no longer
+  // requires a second manual search action: the matching node is selected and
+  // centered as soon as the query uniquely identifies it.
+  useEffect(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query || !scene) return;
+    const exactMatches = scene.nodes.filter((node) =>
+      [node.ip, node.mac, node.name, node.label]
+        .filter(Boolean)
+        .some((value) => value!.toLowerCase() === query),
+    );
+    if (exactMatches.length === 1) focusOnNode(exactMatches[0]);
+  }, [searchQuery, scene]);
 
   const triggerIsolation = async (clientId: string) => {
     try {
@@ -1009,13 +1093,12 @@ export function DigitalTwinPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', height: '100%' }}>
       {/* Top Header & Mode Switcher */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--space-3)' }}>
-        <div>
-          <h1 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-            🌐 3D Digital Twin & AR Topology
-          </h1>
-          <p style={{ margin: 0, color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
-            Spatial security environment correlating physical rooms, network links, and rogue device triangulation.
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--space-4)' }}>
+        <div >
+          <h1 className="page-title">3D Digital Twin</h1>
+          <p
+            style={{ color: "var(--text-muted)", marginTop: "var(--space-1)" }}
+          >    Drag to rotate · Shift-drag or right-drag to pan · Scroll to zoom · Click any device to select and focus it.
           </p>
         </div>
 
@@ -1118,6 +1201,14 @@ export function DigitalTwinPage() {
               )}
 
               {/* 3D Canvas Element */}
+              <div style={{ position: 'absolute', bottom: '38px', left: '14px', zIndex: 2, display: 'flex', gap: '6px', pointerEvents: 'none' }}>
+                {(scene?.meta.floors?.length ? scene.meta.floors : CENTER_FLOORS).map((floor) => (
+                  <span key={floor} style={{ padding: '3px 7px', borderRadius: '999px', background: selectedFloor === floor ? 'rgba(56, 189, 248, 0.35)' : 'rgba(15, 23, 42, 0.8)', border: '1px solid rgba(148, 163, 184, 0.35)', color: '#e2e8f0', fontSize: '0.7rem' }}>
+                    F{floor}
+                  </span>
+                ))}
+              </div>
+
               <canvas
                 ref={canvasRef}
                 width={1050}
@@ -1134,6 +1225,7 @@ export function DigitalTwinPage() {
                   height: '100%',
                   display: 'block',
                   cursor: isDraggingRef.current ? 'grabbing' : hoveredNodeId ? 'pointer' : 'grab',
+                  touchAction: 'none',
                   position: 'relative',
                   zIndex: 1,
                 }}
@@ -1165,7 +1257,7 @@ export function DigitalTwinPage() {
                   style={{
                     background: 'rgba(15, 23, 42, 0.9)',
                     border: '1px solid rgba(56, 189, 248, 0.4)',
-                    color: '#121212',
+                    color: '#f8fafc',
                     padding: '6px 10px',
                     borderRadius: '6px',
                     fontSize: '0.8rem',
@@ -1187,16 +1279,17 @@ export function DigitalTwinPage() {
                   style={{
                     background: 'rgba(15, 23, 42, 0.9)',
                     border: '1px solid rgba(56, 189, 248, 0.4)',
-                    color: '#121212',
+                    color: '#f8fafc',
                     padding: '6px 10px',
                     borderRadius: '6px',
                     fontSize: '0.8rem',
                     backdropFilter: 'blur(8px)',
                   }}
                 >
-                  <option value="all">🏢 All Floors</option>
-                  <option value={1}>Floor 1</option>
-                  <option value={2}>Floor 2</option>
+                  <option value="all">🏢 All Floors ({scene?.meta.floors?.length || CENTER_FLOORS.length})</option>
+                  {(scene?.meta.floors?.length ? scene.meta.floors : CENTER_FLOORS).map((floor) => (
+                    <option key={floor} value={floor}>Floor {floor}</option>
+                  ))}
                 </select>
 
                 {/* Camera View Presets */}
