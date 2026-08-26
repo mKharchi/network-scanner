@@ -46,7 +46,7 @@ def normalise_mac_address(value):
     return mac_address
 
 
-def normalise_neighbour(ip_value, mac_value, entry_type, interface=None):
+def normalise_neighbour(ip_value, mac_value, entry_type, interface=None, *, rssi=None, switch_port=None):
     """Return one safe normalized record, or ``None`` for irrelevant input."""
     try:
         ip_address = ipaddress.ip_address(str(ip_value).strip())
@@ -73,6 +73,13 @@ def normalise_neighbour(ip_value, mac_value, entry_type, interface=None):
     }
     if isinstance(interface, str) and interface.strip():
         record["interface"] = interface.strip()
+    if rssi is not None:
+        try:
+            record["rssi"] = int(rssi)
+        except (TypeError, ValueError):
+            pass
+    if isinstance(switch_port, str) and switch_port.strip():
+        record["switch_port"] = switch_port.strip()
     return record
 
 
@@ -579,6 +586,69 @@ def discover_active_arp(context=None, *, command_runner=None, arp_runner=None, t
     return devices
 
 
+def get_wifi_rssi_map(command_runner=None):
+    """Attempt to collect MAC-to-RSSI mappings from wireless interfaces where available."""
+    runner = command_runner or subprocess.run
+    rssi_map = {}
+    system = platform.system()
+    try:
+        if system == "Linux":
+            try:
+                res = runner(["iw", "dev"], capture_output=True, text=True, timeout=2, check=False)
+                if res.returncode == 0 and res.stdout:
+                    ifaces = re.findall(r"Interface\s+([a-zA-Z0-9_-]+)", res.stdout)
+                    for iface in ifaces:
+                        dump_res = runner(["iw", "dev", iface, "station", "dump"], capture_output=True, text=True, timeout=2, check=False)
+                        if dump_res.returncode == 0 and dump_res.stdout:
+                            curr_mac = None
+                            for line in dump_res.stdout.splitlines():
+                                st_match = re.match(r"Station\s+([0-9a-fA-F:]{17})", line)
+                                if st_match:
+                                    curr_mac = normalise_mac_address(st_match.group(1))
+                                elif curr_mac and "signal:" in line:
+                                    sig_match = re.search(r"signal:\s*(-?\d+)", line)
+                                    if sig_match:
+                                        rssi_map[curr_mac] = int(sig_match.group(1))
+                                elif curr_mac and "signal avg:" in line and curr_mac not in rssi_map:
+                                    sig_match = re.search(r"signal avg:\s*(-?\d+)", line)
+                                    if sig_match:
+                                        rssi_map[curr_mac] = int(sig_match.group(1))
+                        link_res = runner(["iw", "dev", iface, "link"], capture_output=True, text=True, timeout=2, check=False)
+                        if link_res.returncode == 0 and link_res.stdout:
+                            bssid_match = re.search(r"Connected to\s+([0-9a-fA-F:]{17})", link_res.stdout)
+                            sig_match = re.search(r"signal:\s*(-?\d+)", link_res.stdout)
+                            if bssid_match and sig_match:
+                                bssid = normalise_mac_address(bssid_match.group(1))
+                                if bssid:
+                                    rssi_map[bssid] = int(sig_match.group(1))
+            except Exception:
+                pass
+        elif system == "Windows":
+            try:
+                res = runner(["netsh", "wlan", "show", "interfaces"], capture_output=True, text=True, timeout=3, check=False)
+                if res.returncode == 0 and res.stdout:
+                    bssid = None
+                    signal_pct = None
+                    for line in res.stdout.splitlines():
+                        if "BSSID" in line:
+                            parts = line.split(":", 1)
+                            if len(parts) > 1:
+                                bssid = normalise_mac_address(parts[1].strip())
+                        elif "Signal" in line:
+                            parts = line.split(":", 1)
+                            if len(parts) > 1:
+                                match = re.search(r"(\d+)%", parts[1])
+                                if match:
+                                    signal_pct = int(match.group(1))
+                    if bssid and signal_pct is not None:
+                        rssi_map[bssid] = int((signal_pct / 2.0) - 100)
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return rssi_map
+
+
 def merge_neighbours_by_mac(passive_neighbours, active_neighbours):
     """Merge passive kernel neighbour entries and active ARP scan results by MAC address."""
     by_mac = {}
@@ -607,6 +677,10 @@ def merge_neighbours_by_mac(passive_neighbours, active_neighbours):
                 existing["hostname"] = entry["hostname"]
             if entry.get("vendor") and not existing.get("vendor"):
                 existing["vendor"] = entry["vendor"]
+            if entry.get("rssi") is not None:
+                existing["rssi"] = entry["rssi"]
+            if entry.get("switch_port") and not existing.get("switch_port"):
+                existing["switch_port"] = entry["switch_port"]
 
     return list(by_mac.values())
 
@@ -621,12 +695,14 @@ class NetworkNeighbourCollector:
         hostname_resolver=None,
         vendor_resolver=None,
         arp_runner=None,
+        wifi_rssi_fetcher=None,
     ):
         self.system_name = system_name or platform.system()
         self.command_runner = command_runner or self._run_command
         self.hostname_resolver = hostname_resolver or get_hostname
         self.vendor_resolver = vendor_resolver
         self.arp_runner = arp_runner
+        self.wifi_rssi_fetcher = wifi_rssi_fetcher or get_wifi_rssi_map
 
     @staticmethod
     def _run_command(command):
@@ -714,6 +790,12 @@ class NetworkNeighbourCollector:
             except Exception:
                 vendor_resolver = lambda mac_address: None
         hostname_lookup_limit = _read_hostname_lookup_limit()
+        wifi_rssi_map = {}
+        if self.wifi_rssi_fetcher:
+            try:
+                wifi_rssi_map = self.wifi_rssi_fetcher(self.command_runner) or {}
+            except Exception:
+                wifi_rssi_map = {}
         _scan_log(
             f"Enrichment started: devices={len(neighbours)} "
             f"hostname_lookup_limit={hostname_lookup_limit}."
@@ -736,6 +818,9 @@ class NetworkNeighbourCollector:
                 vendor = None
             if vendor:
                 enriched["vendor"] = vendor
+            mac = neighbour.get("mac_address")
+            if mac and mac in wifi_rssi_map and neighbour.get("rssi") is None:
+                enriched["rssi"] = wifi_rssi_map[mac]
             enriched_neighbours.append(enriched)
         _scan_log(
             f"Enrichment completed: devices={len(enriched_neighbours)} "
