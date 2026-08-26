@@ -521,6 +521,36 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 self.send_data({"items": api_service.list_spatial_events(limit=limit)})
                 return
 
+            if path == "/api/v1/spatial/scene" or path == "/api/spatial/scene":
+                floor_str = query_params.get("floor", [None])[0]
+                floor_val = int(floor_str) if floor_str and floor_str.isdigit() else None
+                scene = api_service.get_spatial_scene(floor=floor_val)
+                self.send_data(scene)
+                return
+
+            if path == "/api/v1/spatial/topology" or path == "/api/spatial/topology":
+                topology = api_service.get_spatial_topology()
+                self.send_data(topology)
+                return
+
+            if path == "/api/v1/spatial/threats" or path == "/api/spatial/threats":
+                threats = api_service.get_spatial_threats()
+                self.send_data({"items": threats})
+                return
+
+            if path == "/api/v1/spatial/replay" or path == "/api/spatial/replay":
+                from_time = query_params.get("from", [None])[0]
+                to_time = query_params.get("to", [None])[0]
+                interval_str = query_params.get("interval", ["60"])[0]
+                interval_val = int(interval_str) if interval_str and interval_str.isdigit() else 60
+                replay = api_service.get_spatial_replay(
+                    from_time=from_time,
+                    to_time=to_time,
+                    interval_seconds=interval_val,
+                )
+                self.send_data(replay)
+                return
+
             # Fallback 404
             self.send_error_response(404, "NOT_FOUND", f"Unknown endpoint '{path}'.")
 
