@@ -371,7 +371,7 @@ export interface SpatialSceneNode {
   is_sensor: boolean;
   is_rogue: boolean;
   quarantined: boolean;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, any> & { floor?: number };
 }
 
 export interface SpatialSceneEdge {

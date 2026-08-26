@@ -2,10 +2,11 @@ import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import "../styles/shell.css";
 import { useApiState } from "../hooks/useApiState";
-import { TbCloudNetwork } from "react-icons/tb";
+import { TbCloudNetwork, TbMapPin } from "react-icons/tb";
 import { RiScanLine } from "react-icons/ri";
 import { MdHistory } from "react-icons/md";
 import { FiServer } from "react-icons/fi";
+import { HiOutlineSquare3Stack3D } from "react-icons/hi2";
 
 // ── Icons ────────────────────────────────────────────────────────
 function IconDashboard() {
@@ -245,7 +246,7 @@ function Sidebar({ isOpen = false, newAlertCount = 0, onClose }: SidebarProps) {
           to="/locations"
           className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
         >
-          <span className="nav-item__icon" aria-hidden="true">⌖</span>
+          <TbMapPin />
           Locations
         </NavLink>
         <NavLink
@@ -261,7 +262,7 @@ function Sidebar({ isOpen = false, newAlertCount = 0, onClose }: SidebarProps) {
           onClick={onClose}
           className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
         >
-          <span className="nav-item__icon" aria-hidden="true">🌐</span>
+         <HiOutlineSquare3Stack3D />
           3D Digital Twin & AR
         </NavLink>
 

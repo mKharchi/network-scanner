@@ -1434,7 +1434,7 @@ def get_spatial_scene(floor: Optional[int] = None, conn=None) -> Dict[str, Any]:
                 "name": r.get("name") or r.get("label") or f"Location {loc_id}",
                 "label": r.get("label") or r.get("name") or f"Loc-{loc_id}",
                 "type": loc_type,
-                "floor": r.get("floor") or 1,
+                "floor": int(r["floor"]) if r.get("floor") is not None else 1,
                 "parent_id": r.get("parent_id"),
                 "position": {
                     "x": float(r["x"]) if r.get("x") is not None else 0.0,
@@ -1456,7 +1456,7 @@ def get_spatial_scene(floor: Optional[int] = None, conn=None) -> Dict[str, Any]:
             location_map[loc_id] = loc_obj
 
         # 2. Fetch sensors
-        sensor_query = "SELECT s.*, l.label AS loc_label, l.floor AS loc_floor FROM sensors s LEFT JOIN locations l ON l.id = s.location_id WHERE s.is_active = TRUE"
+        sensor_query = "SELECT s.*, l.label AS loc_label, l.floor AS loc_floor, l.z AS loc_z FROM sensors s LEFT JOIN locations l ON l.id = s.location_id WHERE s.is_active = TRUE"
         cursor.execute(sensor_query)
         raw_sensors = _to_dict_rows(cursor.fetchall(), cursor)
 
@@ -1517,7 +1517,11 @@ def get_spatial_scene(floor: Optional[int] = None, conn=None) -> Dict[str, Any]:
                     caps = [caps]
             s_x = float(s["x"]) if s.get("x") is not None else 5.0
             s_y = float(s["y"]) if s.get("y") is not None else 5.0
-            s_z = float(s["z"]) if s.get("z") is not None else 2.5
+            sensor_floor = int(s["loc_floor"]) if s.get("loc_floor") is not None else 1
+            # Sensor coordinates are stored in the local floor frame. If z is
+            # omitted, anchor the sensor to its assigned floor elevation.
+            floor_z = float(s["loc_z"]) if s.get("loc_z") is not None else sensor_floor * 3.0
+            s_z = max(float(s["z"]), floor_z + 0.8) if s.get("z") is not None else floor_z + 2.5
             sensor_node = {
                 "id": s_id,
                 "name": s.get("name") or f"Sensor {s['id']}",
@@ -1533,6 +1537,7 @@ def get_spatial_scene(floor: Optional[int] = None, conn=None) -> Dict[str, Any]:
                 "quarantined": False,
                 "metadata": {
                     "sensor_type": s.get("sensor_type"),
+                    "floor": sensor_floor,
                     "capabilities": caps or ["arp", "dhcp", "rssi"],
                 },
             }
@@ -1582,6 +1587,7 @@ def get_spatial_scene(floor: Optional[int] = None, conn=None) -> Dict[str, Any]:
                 "quarantined": bool(c.get("is_quarantined")),
                 "metadata": {
                     "os": f"{c.get('os_name') or ''} {c.get('os_version') or ''}".strip(),
+                    "floor": int(c["loc_floor"]) if c.get("loc_floor") is not None else 0,
                     "agent_role": c.get("agent_role") or "agent",
                 },
             }
@@ -1663,6 +1669,7 @@ def get_spatial_scene(floor: Optional[int] = None, conn=None) -> Dict[str, Any]:
                 "quarantined": False,
                 "metadata": {
                     "rogue_score": score,
+                    "floor": int(d["loc_floor"]) if d.get("loc_floor") is not None else 0,
                     "reasons": reasons,
                     "method": d.get("est_method") or "TRIANGULATION",
                 },
