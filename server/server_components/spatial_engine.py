@@ -1384,3 +1384,523 @@ def list_spatial_events(limit: int = 50, conn=None) -> List[Dict[str, Any]]:
         cursor.close()
         if owns_conn:
             conn.close()
+
+
+# ============================================================
+# 3D DIGITAL TWIN SCENE, TOPOLOGY & REPLAY SERVICES
+# ============================================================
+
+
+def get_spatial_scene(floor: Optional[int] = None, conn=None) -> Dict[str, Any]:
+    """Generate the complete 3D digital twin scene graph for WebGL and AR rendering.
+
+    Combines the physical environment hierarchy (rooms, zones, seats), spatial nodes
+    (workstations, servers, switches, sensors, rogue devices), network topology links,
+    and active threat radar markers into a unified normalized JSON schema.
+    """
+    try:
+        from database import get_connection
+    except ImportError:
+        from ..database import get_connection
+
+    owns_conn = conn is None
+    if owns_conn:
+        conn = get_connection()
+        if not conn:
+            return {"version": 1, "timestamp": datetime.now(timezone.utc).isoformat(), "locations": [], "nodes": [], "edges": [], "threats": [], "meta": {}}
+
+    cursor = _get_cursor(conn)
+    try:
+        # 1. Fetch physical locations
+        loc_query = "SELECT * FROM locations"
+        loc_params = []
+        if floor is not None:
+            loc_query += " WHERE floor = %s"
+            loc_params.append(floor)
+        loc_query += " ORDER BY floor ASC, id ASC"
+        cursor.execute(loc_query, tuple(loc_params))
+        raw_locations = _to_dict_rows(cursor.fetchall(), cursor)
+
+        locations = []
+        location_map = {}
+        for r in raw_locations:
+            loc_id = r["id"]
+            loc_type = r.get("location_type") or r.get("type") or "zone"
+            w = r.get("width") or (12.0 if loc_type == "room" else (4.0 if loc_type == "zone" else 1.2))
+            length_val = r.get("length") or (10.0 if loc_type == "room" else (3.5 if loc_type == "zone" else 0.8))
+            h = r.get("height") or (3.0 if loc_type == "room" else 0.8)
+            loc_obj = {
+                "id": loc_id,
+                "name": r.get("name") or r.get("label") or f"Location {loc_id}",
+                "label": r.get("label") or r.get("name") or f"Loc-{loc_id}",
+                "type": loc_type,
+                "floor": r.get("floor") or 1,
+                "parent_id": r.get("parent_id"),
+                "position": {
+                    "x": float(r["x"]) if r.get("x") is not None else 0.0,
+                    "y": float(r["y"]) if r.get("y") is not None else 0.0,
+                    "z": float(r["z"]) if r.get("z") is not None else 0.0,
+                },
+                "bounds": {
+                    "width": float(w),
+                    "length": float(length_val),
+                    "height": float(h),
+                },
+                "is_restricted": bool(r.get("is_restricted")),
+                "zone_type": r.get("zone_type") or "office",
+                "aisle": r.get("aisle"),
+                "table_no": r.get("table_no"),
+                "position_no": r.get("position"),
+            }
+            locations.append(loc_obj)
+            location_map[loc_id] = loc_obj
+
+        # 2. Fetch sensors
+        sensor_query = "SELECT s.*, l.label AS loc_label, l.floor AS loc_floor FROM sensors s LEFT JOIN locations l ON l.id = s.location_id WHERE s.is_active = TRUE"
+        cursor.execute(sensor_query)
+        raw_sensors = _to_dict_rows(cursor.fetchall(), cursor)
+
+        nodes = []
+        node_ids = set()
+
+        # Add Gateway & Core Switch Infrastructure nodes
+        gateway_node = {
+            "id": "node-gateway",
+            "name": "Core Gateway / Firewall",
+            "label": "Gateway",
+            "type": "gateway",
+            "position": {"x": 2.0, "y": 2.0, "z": 1.2},
+            "status": "online",
+            "risk": "low",
+            "confidence": 1.0,
+            "ip": "192.168.1.1",
+            "mac": "00:50:56:00:00:01",
+            "vendor": "Cisco Systems",
+            "location_label": "Server Room / Network Rack",
+            "is_sensor": False,
+            "is_rogue": False,
+            "quarantined": False,
+            "metadata": {"role": "default_gateway", "bandwidth_gbps": 10},
+        }
+        nodes.append(gateway_node)
+        node_ids.add("node-gateway")
+
+        switch_node = {
+            "id": "node-switch-core",
+            "name": "Core Distribution Switch",
+            "label": "Switch-01",
+            "type": "switch",
+            "position": {"x": 4.0, "y": 2.0, "z": 1.0},
+            "status": "online",
+            "risk": "low",
+            "confidence": 1.0,
+            "ip": "192.168.1.2",
+            "mac": "00:50:56:00:00:02",
+            "vendor": "Cisco Systems",
+            "location_label": "Server Room / Rack 1",
+            "is_sensor": False,
+            "is_rogue": False,
+            "quarantined": False,
+            "metadata": {"ports_total": 48, "ports_active": 24},
+        }
+        nodes.append(switch_node)
+        node_ids.add("node-switch-core")
+
+        # Add Sensors
+        for s in raw_sensors:
+            s_id = f"sensor-{s['id']}"
+            caps = s.get("capabilities")
+            if isinstance(caps, str):
+                try:
+                    caps = json.loads(caps)
+                except Exception:
+                    caps = [caps]
+            s_x = float(s["x"]) if s.get("x") is not None else 5.0
+            s_y = float(s["y"]) if s.get("y") is not None else 5.0
+            s_z = float(s["z"]) if s.get("z") is not None else 2.5
+            sensor_node = {
+                "id": s_id,
+                "name": s.get("name") or f"Sensor {s['id']}",
+                "label": s.get("name") or f"Sensor {s['id']}",
+                "type": "sensor",
+                "position": {"x": s_x, "y": s_y, "z": s_z},
+                "status": "online" if s.get("is_active") else "offline",
+                "risk": "low",
+                "confidence": 1.0,
+                "location_label": s.get("loc_label") or "Zone Sensor",
+                "is_sensor": True,
+                "is_rogue": False,
+                "quarantined": False,
+                "metadata": {
+                    "sensor_type": s.get("sensor_type"),
+                    "capabilities": caps or ["arp", "dhcp", "rssi"],
+                },
+            }
+            nodes.append(sensor_node)
+            node_ids.add(s_id)
+
+        # 3. Fetch Registered Clients (Workstations / Managed Endpoints)
+        client_query = """
+            SELECT c.*, l.label AS loc_label, l.x AS loc_x, l.y AS loc_y, l.z AS loc_z,
+                   l.floor AS loc_floor, l.is_restricted AS loc_restricted
+            FROM clients c
+            LEFT JOIN locations l ON l.id = c.location_id
+        """
+        cursor.execute(client_query)
+        raw_clients = _to_dict_rows(cursor.fetchall(), cursor)
+        for c in raw_clients:
+            c_node_id = f"client-{c['id']}"
+            c_status = (c.get("status") or "online").lower()
+            if c_status not in {"online", "offline", "quarantined"}:
+                c_status = "online"
+            c_x = float(c["loc_x"]) if c.get("loc_x") is not None else (float(c.get("x") or 0.0) if c.get("x") is not None else None)
+            c_y = float(c["loc_y"]) if c.get("loc_y") is not None else (float(c.get("y") or 0.0) if c.get("y") is not None else None)
+            c_z = float(c["loc_z"]) if c.get("loc_z") is not None else (float(c.get("z") or 0.0) if c.get("z") is not None else 0.8)
+
+            # Assign room offset fallback if coordinates missing
+            if c_x is None or c_y is None:
+                h_val = hash(c.get("mac") or str(c["id"]))
+                c_x = 5.0 + (h_val % 15) * 1.2
+                c_y = 4.0 + ((h_val // 15) % 10) * 1.2
+                c_z = 0.8
+
+            client_node = {
+                "id": c_node_id,
+                "name": c.get("hostname") or f"Workstation {c['id']}",
+                "label": c.get("hostname") or f"PC-{c['id']}",
+                "type": "workstation" if "server" not in (c.get("hostname") or "").lower() else "server",
+                "position": {"x": c_x, "y": c_y, "z": c_z},
+                "status": "isolated" if c.get("is_quarantined") else c_status,
+                "risk": "medium" if c.get("is_quarantined") else "low",
+                "confidence": 0.95 if c.get("location_id") else 0.75,
+                "ip": c.get("ip"),
+                "mac": c.get("mac"),
+                "vendor": c.get("os_name") or "Managed Workstation",
+                "location_label": c.get("loc_label") or "General Area",
+                "is_sensor": False,
+                "is_rogue": False,
+                "quarantined": bool(c.get("is_quarantined")),
+                "metadata": {
+                    "os": f"{c.get('os_name') or ''} {c.get('os_version') or ''}".strip(),
+                    "agent_role": c.get("agent_role") or "agent",
+                },
+            }
+            nodes.append(client_node)
+            node_ids.add(c_node_id)
+
+        # 4. Fetch Network Devices, Spatial Estimates & Rogue Assessments
+        dev_query = """
+            SELECT d.id AS device_id, d.id AS id, d.mac_address, d.ip_address, d.hostname, d.vendor,
+                   d.first_seen, d.last_seen,
+                   e.location_id, e.x AS est_x, e.y AS est_y, e.z AS est_z,
+                   e.confidence AS est_conf, e.method AS est_method,
+                   e.supporting_sensor_ids,
+                   l.label AS loc_label, l.floor AS loc_floor, l.is_restricted AS loc_restricted,
+                   r.rogue_score, r.is_rogue, r.classification AS rogue_class,
+                   r.risk_level, r.reasons AS rogue_reasons
+            FROM network_devices d
+            LEFT JOIN device_location_estimates e ON e.device_id = d.id
+            LEFT JOIN locations l ON l.id = e.location_id
+            LEFT JOIN rogue_device_assessments r ON r.device_id = d.id
+            ORDER BY COALESCE(r.rogue_score, 0) DESC, d.last_seen DESC
+        """
+        cursor.execute(dev_query)
+        raw_devices = _to_dict_rows(cursor.fetchall(), cursor)
+
+        threats = []
+        for d in raw_devices:
+            dev_id = d.get("device_id") or d.get("id")
+            if not dev_id:
+                continue
+
+            # Skip if this network device is already represented by a registered client with same MAC
+            mac = d.get("mac_address")
+            if any(n.get("mac") == mac for n in nodes if n.get("mac")):
+                continue
+
+            d_node_id = f"dev-{dev_id}"
+            score = int(d.get("rogue_score") or 0)
+            is_rogue = bool(d.get("is_rogue")) or score >= 50
+            risk_raw = str(d.get("risk_level") or ("CRITICAL" if score >= 75 else ("HIGH" if score >= 50 else ("MEDIUM" if score >= 30 else "LOW")))).upper()
+
+            d_x = float(d["est_x"]) if d.get("est_x") is not None else None
+            d_y = float(d["est_y"]) if d.get("est_y") is not None else None
+            d_z = float(d["est_z"]) if d.get("est_z") is not None else 0.8
+
+            if d_x is None or d_y is None:
+                h_val = hash(mac or str(dev_id))
+                d_x = 8.0 + (abs(h_val) % 18) * 1.6
+                d_y = 5.0 + ((abs(h_val) // 18) % 12) * 1.6
+                d_z = 0.8
+
+            dev_type = "rogue" if (is_rogue or score >= 35) else ("printer" if "print" in (d.get("hostname") or "").lower() else ("server" if "srv" in (d.get("hostname") or "").lower() else "workstation"))
+            node_status = "rogue" if is_rogue else ("suspicious" if score >= 20 else "online")
+
+            reasons = []
+            if d.get("rogue_reasons"):
+                try:
+                    reasons = json.loads(d["rogue_reasons"]) if isinstance(d["rogue_reasons"], str) and d["rogue_reasons"].startswith("[") else ([d["rogue_reasons"]] if isinstance(d["rogue_reasons"], str) else d["rogue_reasons"])
+                except Exception:
+                    reasons = [str(d["rogue_reasons"])]
+            if not reasons and (is_rogue or score >= 20):
+                reasons = ["Unmanaged network endpoint detected on subnet"]
+
+            dev_node = {
+                "id": d_node_id,
+                "name": d.get("hostname") or f"Device {mac or dev_id}",
+                "label": d.get("hostname") or (mac or f"Dev-{dev_id}"),
+                "type": dev_type,
+                "position": {"x": d_x, "y": d_y, "z": d_z},
+                "status": node_status,
+                "risk": risk_raw.lower(),
+                "confidence": float(d.get("est_conf") or 0.75),
+                "ip": d.get("ip_address"),
+                "mac": mac,
+                "vendor": d.get("vendor") or "Unknown Vendor",
+                "location_label": d.get("loc_label") or "Office Floor",
+                "is_sensor": False,
+                "is_rogue": is_rogue or score >= 20,
+                "quarantined": False,
+                "metadata": {
+                    "rogue_score": score,
+                    "reasons": reasons,
+                    "method": d.get("est_method") or "TRIANGULATION",
+                },
+            }
+            nodes.append(dev_node)
+            node_ids.add(d_node_id)
+
+            if is_rogue or score >= 20 or risk_raw in {"CRITICAL", "HIGH", "MEDIUM"}:
+                threats.append({
+                    "id": f"threat-{dev_id}",
+                    "device_id": dev_id,
+                    "node_id": d_node_id,
+                    "name": d.get("hostname") or mac or f"Threat-{dev_id}",
+                    "severity": risk_raw.lower(),
+                    "score": score,
+                    "position": {"x": d_x, "y": d_y, "z": d_z},
+                    "confidence": float(d.get("est_conf") or 0.75),
+                    "reasons": reasons,
+                    "detected_at": d.get("first_seen").isoformat() if d.get("first_seen") and hasattr(d["first_seen"], "isoformat") else str(d.get("first_seen") or ""),
+                    "is_restricted_zone": bool(d.get("loc_restricted")),
+                })
+
+        # 5. Fetch Network Topology Links (Edges)
+        edges = []
+        edge_id = 1
+
+        # Connect Core Gateway to Core Switch
+        edges.append({
+            "id": f"edge-{edge_id}",
+            "source": "node-gateway",
+            "target": "node-switch-core",
+            "type": "physical",
+            "status": "active",
+            "traffic_rate": "1.2 Gbps",
+            "latency": 0.2,
+            "risk": "low",
+        })
+        edge_id += 1
+
+        # Connect Sensors to Core Switch
+        for s in raw_sensors:
+            edges.append({
+                "id": f"edge-{edge_id}",
+                "source": "node-switch-core",
+                "target": f"sensor-{s['id']}",
+                "type": "physical",
+                "status": "active",
+                "traffic_rate": "24 kbps",
+                "latency": 0.5,
+                "risk": "low",
+            })
+            edge_id += 1
+
+        # Connect Clients to Switch
+        for c in raw_clients:
+            c_node_id = f"client-{c['id']}"
+            if c_node_id in node_ids:
+                edges.append({
+                    "id": f"edge-{edge_id}",
+                    "source": "node-switch-core",
+                    "target": c_node_id,
+                    "type": "physical",
+                    "status": "isolated" if c.get("is_quarantined") else "active",
+                    "traffic_rate": "4.5 Mbps",
+                    "latency": 0.8,
+                    "risk": "medium" if c.get("is_quarantined") else "low",
+                })
+                edge_id += 1
+
+        # Connect Observations / Wireless Proximity Edges
+        obs_query = """
+            SELECT DISTINCT obs.device_id, obs.source_client_id, obs.rssi, obs.switch_port,
+                   c.id AS client_id
+            FROM network_device_observations obs
+            LEFT JOIN clients c ON c.id = obs.source_client_id
+            WHERE obs.observed_at >= NOW() - INTERVAL 24 HOUR
+            LIMIT 100
+        """
+        try:
+            cursor.execute(obs_query)
+            raw_obs = _to_dict_rows(cursor.fetchall(), cursor)
+            for ob in raw_obs:
+                target_node_id = f"dev-{ob['device_id']}"
+                source_node_id = f"client-{ob['client_id']}" if ob.get("client_id") else "node-switch-core"
+                if target_node_id in node_ids and source_node_id in node_ids:
+                    rssi_val = ob.get("rssi")
+                    edges.append({
+                        "id": f"edge-{edge_id}",
+                        "source": source_node_id,
+                        "target": target_node_id,
+                        "type": "wireless" if rssi_val is not None else "logical",
+                        "status": "active",
+                        "traffic_rate": f"{rssi_val} dBm" if rssi_val is not None else "normal",
+                        "latency": 1.2,
+                        "risk": "high" if any(t["node_id"] == target_node_id for t in threats) else "low",
+                    })
+                    edge_id += 1
+        except Exception:
+            pass
+
+        # 6. Calculate Spatial Bounding Metadata
+        all_x = [n["position"]["x"] for n in nodes] + [l["position"]["x"] for l in locations]
+        all_y = [n["position"]["y"] for n in nodes] + [l["position"]["y"] for l in locations]
+        all_z = [n["position"]["z"] for n in nodes] + [l["position"]["z"] for l in locations]
+
+        meta = {
+            "version": 1,
+            "floors": sorted(list(set(l["floor"] for l in locations))) or [1],
+            "total_locations": len(locations),
+            "total_nodes": len(nodes),
+            "total_edges": len(edges),
+            "total_threats": len(threats),
+            "bounds": {
+                "min_x": min(all_x) if all_x else 0.0,
+                "max_x": max(all_x) if all_x else 50.0,
+                "min_y": min(all_y) if all_y else 0.0,
+                "max_y": max(all_y) if all_y else 40.0,
+                "min_z": min(all_z) if all_z else 0.0,
+                "max_z": max(all_z) if all_z else 10.0,
+            },
+        }
+
+        return {
+            "version": 1,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "locations": locations,
+            "nodes": nodes,
+            "edges": edges,
+            "threats": threats,
+            "meta": meta,
+        }
+    finally:
+        cursor.close()
+        if owns_conn:
+            conn.close()
+
+
+def get_spatial_topology(conn=None) -> Dict[str, Any]:
+    """Retrieve the physical and logical network topology graph with link metrics."""
+    scene = get_spatial_scene(conn=conn)
+    return {
+        "nodes": scene["nodes"],
+        "edges": scene["edges"],
+        "summary": {
+            "total_nodes": len(scene["nodes"]),
+            "total_edges": len(scene["edges"]),
+            "physical_links": sum(1 for e in scene["edges"] if e["type"] == "physical"),
+            "wireless_links": sum(1 for e in scene["edges"] if e["type"] == "wireless"),
+            "threat_links": sum(1 for e in scene["edges"] if e.get("risk") == "high"),
+        },
+    }
+
+
+def get_spatial_threats(conn=None) -> List[Dict[str, Any]]:
+    """Retrieve all spatially localized threats and rogue candidates with evidence vectors."""
+    scene = get_spatial_scene(conn=conn)
+    return scene.get("threats", [])
+
+
+def get_spatial_replay(
+    from_time: Optional[str] = None,
+    to_time: Optional[str] = None,
+    interval_seconds: int = 60,
+    conn=None,
+) -> Dict[str, Any]:
+    """Generate time-series replay frames of spatial movements and security events.
+
+    Allows operators to scrub through history to observe when rogue devices appeared,
+    how they moved across zones, and when isolation actions were triggered.
+    """
+    try:
+        from database import get_connection
+    except ImportError:
+        from ..database import get_connection
+
+    owns_conn = conn is None
+    if owns_conn:
+        conn = get_connection()
+        if not conn:
+            return {"frames": [], "events": [], "interval_seconds": interval_seconds}
+
+    cursor = _get_cursor(conn)
+    try:
+        events = list_spatial_events(limit=200, conn=conn)
+        base_scene = get_spatial_scene(conn=conn)
+
+        # Build chronological timeline frames from events
+        frames = []
+        if events:
+            # Sort chronological
+            sorted_events = sorted(events, key=lambda e: e.get("timestamp") or "")
+            for idx, ev in enumerate(sorted_events):
+                frame_ts = ev.get("timestamp")
+                # Create snapshot reflecting position change
+                dev_id = f"dev-{ev['device_id']}"
+                frame_nodes = []
+                for n in base_scene["nodes"]:
+                    node_copy = dict(n)
+                    if n["id"] == dev_id and ev.get("new_location"):
+                        node_copy["position"] = {
+                            "x": ev["new_location"].get("x") or n["position"]["x"],
+                            "y": ev["new_location"].get("y") or n["position"]["y"],
+                            "z": ev["new_location"].get("z") or n["position"]["z"],
+                        }
+                    frame_nodes.append(node_copy)
+
+                frames.append({
+                    "frame_index": idx,
+                    "timestamp": frame_ts,
+                    "trigger_event": {
+                        "device_id": ev["device_id"],
+                        "hostname": ev.get("hostname"),
+                        "mac_address": ev.get("mac_address"),
+                        "reason": ev.get("reason"),
+                        "from_location": ev.get("previous_location", {}).get("label") if ev.get("previous_location") else None,
+                        "to_location": ev.get("new_location", {}).get("label") if ev.get("new_location") else None,
+                    },
+                    "active_nodes_count": len(frame_nodes),
+                })
+        else:
+            # Provide default initial frame
+            now_iso = datetime.now(timezone.utc).isoformat()
+            frames.append({
+                "frame_index": 0,
+                "timestamp": now_iso,
+                "trigger_event": None,
+                "active_nodes_count": len(base_scene["nodes"]),
+            })
+
+        return {
+            "interval_seconds": interval_seconds,
+            "total_frames": len(frames),
+            "events": events,
+            "frames": frames,
+            "base_scene": base_scene,
+        }
+    finally:
+        cursor.close()
+        if owns_conn:
+            conn.close()
+

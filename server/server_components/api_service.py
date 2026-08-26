@@ -1877,3 +1877,36 @@ def trigger_spatial_scan_evaluation() -> List[Dict[str, Any]]:
     from server_components import spatial_engine
     return spatial_engine.evaluate_all_devices()
 
+
+def get_spatial_scene(floor: Optional[int] = None) -> Dict[str, Any]:
+    """Retrieve full 3D digital twin scene graph for physical/AR rendering."""
+    from server_components import spatial_engine
+    return spatial_engine.get_spatial_scene(floor=floor)
+
+
+def get_spatial_topology() -> Dict[str, Any]:
+    """Retrieve network graph topology separating physical, logical, and wireless links."""
+    from server_components import spatial_engine
+    return spatial_engine.get_spatial_topology()
+
+
+def get_spatial_threats() -> List[Dict[str, Any]]:
+    """Retrieve active spatial threat markers with 3D anchors and risk scores."""
+    from server_components import spatial_engine
+    return spatial_engine.get_spatial_threats()
+
+
+def get_spatial_replay(
+    from_time: Optional[str] = None,
+    to_time: Optional[str] = None,
+    interval_seconds: int = 60,
+) -> Dict[str, Any]:
+    """Generate time-replay frames of spatial movements and security events."""
+    from server_components import spatial_engine
+    return spatial_engine.get_spatial_replay(
+        from_time=from_time,
+        to_time=to_time,
+        interval_seconds=interval_seconds,
+    )
+
+
