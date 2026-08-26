@@ -248,6 +248,14 @@ function Sidebar({ isOpen = false, newAlertCount = 0, onClose }: SidebarProps) {
           <span className="nav-item__icon" aria-hidden="true">⌖</span>
           Locations
         </NavLink>
+        <NavLink
+          to="/rogue-devices"
+          onClick={onClose}
+          className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
+        >
+          <span className="nav-item__icon" aria-hidden="true">🛰️</span>
+          Rogue Triangulation
+        </NavLink>
 
         <span
           className="sidebar__section-label"

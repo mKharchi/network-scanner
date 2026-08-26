@@ -68,8 +68,15 @@ def _location_from_row(row: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]
         "column": column,
         "position": row.get("position"),
         "label": row.get("label"),
+        "parent_id": row.get("parent_id"),
+        "x": row.get("x"),
+        "y": row.get("y"),
+        "z": row.get("z"),
+        "is_restricted": bool(row.get("is_restricted")),
         "assignable": location_type in ASSIGNABLE_LOCATION_TYPES,
     }
+    if row.get("metadata"):
+        location["metadata"] = row["metadata"]
     if row.get("hostname") is not None:
         location["hostname"] = row["hostname"]
     if row.get("client_id") is not None:
@@ -1790,3 +1797,83 @@ def delete_forbidden_process(identifier: str) -> bool:
         return deleted
     finally:
         conn.close()
+
+
+# ============================================================
+# SPATIAL & ROGUE DEVICE SENSORS / TRIANGULATION
+# ============================================================
+
+
+def list_sensors() -> List[Dict[str, Any]]:
+    """Return all registered infrastructure and client sensors."""
+    from server_components import spatial_engine
+    return spatial_engine.list_sensors()
+
+
+def create_sensor(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Register a new infrastructure sensor."""
+    from server_components import spatial_engine
+    sensor_id = payload.get("sensor_id") or f"sensor-{int(datetime.now(timezone.utc).timestamp())}"
+    name = payload.get("name") or sensor_id
+    sensor_type = payload.get("sensor_type") or payload.get("type") or "endpoint"
+    location_id = payload.get("location_id")
+    client_id = payload.get("client_id")
+    x = payload.get("x")
+    y = payload.get("y")
+    z = payload.get("z")
+    capabilities = payload.get("capabilities")
+    return spatial_engine.register_sensor(
+        sensor_id=sensor_id,
+        name=name,
+        sensor_type=sensor_type,
+        location_id=location_id,
+        client_id=client_id,
+        x=float(x) if x is not None else None,
+        y=float(y) if y is not None else None,
+        z=float(z) if z is not None else None,
+        capabilities=capabilities if isinstance(capabilities, list) else None,
+    )
+
+
+def get_device_spatial_location(device_identifier: Any) -> Optional[Dict[str, Any]]:
+    """Return spatial location estimate, coordinates, confidence, and supporting sensors."""
+    from server_components import spatial_engine
+    return spatial_engine.get_device_location(device_identifier)
+
+
+def get_device_spatial_history(device_identifier: Any, limit: int = 50) -> List[Dict[str, Any]]:
+    """Return chronological location change and movement history for a device."""
+    from server_components import spatial_engine
+    return spatial_engine.get_device_location_history(device_identifier, limit=limit)
+
+
+def list_rogue_devices(min_score: int = 35) -> List[Dict[str, Any]]:
+    """List rogue device candidates and unmanaged endpoints sorted by threat score."""
+    from server_components import spatial_engine
+    return spatial_engine.list_rogue_devices(min_score=min_score)
+
+
+def get_rogue_device_detail(device_identifier: Any) -> Optional[Dict[str, Any]]:
+    """Return full rogue analysis report, evidence list, and spatial location for a device."""
+    from server_components import spatial_engine
+    loc_info = spatial_engine.get_device_location(device_identifier)
+    if not loc_info:
+        return None
+    history = spatial_engine.get_device_location_history(device_identifier, limit=20)
+    return {
+        **loc_info,
+        "movement_history": history,
+    }
+
+
+def list_spatial_events(limit: int = 50) -> List[Dict[str, Any]]:
+    """Return recent global spatial localization and movement events."""
+    from server_components import spatial_engine
+    return spatial_engine.list_spatial_events(limit=limit)
+
+
+def trigger_spatial_scan_evaluation() -> List[Dict[str, Any]]:
+    """Evaluate spatial coordinates and rogue scores across all network devices."""
+    from server_components import spatial_engine
+    return spatial_engine.evaluate_all_devices()
+
