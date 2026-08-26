@@ -477,8 +477,48 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 rule = api_service.get_forbidden_process(urllib.parse.unquote(m.group(1)))
                 if rule is None:
                     self.send_error_response(404, "NOT_FOUND", "Forbidden process rule not found.")
-                else:
-                    self.send_data(rule)
+            # 11. Spatial & Rogue Device Triangulation
+            if path == "/api/v1/sensors" or path == "/api/sensors":
+                self.send_data({"items": api_service.list_sensors()})
+                return
+
+            if path == "/api/v1/rogue-devices" or path == "/api/rogue-devices":
+                min_score = get_int_param("min_score", 35)
+                items = api_service.list_rogue_devices(min_score=min_score)
+                self.send_data({"items": items, "total": len(items)})
+                return
+
+            m = re.match(r"^/(?:api/v1/|api/)rogue-devices/([^/]+)$", path)
+            if m:
+                device_id = urllib.parse.unquote(m.group(1))
+                detail = api_service.get_rogue_device_detail(device_id)
+                if not detail:
+                    self.send_error_response(404, "NOT_FOUND", f"Device '{device_id}' rogue details not found.")
+                    return
+                self.send_data(detail)
+                return
+
+            m = re.match(r"^/(?:api/v1/|api/)(?:spatial/)?devices/([^/]+)/location$", path)
+            if m:
+                device_id = urllib.parse.unquote(m.group(1))
+                loc = api_service.get_device_spatial_location(device_id)
+                if not loc:
+                    self.send_error_response(404, "NOT_FOUND", f"Spatial location for device '{device_id}' not found.")
+                    return
+                self.send_data(loc)
+                return
+
+            m = re.match(r"^/(?:api/v1/|api/)(?:spatial/)?devices/([^/]+)/(?:location-history|history)$", path)
+            if m:
+                device_id = urllib.parse.unquote(m.group(1))
+                limit = get_int_param("limit", 50)
+                history = api_service.get_device_spatial_history(device_id, limit=limit)
+                self.send_data({"items": history})
+                return
+
+            if path == "/api/v1/spatial/events" or path == "/api/spatial/events":
+                limit = get_int_param("limit", 50)
+                self.send_data({"items": api_service.list_spatial_events(limit=limit)})
                 return
 
             # Fallback 404
@@ -770,6 +810,21 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     "status": "started" if created else "already_running",
                 }
                 self.send_data(response, status_code=202 if created else 200)
+            if path == "/api/v1/sensors" or path == "/api/sensors":
+                payload = self._read_json_payload()
+                if payload is None:
+                    self.send_error_response(400, "INVALID_PAYLOAD", "Invalid JSON payload.")
+                    return
+                try:
+                    sensor = api_service.create_sensor(payload)
+                    self.send_data(sensor, status_code=201)
+                except Exception as exc:
+                    self.send_error_response(400, "SENSOR_CREATION_FAILED", str(exc))
+                return
+
+            if path == "/api/v1/spatial/evaluate" or path == "/api/spatial/evaluate":
+                eval_res = api_service.trigger_spatial_scan_evaluation()
+                self.send_data({"status": "ok", "evaluated_devices": len(eval_res), "items": eval_res})
                 return
 
             # Fallback 404

@@ -155,14 +155,18 @@ def _store_observations(reporter_mac, neighbours, source_type, *, observed_at=No
                 raise ValueError("reporting client is not registered")
             reporter_client_id = reporter[0]
 
+        updated_device_ids = set()
         for neighbour in neighbours:
             device_id = _upsert_device(cursor, neighbour, observed_at)
+            updated_device_ids.add(device_id)
+            rssi = neighbour.get("rssi")
+            switch_port = neighbour.get("switch_port")
             cursor.execute(
                 """
                 INSERT INTO network_device_observations (
                     device_id, source_type, source_client_id, ip_address,
-                    interface_name, entry_type, observed_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    interface_name, entry_type, observed_at, rssi, switch_port
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     device_id,
@@ -172,9 +176,20 @@ def _store_observations(reporter_mac, neighbours, source_type, *, observed_at=No
                     neighbour.get("interface"),
                     neighbour["entry_type"],
                     observed_at,
+                    rssi,
+                    switch_port,
                 ),
             )
         connection.commit()
+
+        # Trigger spatial and rogue evaluation for newly observed devices
+        try:
+            from server_components import spatial_engine
+            for dev_id in updated_device_ids:
+                spatial_engine.evaluate_device_spatial_and_rogue_status(dev_id, conn=connection)
+        except Exception as spatial_err:
+            LOGGER.warning("Spatial triangulation evaluation skipped: %s", spatial_err)
+
         return len(neighbours)
     except Exception:
         if connection:

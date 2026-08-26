@@ -9,12 +9,20 @@ CREATE TABLE IF NOT EXISTS locations (
     position INT NULL,
     label VARCHAR(255) NOT NULL UNIQUE,
     location_type VARCHAR(32) NOT NULL DEFAULT 'pc_position',
+    parent_id INT NULL,
+    x DOUBLE NULL,
+    y DOUBLE NULL,
+    z DOUBLE NULL,
+    is_restricted BOOLEAN NOT NULL DEFAULT FALSE,
+    metadata TEXT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uq_location_position
         (floor, zone_type, zone_name, aisle, table_no, row_no, position),
+    FOREIGN KEY (parent_id) REFERENCES locations(id) ON DELETE SET NULL,
     INDEX idx_locations_floor (floor),
     INDEX idx_locations_zone (zone_type, zone_name),
-    INDEX idx_locations_type (location_type)
+    INDEX idx_locations_type (location_type),
+    INDEX idx_locations_coords (x, y, z)
 );
 
 CREATE TABLE IF NOT EXISTS clients (
@@ -204,14 +212,40 @@ CREATE TABLE IF NOT EXISTS network_devices (
     INDEX idx_network_devices_last_seen (last_seen)
 );
 
+CREATE TABLE IF NOT EXISTS sensors (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    sensor_id VARCHAR(64) NOT NULL UNIQUE,
+    name VARCHAR(255) NOT NULL,
+    sensor_type VARCHAR(32) NOT NULL DEFAULT 'endpoint',
+    client_id INT NULL,
+    location_id INT NULL,
+    x DOUBLE NULL,
+    y DOUBLE NULL,
+    z DOUBLE NULL,
+    capabilities TEXT NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'ONLINE',
+    last_seen DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL,
+    FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE SET NULL,
+    INDEX idx_sensors_type (sensor_type),
+    INDEX idx_sensors_status (status)
+);
+
 CREATE TABLE IF NOT EXISTS network_device_observations (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     device_id BIGINT NOT NULL,
     source_type VARCHAR(32) NOT NULL,
     source_client_id INT NULL,
+    sensor_id INT NULL,
     ip_address VARCHAR(45) NOT NULL,
     interface_name VARCHAR(255) NULL,
     entry_type VARCHAR(16) NOT NULL,
+    rssi INT NULL,
+    switch_port VARCHAR(64) NULL,
+    raw_data TEXT NULL,
     observed_at DATETIME NOT NULL,
     received_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (device_id)
@@ -220,8 +254,69 @@ CREATE TABLE IF NOT EXISTS network_device_observations (
     FOREIGN KEY (source_client_id)
         REFERENCES clients(id)
         ON DELETE SET NULL,
+    FOREIGN KEY (sensor_id)
+        REFERENCES sensors(id)
+        ON DELETE SET NULL,
     INDEX idx_network_device_observations_device_time (device_id, observed_at),
-    INDEX idx_network_device_observations_source_client (source_client_id)
+    INDEX idx_network_device_observations_source_client (source_client_id),
+    INDEX idx_network_device_observations_sensor (sensor_id)
+);
+
+CREATE TABLE IF NOT EXISTS device_location_estimates (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    device_id BIGINT NOT NULL UNIQUE,
+    location_id INT NULL,
+    x DOUBLE NULL,
+    y DOUBLE NULL,
+    z DOUBLE NULL,
+    confidence DOUBLE NOT NULL DEFAULT 0.0,
+    method VARCHAR(64) NOT NULL,
+    supporting_sensor_ids TEXT NULL,
+    calculated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (device_id) REFERENCES network_devices(id) ON DELETE CASCADE,
+    FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE SET NULL,
+    INDEX idx_estimates_location (location_id),
+    INDEX idx_estimates_confidence (confidence)
+);
+
+CREATE TABLE IF NOT EXISTS device_location_events (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    device_id BIGINT NOT NULL,
+    previous_location_id INT NULL,
+    new_location_id INT NULL,
+    previous_x DOUBLE NULL,
+    previous_y DOUBLE NULL,
+    previous_z DOUBLE NULL,
+    new_x DOUBLE NULL,
+    new_y DOUBLE NULL,
+    new_z DOUBLE NULL,
+    confidence DOUBLE NOT NULL DEFAULT 0.0,
+    method VARCHAR(64) NOT NULL,
+    reason VARCHAR(255) NULL,
+    timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (device_id) REFERENCES network_devices(id) ON DELETE CASCADE,
+    FOREIGN KEY (previous_location_id) REFERENCES locations(id) ON DELETE SET NULL,
+    FOREIGN KEY (new_location_id) REFERENCES locations(id) ON DELETE SET NULL,
+    INDEX idx_location_events_device_time (device_id, timestamp)
+);
+
+CREATE TABLE IF NOT EXISTS rogue_device_assessments (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    device_id BIGINT NOT NULL UNIQUE,
+    rogue_score INT NOT NULL DEFAULT 0,
+    is_rogue BOOLEAN NOT NULL DEFAULT FALSE,
+    classification VARCHAR(32) NOT NULL DEFAULT 'UNKNOWN',
+    risk_level ENUM('LOW', 'MEDIUM', 'HIGH', 'CRITICAL') NOT NULL DEFAULT 'LOW',
+    reasons TEXT NULL,
+    first_detected_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_evaluated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (device_id) REFERENCES network_devices(id) ON DELETE CASCADE,
+    INDEX idx_rogue_score (rogue_score),
+    INDEX idx_is_rogue (is_rogue),
+    INDEX idx_rogue_risk (risk_level)
 );
 
 CREATE TABLE IF NOT EXISTS daily_network_scan_files (
