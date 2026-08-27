@@ -786,6 +786,9 @@ export const api = {
   getLocationLayout: (floor: number) =>
     getAction<FloorLayout>(`/api/locations/layout?floor=${floor}`),
 
+  getCalibrationReport: () =>
+    getAction<CalibrationReport>("/api/locations/calibration"),
+
   createLocation: (payload: Omit<ClientLocation, "id" | "client_id">) =>
     postAction<ClientLocation>("/api/locations", payload),
 

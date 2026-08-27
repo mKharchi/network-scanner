@@ -89,6 +89,30 @@ class LocationAssignmentTests(unittest.TestCase):
         self.assertIn("already exists", str(raised.exception))
         conn.rollback.assert_called_once()
 
+    @patch("server_components.event_broadcaster.broadcast_client_location_updated")
+    @patch("server_components.api_service.get_connection")
+    def test_assign_location_broadcasts_authoritative_update(self, get_connection, broadcast_update):
+        cursor = MagicMock()
+        cursor.fetchone.side_effect = [
+            {"id": 8, "client_id": "client-a", "location_id": None},
+            SEAT,
+            None,
+        ]
+        conn = _connection(cursor)
+        get_connection.return_value = conn
+
+        api_service.assign_client_location("client-a", 4, assigned_by="admin")
+
+        conn.commit.assert_called_once()
+        broadcast_update.assert_called_once()
+        payload = broadcast_update.call_args.kwargs
+        self.assertEqual(payload["client_id"], "client-a")
+        self.assertEqual(payload["location"]["id"], 4)
+        self.assertEqual(payload["assignment"]["method"], "MANUAL")
+        self.assertEqual(payload["assignment"]["status"], "ASSIGNED")
+        self.assertIsNone(payload["previous_location_id"])
+        self.assertEqual(payload["change"], "assigned")
+
     @patch("server_components.api_service.get_connection")
     def test_assign_location_to_unassigned_client(self, get_connection):
         cursor = MagicMock()
@@ -157,6 +181,48 @@ class LocationAssignmentTests(unittest.TestCase):
         self.assertEqual(client_update[2], "ASSIGNED")
         self.assertEqual(client_update[3], 0.91)
         self.assertFalse(client_update[4])
+
+    @patch("server_components.event_broadcaster.broadcast_client_location_updated")
+    @patch("server_components.api_service.get_connection")
+    def test_confirm_location_broadcasts_confirmed_update(self, get_connection, broadcast_update):
+        cursor = MagicMock()
+        cursor.fetchone.return_value = {
+            "id": 4,
+            "client_id": "client-a",
+            "location_id": 4,
+            "location_assignment_method": "AUTO",
+            "location_assignment_status": "ASSIGNED",
+            "location_confidence": 0.91,
+            "location_verified": False,
+            "location_assigned_at": "2026-08-27T10:00:00+00:00",
+            "location_assigned_by": "localization_engine",
+            "location_last_calculated_at": "2026-08-27T10:00:00+00:00",
+            "location_source": "localization_engine",
+            "location_evidence": '["sensor_match"]',
+            "label": "F1-A1-T1-R1-P1",
+            "floor": 1,
+            "zone_type": "training",
+            "zone_name": None,
+            "aisle": 1,
+            "table_no": 1,
+            "row_no": 1,
+            "position": 1,
+            "location_type": "pc_position",
+        }
+        conn = _connection(cursor)
+        get_connection.return_value = conn
+
+        api_service.confirm_client_location("client-a", confirmed_by="admin")
+
+        conn.commit.assert_called_once()
+        broadcast_update.assert_called_once()
+        payload = broadcast_update.call_args.kwargs
+        self.assertEqual(payload["client_id"], "client-a")
+        self.assertEqual(payload["location"]["id"], 4)
+        self.assertEqual(payload["assignment"]["status"], "CONFIRMED")
+        self.assertTrue(payload["assignment"]["verified"])
+        self.assertEqual(payload["previous_location_id"], 4)
+        self.assertEqual(payload["change"], "confirmed")
 
     @patch("server_components.api_service.get_connection")
     def test_confirm_auto_assignment_marks_current_history_verified(self, get_connection):

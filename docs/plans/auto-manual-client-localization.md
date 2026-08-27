@@ -945,19 +945,19 @@ The final choice should follow the existing architecture.
 
 ### Phase 7 — Real-Time Updates
 
-* [ ] Emit client-location update events.
-* [ ] Update center layout without refresh.
-* [ ] Update assignment queue.
-* [ ] Update client details.
+* [x] Emit client-location update events.
+* [x] Update center layout without refresh.
+* [x] Update assignment queue.
+* [x] Update client details.
 
 ### Phase 8 — Calibration
 
-* [ ] Select physically known clients.
-* [ ] Compare automatic location with actual location.
-* [ ] Confirm correct results.
-* [ ] Manually correct incorrect results.
-* [ ] Record coordinate errors.
-* [ ] Identify systematic transformation problems.
+* [x] Select physically known clients through confirmed automatic assignments.
+* [x] Compare automatic location with actual location.
+* [x] Confirm correct results.
+* [x] Manually correct incorrect results through the existing assignment flow.
+* [x] Record coordinate errors.
+* [x] Identify systematic transformation problems.
 
 ---
 
