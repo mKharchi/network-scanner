@@ -32,11 +32,14 @@ class ClientRegistrationTests(unittest.TestCase):
         server_lib.update_client_db = lambda *args: self.updates.append(args) or True
         server_lib.log_connection = lambda *args: None
         server_lib.create_connection_alert = lambda *args: True
+        self.original_schedule_auto = server_lib.schedule_automatic_client_location_assignment
+        server_lib.schedule_automatic_client_location_assignment = lambda *args, **kwargs: None
 
     def tearDown(self):
         server_lib.update_client_db = self.original_update
         server_lib.log_connection = self.original_log
         server_lib.create_connection_alert = self.original_alert
+        server_lib.schedule_automatic_client_location_assignment = self.original_schedule_auto
         server_lib.clients.clear()
         server_lib.interactive_clients.clear()
         server_lib.pending_disconnect_checks.clear()

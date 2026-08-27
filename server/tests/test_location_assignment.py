@@ -104,9 +104,59 @@ class LocationAssignmentTests(unittest.TestCase):
         self.assertEqual(assigned["id"], 4)
         self.assertEqual(assigned["client_id"], "client-a")
         self.assertEqual(assigned["label"], "F1-A1-T1-R1-P1")
+        self.assertEqual(assigned["assignment"]["method"], "MANUAL")
+        self.assertEqual(assigned["assignment"]["status"], "ASSIGNED")
+        self.assertTrue(assigned["assignment"]["verified"])
+        self.assertEqual(assigned["assignment"]["source"], "administrator")
+        self.assertEqual(assigned["assignment"]["assigned_by"], "admin")
         updates = [sql for sql, _params in (call.args for call in cursor.execute.call_args_list)]
-        self.assertTrue(any("UPDATE clients SET location_id" in sql for sql in updates))
+        self.assertTrue(any("UPDATE clients" in sql and "location_assignment_method" in sql for sql in updates))
         self.assertTrue(any("INSERT INTO client_location_history" in sql for sql in updates))
+        history_insert = next(
+            params for sql, params in (call.args for call in cursor.execute.call_args_list)
+            if "INSERT INTO client_location_history" in sql
+        )
+        self.assertEqual(history_insert[3], "MANUAL")
+        self.assertEqual(history_insert[4], "ASSIGNED")
+        self.assertTrue(history_insert[6])
+
+    @patch("server_components.api_service.get_connection")
+    def test_assign_location_stores_auto_confidence_and_evidence(self, get_connection):
+        cursor = MagicMock()
+        cursor.fetchone.side_effect = [
+            {"id": 8, "client_id": "client-a", "location_id": None},
+            SEAT,
+            None,
+        ]
+        get_connection.return_value = _connection(cursor)
+
+        assigned = api_service.assign_client_location(
+            "client-a",
+            4,
+            assigned_by="localization",
+            method="AUTO",
+            status="ASSIGNED",
+            confidence=0.91,
+            verified=False,
+            evidence=["sensor_match", "network_observation"],
+        )
+
+        self.assertEqual(assigned["assignment"]["method"], "AUTO")
+        self.assertEqual(assigned["assignment"]["confidence"], 0.91)
+        self.assertFalse(assigned["assignment"]["verified"])
+        self.assertEqual(assigned["assignment"]["source"], "localization_engine")
+        self.assertEqual(
+            assigned["assignment"]["evidence"],
+            ["sensor_match", "network_observation"],
+        )
+        client_update = next(
+            params for sql, params in (call.args for call in cursor.execute.call_args_list)
+            if "UPDATE clients" in sql and "location_assignment_method" in sql
+        )
+        self.assertEqual(client_update[1], "AUTO")
+        self.assertEqual(client_update[2], "ASSIGNED")
+        self.assertEqual(client_update[3], 0.91)
+        self.assertFalse(client_update[4])
 
     @patch("server_components.api_service.get_connection")
     def test_change_location_closes_previous_history_row(self, get_connection):
@@ -209,6 +259,12 @@ class LocationAssignmentTests(unittest.TestCase):
                 "assigned_at": "2026-08-24T10:00:00",
                 "unassigned_at": None,
                 "assigned_by": "admin",
+                "assignment_method": "MANUAL",
+                "assignment_status": "ASSIGNED",
+                "confidence": None,
+                "verified": True,
+                "source": "administrator",
+                "evidence": None,
                 "location_id": 4,
                 "floor": 1,
                 "zone_type": "training",
@@ -228,6 +284,31 @@ class LocationAssignmentTests(unittest.TestCase):
         self.assertEqual(history[0]["assigned_by"], "admin")
         self.assertIsNone(history[0]["unassigned_at"])
         self.assertEqual(history[0]["location"]["label"], "F1-A1-T1-R1-P1")
+        self.assertEqual(history[0]["assignment"]["method"], "MANUAL")
+        self.assertTrue(history[0]["assignment"]["verified"])
+
+
+    @patch("server_components.api_service.list_clients")
+    def test_list_unassigned_clients_adds_reason(self, list_clients):
+        list_clients.return_value = [
+            {
+                "id": "client-a",
+                "hostname": "PC-07",
+                "location": None,
+                "location_assignment": {
+                    "method": "AUTO",
+                    "status": "PENDING",
+                    "failure_reason": "low_confidence",
+                    "confidence": 0.42,
+                },
+            }
+        ]
+
+        queue = api_service.list_unassigned_clients()
+
+        list_clients.assert_called_once_with(location_filter="unassigned", limit=100)
+        self.assertEqual(queue[0]["unassigned_reason"], "low_confidence")
+        self.assertEqual(queue[0]["localization_confidence"], 0.42)
 
 
 class PhysicalNeighborLookupTests(unittest.TestCase):

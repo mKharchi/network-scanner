@@ -193,7 +193,7 @@ export function DashboardPage() {
             value={data.clients.unassigned!}
             valueVariant="warning"
             context={
-              <Link to="/clients?location=unassigned" style={{ color: "inherit" }}>
+              <Link to="/locations" style={{ color: "inherit" }}>
                 Assign physical locations
               </Link>
             }

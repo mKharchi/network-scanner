@@ -140,7 +140,10 @@ function FilterBar({
 }
 
 // ── Column definitions ────────────────────────────────────────────
-const columns: Column<ManagedClientSummary>[] = [
+function buildClientColumns(
+  onAssign: (clientId: string) => void,
+): Column<ManagedClientSummary>[] {
+  return [
   {
     key: "hostname",
     label: "Hostname",
@@ -174,6 +177,23 @@ const columns: Column<ManagedClientSummary>[] = [
     ),
   },
   {
+    key: "assign",
+    label: "",
+    render: (c) =>
+      c.location ? null : (
+        <Button
+          variant="quiet"
+          size="sm"
+          onClick={(event) => {
+            event.stopPropagation();
+            onAssign(c.id);
+          }}
+        >
+          Assign
+        </Button>
+      ),
+  },
+  {
     key: "os",
     label: "OS",
     render: (c) =>
@@ -196,6 +216,7 @@ const columns: Column<ManagedClientSummary>[] = [
     ),
   },
 ];
+}
 
 // ── Clients page ──────────────────────────────────────────────────
 export function ClientsPage() {
@@ -239,6 +260,10 @@ export function ClientsPage() {
     let av = sortKey === "hostname" ? a.hostname : "";
     let bv = sortKey === "hostname" ? b.hostname : "";
     return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
+  });
+
+  const columns = buildClientColumns((clientId) => {
+    navigate(`/locations?assign=${encodeURIComponent(clientId)}`);
   });
 
   return (
@@ -298,7 +323,7 @@ export function ClientsPage() {
           icon="💻"
           title={locationFilter === "unassigned" ? "No unassigned clients" : "No managed clients registered"}
           body={locationFilter === "unassigned"
-            ? "Newly registered agents appear here until an administrator assigns a physical location."
+            ? "Failed or pending automatic localization appears here until an administrator assigns a seat from the center layout."
             : "Monitoring agents will appear here once they connect to the server."}
         />
       ) : (
