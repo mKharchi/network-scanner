@@ -94,7 +94,7 @@ export function LocationsPage() {
   const { state, refetch } = useFetch<FloorLayout>(
     () => api.getLocationLayout(selectedFloor),
     [selectedFloor],
-    ["app:client_status"],
+    ["app:client_status", "app:client_location_updated"],
   );
   const {
     state: unassignedState,
@@ -102,10 +102,10 @@ export function LocationsPage() {
   } = useFetch<{ items: UnassignedClientQueueItem[]; total: number }>(
     () => api.getUnassignedClients(100),
     [],
-    ["app:client_status"],
+    ["app:client_status", "app:client_location_updated"],
   );
-
   const layout: FloorLayout | null =
+
     state.status === "success"
       ? state.data
       : state.status === "error"

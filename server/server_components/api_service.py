@@ -583,6 +583,41 @@ def assign_client_location(
                 ),
             )
         conn.commit()
+        try:
+            from server_components import event_broadcaster
+
+            event_broadcaster.broadcast_client_location_updated(
+                client_id=client_id,
+                location=_location_from_row({
+                    **location,
+                    "client_id": client_id,
+                    "location_assignment_method": assignment_method,
+                    "location_assignment_status": assignment_status,
+                    "location_confidence": confidence,
+                    "location_verified": bool(verified),
+                    "location_assigned_at": datetime.now(timezone.utc),
+                    "location_assigned_by": assigned_by,
+                    "location_last_calculated_at": last_calculated_at,
+                    "location_source": source,
+                    "location_evidence": evidence_json,
+                }),
+                assignment=assignment_payload(
+                    method=assignment_method,
+                    status=assignment_status,
+                    confidence=confidence,
+                    verified=bool(verified),
+                    assigned_at=datetime.now(timezone.utc).isoformat(),
+                    assigned_by=assigned_by,
+                    last_calculated_at=_iso_utc(last_calculated_at),
+                    source=source,
+                    evidence=evidence_json,
+                ),
+                previous_location_id=client["location_id"] if location_changed else location_id,
+                change="moved" if location_changed and client["location_id"] is not None else "assigned",
+            )
+        except Exception:
+            # Database assignment remains authoritative if SSE delivery fails.
+            pass
         assigned = _location_from_row({
             **location,
             "client_id": client_id,
@@ -665,7 +700,7 @@ def confirm_client_location(
             (ASSIGNMENT_STATUS_CONFIRMED, operator, row["id"]),
         )
         conn.commit()
-        return _location_from_row({
+        confirmed_location = _location_from_row({
             **row,
             "id": row["location_id"],
             "client_id": client_id,
@@ -675,6 +710,19 @@ def confirm_client_location(
             "location_assigned_by": operator,
             "location_failure_reason": None,
         }) or {}
+        try:
+            from server_components import event_broadcaster
+
+            event_broadcaster.broadcast_client_location_updated(
+                client_id=client_id,
+                location=confirmed_location,
+                assignment=confirmed_location.get("assignment"),
+                previous_location_id=row["location_id"],
+                change="confirmed",
+            )
+        except Exception:
+            pass
+        return confirmed_location
     finally:
         conn.close()
 
@@ -1128,6 +1176,40 @@ def get_client_localization_debug(client_id: str) -> Optional[Dict[str, Any]]:
             },
             "last_updated": _iso_utc(row.get("updated_at")),
         }
+    finally:
+        conn.close()
+
+
+def get_calibration_report(*, client_id: Optional[str] = None, limit: int = 200) -> Dict[str, Any]:
+    """Compare confirmed AUTO estimates with their confirmed physical positions."""
+    from server_components.calibration import build_calibration_report
+
+    conn = get_connection()
+    if not conn:
+        return build_calibration_report([])
+    try:
+        cursor = conn.cursor(dictionary=True)
+        query = """
+            SELECT h.id AS history_id, c.client_id, c.hostname,
+                   h.location_id, h.assigned_at, h.assignment_method,
+                   h.assignment_status, h.verified, h.evidence,
+                   l.label AS location_label, l.x AS actual_x,
+                   l.y AS actual_y, l.z AS actual_z
+            FROM client_location_history h
+            JOIN clients c ON c.id = h.client_id
+            JOIN locations l ON l.id = h.location_id
+            WHERE h.assignment_method = 'AUTO'
+              AND h.assignment_status = 'CONFIRMED'
+              AND h.verified = TRUE
+        """
+        params: list[Any] = []
+        if client_id:
+            query += " AND c.client_id = %s"
+            params.append(client_id)
+        query += " ORDER BY h.assigned_at DESC LIMIT %s"
+        params.append(max(1, min(int(limit), 1000)))
+        cursor.execute(query, tuple(params))
+        return build_calibration_report(cursor.fetchall() or [])
     finally:
         conn.close()
 
