@@ -197,6 +197,19 @@ def _ensure_observation_spatial_columns(cursor):
             )
 
 
+def _backfill_observation_sensor_links(cursor):
+    """Link historical client observations to their endpoint sensors."""
+    cursor.execute(
+        """
+        UPDATE network_device_observations AS observation
+        INNER JOIN sensors AS sensor ON sensor.client_id = observation.source_client_id
+        SET observation.sensor_id = sensor.id
+        WHERE observation.sensor_id IS NULL
+          AND observation.source_client_id IS NOT NULL
+        """
+    )
+
+
 def initiate_db():
     """
     Initialize the MySQL database schema by executing scripts.sql.
@@ -230,6 +243,7 @@ def initiate_db():
         _ensure_location_type_column(cursor)
         _ensure_location_spatial_columns(cursor)
         _ensure_observation_spatial_columns(cursor)
+        _backfill_observation_sensor_links(cursor)
 
         connection.commit()
         try:
