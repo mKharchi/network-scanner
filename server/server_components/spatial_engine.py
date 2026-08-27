@@ -1589,6 +1589,7 @@ def get_spatial_scene(floor: Optional[int] = None, conn=None) -> Dict[str, Any]:
                     "os": f"{c.get('os_name') or ''} {c.get('os_version') or ''}".strip(),
                     "floor": int(c["loc_floor"]) if c.get("loc_floor") is not None else 0,
                     "agent_role": c.get("agent_role") or "agent",
+                    "client_id": c.get("client_id"),
                 },
             }
             nodes.append(client_node)

@@ -759,6 +759,80 @@ def list_clients(
     return items
 
 
+def get_client_localization_debug(client_id: str) -> Optional[Dict[str, Any]]:
+    """Return the raw client-to-location chain for coordinate validation.
+
+    This endpoint deliberately reports the stored values without changing the
+    assignment or applying a second localization algorithm.
+    """
+    conn = get_connection()
+    if not conn:
+        return None
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT c.id, c.client_id, c.hostname, c.mac, c.ip, c.updated_at,
+                   l.id AS location_id, l.label AS location_label,
+                   l.floor, l.zone_type, l.zone_name, l.location_type,
+                   l.aisle, l.table_no, l.row_no, l.position,
+                   l.x, l.y, l.z, l.metadata
+            FROM clients c
+            LEFT JOIN locations l ON l.id = c.location_id
+            WHERE c.client_id = %s
+            """,
+            (client_id,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+
+        floor = row.get("floor")
+        coordinates = {
+            "x": _numeric(row.get("x")),
+            "y": _numeric(row.get("y")),
+            "z": _numeric(row.get("z")),
+        }
+        return {
+            "client": {
+                "database_id": row.get("id"),
+                "client_id": row.get("client_id"),
+                "hostname": row.get("hostname") or "Unknown",
+                "mac": _format_mac(row.get("mac")),
+                "ip": row.get("ip"),
+            },
+            "location": None if row.get("location_id") is None else {
+                "id": row.get("location_id"),
+                "label": row.get("location_label"),
+                "floor": floor,
+                "zone_type": row.get("zone_type"),
+                "zone_name": row.get("zone_name"),
+                "location_type": row.get("location_type"),
+                "aisle": row.get("aisle"),
+                "table": row.get("table_no"),
+                "row": row.get("row_no"),
+                "position": row.get("position"),
+            },
+            "server_coordinates": coordinates,
+            "coordinate_system": {
+                "name": "center-layout-v1",
+                "unit": "relative",
+                "origin": f"floor-{floor}-origin" if floor is not None else None,
+                "axis": {"x": "layout-horizontal", "y": "layout-depth", "z": "floor-elevation"},
+                "floor_height": 3.0,
+            },
+            "render_coordinates": None,
+            "transformation": {
+                "name": "digital-twin-isometric-projection",
+                "renderer": "server/gui/src/pages/DigitalTwin.tsx",
+                "note": "The final screen pixel coordinates depend on camera yaw, pitch, zoom, and pan.",
+            },
+            "last_updated": _iso_utc(row.get("updated_at")),
+        }
+    finally:
+        conn.close()
+
+
 def get_client_detail(client_id: str) -> Optional[Dict[str, Any]]:
     """Retrieve complete client details, connection history, alerts summary, and latest log."""
     with clients_lock:
