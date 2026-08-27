@@ -49,6 +49,60 @@ def _ensure_client_location_column(cursor):
         cursor.execute("ALTER TABLE clients ADD COLUMN location_id INT NULL")
 
 
+def _ensure_client_location_assignment_columns(cursor):
+    """Hybrid auto/manual assignment metadata on the current client location."""
+    cursor.execute(
+        """
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'clients'
+        """
+    )
+    existing_columns = {row[0] for row in cursor.fetchall()}
+    columns = {
+        "location_assignment_method": "VARCHAR(16) NULL",
+        "location_assignment_status": "VARCHAR(16) NULL",
+        "location_confidence": "DOUBLE NULL",
+        "location_verified": "BOOLEAN NOT NULL DEFAULT FALSE",
+        "location_assigned_at": "DATETIME NULL",
+        "location_assigned_by": "VARCHAR(255) NULL",
+        "location_last_calculated_at": "DATETIME NULL",
+        "location_source": "VARCHAR(64) NULL",
+        "location_evidence": "TEXT NULL",
+        "location_failure_reason": "VARCHAR(255) NULL",
+    }
+    for column_name, definition in columns.items():
+        if column_name not in existing_columns:
+            cursor.execute(f"ALTER TABLE clients ADD COLUMN {column_name} {definition}")
+
+
+def _ensure_client_location_history_assignment_columns(cursor):
+    """Preserve assignment method/confidence evidence on the audit trail."""
+    cursor.execute(
+        """
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'client_location_history'
+        """
+    )
+    existing_columns = {row[0] for row in cursor.fetchall()}
+    columns = {
+        "assignment_method": "VARCHAR(16) NULL",
+        "assignment_status": "VARCHAR(16) NULL",
+        "confidence": "DOUBLE NULL",
+        "verified": "BOOLEAN NOT NULL DEFAULT FALSE",
+        "source": "VARCHAR(64) NULL",
+        "evidence": "TEXT NULL",
+    }
+    for column_name, definition in columns.items():
+        if column_name not in existing_columns:
+            cursor.execute(
+                f"ALTER TABLE client_location_history ADD COLUMN {column_name} {definition}"
+            )
+
+
 def _ensure_client_health_columns(cursor):
     """Store the last health snapshot used by the center visualization."""
     cursor.execute(
@@ -170,6 +224,8 @@ def initiate_db():
 
         _ensure_network_device_metadata_columns(cursor)
         _ensure_client_location_column(cursor)
+        _ensure_client_location_assignment_columns(cursor)
+        _ensure_client_location_history_assignment_columns(cursor)
         _ensure_client_health_columns(cursor)
         _ensure_location_type_column(cursor)
         _ensure_location_spatial_columns(cursor)

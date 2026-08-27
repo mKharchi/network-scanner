@@ -176,6 +176,7 @@ export interface ClientLocalizationDebug {
     ip: string | null;
   };
   location: (ClientLocation & { table?: number | null; row?: number | null }) | null;
+  location_assignment?: LocationAssignment | null;
   server_coordinates: { x: number | null; y: number | null; z: number | null };
   coordinate_system: {
     name: string;
@@ -244,6 +245,19 @@ export interface ClientHealth {
   updated_at: string | null;
 }
 
+export interface LocationAssignment {
+  method: 'AUTO' | 'MANUAL' | null;
+  status: 'PENDING' | 'ASSIGNED' | 'CONFIRMED' | null;
+  confidence: number | null;
+  verified: boolean;
+  assigned_at: string | null;
+  assigned_by: string | null;
+  last_calculated_at: string | null;
+  source: string | null;
+  evidence: unknown;
+  failure_reason?: string | null;
+}
+
 export interface ClientLocation {
   id: number;
   floor: number;
@@ -267,6 +281,7 @@ export interface ClientLocation {
   client_state?: 'ONLINE' | 'OFFLINE' | 'ISOLATED';
   health?: ClientHealth;
   health_status?: string;
+  assignment?: LocationAssignment | null;
 }
 
 export interface SpatialSensor {
@@ -489,6 +504,7 @@ export interface ClientLocationHistoryEntry {
   assigned_at: string;
   unassigned_at: string | null;
   assigned_by: string | null;
+  assignment?: LocationAssignment | null;
   location: ClientLocation;
 }
 
@@ -546,9 +562,15 @@ export interface ManagedClientSummary {
   os: ClientOS;
   connection: ClientConnection;
   location: ClientLocation | null;
+  location_assignment?: LocationAssignment | null;
   health?: ClientHealth;
   created_at: string;
   updated_at: string;
+}
+
+export interface UnassignedClientQueueItem extends ManagedClientSummary {
+  unassigned_reason: string;
+  localization_confidence?: number | null;
 }
 
 export interface NetworkDeviceOS {
@@ -711,6 +733,11 @@ export const api = {
       },
     ),
 
+  getUnassignedClients: (limit = 100) =>
+    getAction<{ items: UnassignedClientQueueItem[]; total: number }>(
+      `/api/clients/unassigned?limit=${limit}`,
+    ),
+
   getClientLocalizationDebug: (clientId: string) =>
     get<ClientLocalizationDebug>(`/debug/clients/${encodeURIComponent(clientId)}/localization`),
 
@@ -756,6 +783,18 @@ export const api = {
       }
       return body?.data as ClientLocation;
     })(),
+
+  autoAssignClientLocation: (clientId: string) =>
+    postAction<Record<string, unknown>>(
+      `/api/clients/${encodeURIComponent(clientId)}/location/auto`,
+      {},
+    ),
+
+  confirmClientLocation: (clientId: string) =>
+    postAction<{ location: ClientLocation }>(
+      `/api/clients/${encodeURIComponent(clientId)}/location/confirm`,
+      {},
+    ),
 
   getClientLocationHistory: (clientId: string) =>
     getAction<{ items: ClientLocationHistoryEntry[] }>(
