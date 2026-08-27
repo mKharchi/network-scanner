@@ -22,6 +22,25 @@
   --primary-hover: #1E40AF;
   --focus:         #2563EB;
 
+  /* ── Colour: semantic state ─────────────────────────────── */
+  --success:       #15803D;
+  --success-bg:    #DCFCE7;
+  --warning:       #B45309;
+  --warning-bg:    #FEF3C7;
+  --danger:        #B91C1C;
+  --danger-bg:     #FEE2E2;
+  --info:          #0369A1;
+  --info-bg:       #E0F2FE;
+  --border-hover:  #94A3B8;
+
+  /* Compatibility aliases used by spatial views. */
+  --color-primary-500: var(--primary);
+  --color-warning-500: var(--warning);
+  --color-danger-500: var(--danger);
+  --color-bg-secondary: var(--surface-muted);
+  --color-text-muted: var(--text-muted);
+  --color-border: var(--border);
+
   /* ── Colour: station visualization ──────────────────────── */
   --station-healthy:   var(--success);
   --station-healthy-bg: var(--success-bg);
@@ -44,6 +63,7 @@
   --font-xs:   0.75rem;    /* 12px – timestamps, labels       */
   --font-sm:   0.875rem;   /* 14px – body, table values, btns */
   --font-base: 1rem;       /* 16px – long-form content        */
+  --font-md:   1rem;       /* 16px – compatibility alias      */
   --font-lg:   1.125rem;   /* 18px – card titles, headings    */
   --font-xl:   1.5rem;     /* 24px – page titles              */
   --font-2xl:  2rem;       /* 32px – dashboard key metric     */

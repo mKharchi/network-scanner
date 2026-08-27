@@ -207,6 +207,13 @@ export function LocationsPage() {
     parameters: Record<string, unknown> = {},
   ) => {
     if (!selectedClientIds.length) return;
+    if (actionType === "RESTART" || actionType === "SHUTDOWN") {
+      const verb = actionType === "SHUTDOWN" ? "shut down" : "restart";
+      const confirmed = window.confirm(
+        `This will ${verb} ${selectedClientIds.length} selected client${selectedClientIds.length === 1 ? "" : "s"}. Continue?`,
+      );
+      if (!confirmed) return;
+    }
     setActionLoading(true);
     try {
       const action = await api.createAction({

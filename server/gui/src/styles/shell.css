@@ -511,55 +511,6 @@
   line-height: 1.5;
 }
 
-/* ── Dashboard Layout Updates ─────────────────────────────── */
-.dashboard {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-6);
-  width: 100%;
-  animation: fade-in 0.3s ease-out;
-}
-
-@keyframes fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.dashboard__metrics {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1.25rem;
-  width: 100%;
-  margin-bottom: var(--space-2);
-}
-
-.metric-card {
-  width: 100%;
-  min-height: 96px;
-  padding: 1rem 1.25rem;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: 0 2px 4px rgba(11, 22, 38, 0.04);
-  transition: transform 120ms ease, box-shadow 120ms ease;
-  cursor: default;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.metric-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(11, 22, 38, 0.08);
-}
-
-
 /* ── Dashboard Layout & Animations ────────────────────────────── */
 
 /* Smooth, professional ease curve */

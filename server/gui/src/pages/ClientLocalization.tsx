@@ -29,7 +29,7 @@ export function ClientLocalizationPage() {
   const { state: clientsState, refetch: refetchClients } = useFetch<{ items: ManagedClientSummary[] }>(
     () => api.getClients({ search: search || undefined, limit: 200 }),
     [search],
-    ["app:client_status", "client_status"],
+    ["app:client_status"],
   );
 
   const clients = clientsState.status === "success"
