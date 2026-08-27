@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   api,
+  type CalibrationReport,
   type ClientLocation,
   type FloorLayout,
   type FloorTable,
@@ -75,6 +76,10 @@ function stationKey(location: ClientLocation): string {
   return String(location.id);
 }
 
+function formatCoordinate(value: number): string {
+  return value.toFixed(2);
+}
+
 export function LocationsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -104,6 +109,12 @@ export function LocationsPage() {
     [],
     ["app:client_status", "app:client_location_updated"],
   );
+  const { state: calibrationState, refetch: refetchCalibration } =
+    useFetch<CalibrationReport>(
+      () => api.getCalibrationReport(),
+      [],
+      ["app:client_location_updated"],
+    );
   const layout: FloorLayout | null =
 
     state.status === "success"
@@ -443,12 +454,15 @@ export function LocationsPage() {
             onClick={() => {
               refetch();
               refetchUnassigned();
+              refetchCalibration();
             }}
           >
             Refresh
           </Button>
         </div>
       </div>
+
+      <CalibrationSummary report={calibrationState.status === "success" ? calibrationState.data : null} loading={calibrationState.status === "loading" || calibrationState.status === "idle"} error={calibrationState.status === "error" ? calibrationState.error.message : null} />
 
       {assigningClientId && (
         <div style={{ marginBottom: "var(--space-4)" }}>
@@ -1206,6 +1220,77 @@ export function LocationsPage() {
           </SectionCard>
         </div>
       )}
+    </div>
+  );
+}
+
+function CalibrationSummary({
+  report,
+  loading,
+  error,
+}: {
+  report: CalibrationReport | null;
+  loading: boolean;
+  error: string | null;
+}) {
+  if (loading) {
+    return <div style={{ marginBottom: "var(--space-5)" }}><Skeleton variant="row" width="100%" /></div>;
+  }
+  if (error) {
+    return (
+      <div className="notice notice--warning" style={{ marginBottom: "var(--space-5)" }}>
+        Calibration data is unavailable: {error}
+      </div>
+    );
+  }
+  if (!report) return null;
+
+  const { summary } = report;
+  return (
+    <div style={{ marginBottom: "var(--space-5)" }}>
+      <SectionCard title="Localization calibration">
+        <p style={{ color: "var(--text-muted)", marginTop: 0 }}>
+          Confirmed automatic assignments compare the calculated position with the physical seat.
+        </p>
+        <div className="floor-vis__legend" style={{ marginBottom: "var(--space-3)" }}>
+          <span><strong>{report.sample_count}</strong> verified sample{report.sample_count === 1 ? "" : "s"}</span>
+          <span><strong>{formatCoordinate(summary.mean_distance)}</strong> mean distance error</span>
+          <span style={{ color: summary.systematic_transformation_signal ? "var(--danger)" : "var(--success)" }}>
+            {summary.systematic_transformation_signal ? "Offset signal detected" : "No offset signal"}
+          </span>
+        </div>
+        <div style={{ color: "var(--text-muted)", marginBottom: "var(--space-3)" }}>
+          Mean axis error: Δx {formatCoordinate(summary.mean_error.x)}, Δy {formatCoordinate(summary.mean_error.y)}, Δz {formatCoordinate(summary.mean_error.z)}. {summary.interpretation}
+        </div>
+        {report.comparisons.length > 0 && (
+          <div style={{ overflowX: "auto" }}>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Client</th>
+                  <th>Confirmed seat</th>
+                  <th>Δx</th>
+                  <th>Δy</th>
+                  <th>Δz</th>
+                  <th>Distance</th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.comparisons.slice(0, 10).map((comparison) => (
+                  <tr key={`${comparison.history_id}-${comparison.client_id}`}>
+                    <td>{comparison.hostname || comparison.client_id}</td>
+                    <td>{comparison.location_label}</td>
+                    <td>{formatCoordinate(comparison.error.dx)}</td>
+                    <td>{formatCoordinate(comparison.error.dy)}</td>
+                    <td>{formatCoordinate(comparison.error.dz)}</td>
+                    <td>{formatCoordinate(comparison.error.distance)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </SectionCard>
     </div>
   );
 }
