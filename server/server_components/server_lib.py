@@ -15,6 +15,19 @@ except ImportError:
 
 from server_components.log_storage import store_log_file
 
+
+def schedule_automatic_client_location_assignment(client_id):
+    """Hook point for hybrid auto-location after registration (overridable in tests)."""
+    try:
+        from server_components.client_localization import (
+            schedule_automatic_client_location_assignment as _schedule,
+        )
+    except Exception as exc:  # noqa: BLE001
+        print(f"Auto location assignment unavailable: {exc}")
+        return
+    _schedule(client_id)
+
+
 # ============================================================
 # SHARED STATE
 # ============================================================
@@ -991,6 +1004,7 @@ def register_client(client_info, conn):
             print(f"Client reconnected: {client['client_id']}")
             log_connection(mac, "reconnected")
             create_connection_alert(client_info)
+            schedule_automatic_client_location_assignment(client["client_id"])
             return client["client_id"]
 
         # ---- New client ----
@@ -1026,6 +1040,7 @@ def register_client(client_info, conn):
         print(f"New client connected: {client_id}")
         log_connection(mac, "connected")
         create_connection_alert(client_info)
+        schedule_automatic_client_location_assignment(client_id)
         return client_id
 
 

@@ -81,3 +81,23 @@ def broadcast_dhcp_update(dhcp_info: Dict[str, Any]) -> None:
         "dhcp": dhcp_info,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     })
+
+
+def broadcast_client_location_updated(
+    *,
+    client_id: str,
+    location: Dict[str, Any] | None,
+    assignment: Dict[str, Any] | None,
+    previous_location_id: Any = None,
+    change: str = "assigned",
+) -> None:
+    """Broadcast an authoritative client-location assignment change."""
+    broadcast("client_location_updated", {
+        "client_id": client_id,
+        "location_id": location.get("id") if location else None,
+        "location": location,
+        "previous_location_id": previous_location_id,
+        "assignment": assignment,
+        "change": change,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useToast } from "../hooks/useToast";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, type ManagedClientSummary } from "../api/client";
 import { useFetch } from "../hooks/useFetch";
@@ -140,7 +141,12 @@ function FilterBar({
 }
 
 // ── Column definitions ────────────────────────────────────────────
-const columns: Column<ManagedClientSummary>[] = [
+function buildClientColumns(
+  onAssign: (clientId: string) => void,
+  onAutoLocate: (client: ManagedClientSummary) => void,
+  autoLocatingClientId: string | null,
+): Column<ManagedClientSummary>[] {
+  return [
   {
     key: "hostname",
     label: "Hostname",
@@ -174,6 +180,37 @@ const columns: Column<ManagedClientSummary>[] = [
     ),
   },
   {
+    key: "assign",
+    label: "",
+    render: (c) =>
+      c.location ? null : (
+        <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={autoLocatingClientId !== null}
+            onClick={(event) => {
+              event.stopPropagation();
+              onAutoLocate(c);
+            }}
+          >
+            {autoLocatingClientId === c.id ? "Locating…" : "Try auto"}
+          </Button>
+          <Button
+            variant="quiet"
+            size="sm"
+            disabled={autoLocatingClientId !== null}
+            onClick={(event) => {
+              event.stopPropagation();
+              onAssign(c.id);
+            }}
+          >
+            Assign
+          </Button>
+        </div>
+      ),
+  },
+  {
     key: "os",
     label: "OS",
     render: (c) =>
@@ -196,16 +233,19 @@ const columns: Column<ManagedClientSummary>[] = [
     ),
   },
 ];
+}
 
 // ── Clients page ──────────────────────────────────────────────────
 export function ClientsPage() {
   const navigate = useNavigate();
+  const { addToast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const [stateFilter, setStateFilter] = useState("");
   const [locationFilter, setLocationFilter] = useState(searchParams.get("location") || "");
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState("hostname");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [autoLocatingClientId, setAutoLocatingClientId] = useState<string | null>(null);
 
   const { state, refetch } = useFetch(
     () =>
@@ -240,6 +280,50 @@ export function ClientsPage() {
     let bv = sortKey === "hostname" ? b.hostname : "";
     return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
   });
+
+  const startManualAssignment = (clientId: string) => {
+    navigate(`/locations?assign=${encodeURIComponent(clientId)}`);
+  };
+
+  const tryAutomaticLocation = async (client: ManagedClientSummary) => {
+    setAutoLocatingClientId(client.id);
+    try {
+      const outcome = await api.autoAssignClientLocation(client.id);
+      const location = outcome.location as { label?: string } | undefined;
+      if (outcome.assigned === true && location?.label) {
+        addToast({
+          title: "Automatic location assigned",
+          message: `${client.hostname || client.id} was placed at ${location.label}. Open the Center layout to verify and confirm it.`,
+          severity: "SUCCESS",
+          action: {
+            label: "Review location",
+            onClick: () => navigate("/locations"),
+          },
+        });
+      } else {
+        addToast({
+          title: "Automatic location not assigned",
+          message: `${client.hostname || client.id} remains unassigned. Use Assign to place it manually.`,
+          severity: "HIGH",
+        });
+      }
+      refetch();
+    } catch (err: any) {
+      addToast({
+        title: "Automatic location failed",
+        message: err?.message || "Unable to calculate an automatic location.",
+        severity: "CRITICAL",
+      });
+    } finally {
+      setAutoLocatingClientId(null);
+    }
+  };
+
+  const columns = buildClientColumns(
+    startManualAssignment,
+    tryAutomaticLocation,
+    autoLocatingClientId,
+  );
 
   return (
     <div>
@@ -298,7 +382,7 @@ export function ClientsPage() {
           icon="💻"
           title={locationFilter === "unassigned" ? "No unassigned clients" : "No managed clients registered"}
           body={locationFilter === "unassigned"
-            ? "Newly registered agents appear here until an administrator assigns a physical location."
+            ? "Failed or pending automatic localization appears here until an administrator assigns a seat from the center layout."
             : "Monitoring agents will appear here once they connect to the server."}
         />
       ) : (

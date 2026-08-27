@@ -63,6 +63,22 @@ class ApiEndpointsTestCase(unittest.TestCase):
         except urllib.error.HTTPError as e:
             return e.code, dict(e.headers), e.read()
 
+    @patch("server_components.api_service.get_client_localization_debug")
+    def test_client_localization_debug_endpoint(self, get_debug):
+        get_debug.return_value = {
+            "client": {"client_id": "client-a", "hostname": "PC-A", "mac": "AA:BB", "ip": "192.168.1.20"},
+            "location": {"id": 42, "label": "F1-A1-T1-C1-P1", "floor": 1},
+            "server_coordinates": {"x": 8.5, "y": 6.5, "z": 3.0},
+            "coordinate_system": {"name": "center-layout-v1"},
+            "render_coordinates": None,
+            "transformation": {"name": "digital-twin-isometric-projection"},
+            "last_updated": "2026-08-26T10:00:00+00:00",
+        }
+        status, body = self._fetch("/api/v1/debug/clients/client-a/localization")
+        self.assertEqual(status, 200)
+        self.assertEqual(body["data"]["client"]["client_id"], "client-a")
+        self.assertEqual(body["data"]["server_coordinates"]["z"], 3.0)
+
     # 1. Health check
     def test_health_check(self):
         status, body = self._fetch("/health")

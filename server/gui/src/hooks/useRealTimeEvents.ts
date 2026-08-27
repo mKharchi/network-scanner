@@ -109,7 +109,18 @@ export function useRealTimeEvents() {
           }
         });
 
-        // 4. DHCP Update
+        // 4. Client location assignment update
+        es.addEventListener('client_location_updated', (e: MessageEvent) => {
+          try {
+            const data = JSON.parse(e.data);
+            console.log('[SSE Event: client_location_updated]', data);
+            window.dispatchEvent(new CustomEvent('app:client_location_updated', { detail: data }));
+          } catch (err) {
+            console.error('Error handling SSE client_location_updated event:', err);
+          }
+        });
+
+        // 5. DHCP Update
         es.addEventListener('dhcp_update', (e: MessageEvent) => {
           try {
             const data = JSON.parse(e.data);

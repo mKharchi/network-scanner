@@ -16,6 +16,8 @@ import { ActivityLogsPage } from './pages/ActivityLogs';
 import { SettingsPage } from './pages/Settings';
 import { LocationsPage } from './pages/Locations';
 import { RogueDevicesPage } from './pages/RogueDevices';
+import { DigitalTwinPage } from './pages/DigitalTwin';
+import { ClientLocalizationPage } from './pages/ClientLocalization';
 
 function AppContent() {
   const { unreadAlerts } = useRealTimeEvents();
@@ -30,6 +32,9 @@ function AppContent() {
         <Route path="/clients/:clientId" element={<ClientDetailPage />} />
         <Route path="/locations" element={<LocationsPage />} />
         <Route path="/rogue-devices" element={<RogueDevicesPage />} />
+        <Route path="/digital-twin" element={<DigitalTwinPage />} />
+        <Route path="/client-localization" element={<ClientLocalizationPage />} />
+        <Route path="/spatial/digital-twin" element={<Navigate to="/digital-twin" replace />} />
         <Route path="/spatial/rogue" element={<Navigate to="/rogue-devices" replace />} />
 
         {/* Network */}

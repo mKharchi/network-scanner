@@ -1,12 +1,14 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   api,
+  type CalibrationReport,
   type ClientLocation,
   type FloorLayout,
   type FloorTable,
   type ManagedClientSummary,
   type PhysicalNeighbor,
+  type UnassignedClientQueueItem,
 } from "../api/client";
 import { useFetch } from "../hooks/useFetch";
 import { useToast } from "../hooks/useToast";
@@ -18,6 +20,14 @@ import {
   STATION_VISUAL_LABEL,
   type StationVisual,
 } from "../utils/stationVisual";
+import {
+  ASSIGNMENT_METHOD_GLYPH,
+  assignmentMethodOf,
+  formatAssignmentConfidence,
+  resolveLocationAssignment,
+  stationAssignmentMeta,
+  stationAssignmentTitle,
+} from "../utils/stationAssignment";
 import "../styles/floor-visualization.css";
 
 const NEIGHBOR_RELATIONSHIP_LABELS: Record<
@@ -30,7 +40,24 @@ const NEIGHBOR_RELATIONSHIP_LABELS: Record<
   same_zone: "Same room",
 };
 
+const UNASSIGNED_REASON_LABELS: Record<string, string> = {
+  insufficient_evidence: "insufficient localization evidence",
+  no_location_match: "no location match",
+  low_confidence: "low confidence",
+  localization_unavailable: "localization unavailable",
+  location_occupied: "matched seat occupied",
+  unassigned: "not yet localized",
+};
+
 type StatusFilter = "all" | StationVisual;
+
+function formatUnassignedReason(reason: string, confidence?: number | null): string {
+  const base = UNASSIGNED_REASON_LABELS[reason] || reason.replace(/_/g, " ");
+  if (reason === "low_confidence" && confidence != null) {
+    return `${base} (${Math.round(confidence * 100)}%)`;
+  }
+  return base;
+}
 
 function locationDescription(location: ClientLocation): string {
   const parts = [
@@ -49,8 +76,37 @@ function stationKey(location: ClientLocation): string {
   return String(location.id);
 }
 
+function formatCoordinate(value: number): string {
+  return value.toFixed(2);
+}
+
+function automaticLocationFailureMessage(outcome: Record<string, unknown>): string {
+  if (outcome.reason !== "insufficient_evidence") {
+    return typeof outcome.reason === "string"
+      ? formatUnassignedReason(
+          outcome.reason,
+          typeof outcome.confidence === "number" ? outcome.confidence : null,
+        )
+      : "automatic localization could not select a reliable seat";
+  }
+
+  const evidence = outcome.evidence;
+  if (!evidence || typeof evidence !== "object") {
+    return "No usable localization observations are available yet.";
+  }
+  const details = evidence as Record<string, unknown>;
+  if (details.device_id == null) {
+    return "This client has not been discovered as a network device yet, so there are no observations to calculate from.";
+  }
+  if (details.observation_count === 0) {
+    return "This client has been discovered, but no usable sensor observations are available yet.";
+  }
+  return "The available observations do not contain usable coordinates for a reliable location.";
+}
+
 export function LocationsPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { addToast } = useToast();
   const [selectedFloor, setSelectedFloor] = useState(1);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -61,19 +117,48 @@ export function LocationsPage() {
   );
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
   const [actionLoading, setActionLoading] = useState(false);
+  const [assignLoading, setAssignLoading] = useState(false);
+  const [autoLocatingClientId, setAutoLocatingClientId] = useState<string | null>(null);
+  const assigningClientId = searchParams.get("assign");
 
   const { state, refetch } = useFetch<FloorLayout>(
     () => api.getLocationLayout(selectedFloor),
     [selectedFloor],
-    ["app:client_status"],
+    ["app:client_status", "app:client_location_updated"],
   );
-
+  const {
+    state: unassignedState,
+    refetch: refetchUnassigned,
+  } = useFetch<{ items: UnassignedClientQueueItem[]; total: number }>(
+    () => api.getUnassignedClients(100),
+    [],
+    ["app:client_status", "app:client_location_updated"],
+  );
+  const { state: calibrationState, refetch: refetchCalibration } =
+    useFetch<CalibrationReport>(
+      () => api.getCalibrationReport(),
+      [],
+      ["app:client_location_updated"],
+    );
   const layout: FloorLayout | null =
+
     state.status === "success"
       ? state.data
       : state.status === "error"
         ? state.staleData || null
         : null;
+
+  const unassignedItems: UnassignedClientQueueItem[] =
+    unassignedState.status === "success"
+      ? unassignedState.data.items
+      : unassignedState.status === "error" && unassignedState.staleData
+        ? unassignedState.staleData.items
+        : [];
+
+  const assigningClient = useMemo(
+    () => unassignedItems.find((item) => item.id === assigningClientId) || null,
+    [unassignedItems, assigningClientId],
+  );
 
   const selectedLocation = useMemo(
     () => findLocation(layout, selectedLocationId),
@@ -233,6 +318,136 @@ export function LocationsPage() {
     }
   };
 
+  const tryAutomaticLocation = async (queueItem: UnassignedClientQueueItem) => {
+    setAutoLocatingClientId(queueItem.id);
+    try {
+      const outcome = await api.autoAssignClientLocation(queueItem.id);
+      const location = outcome.location as { label?: string } | undefined;
+      if (outcome.assigned === true && location?.label) {
+        addToast({
+          title: "Automatic location assigned",
+          message: `${queueItem.hostname || queueItem.id} was placed at ${location.label}. Select that seat and confirm it after physical verification.`,
+          severity: "SUCCESS",
+        });
+      } else {
+        const reason = automaticLocationFailureMessage(outcome);
+        addToast({
+          title: "Automatic location not assigned",
+          message: `${queueItem.hostname || queueItem.id}: ${reason} Choose Assign manually to place it now.`, 
+          severity: "HIGH",
+        });
+      }
+      refetch();
+      refetchUnassigned();
+      refetchCalibration();
+    } catch (err: any) {
+      addToast({
+        title: "Automatic location failed",
+        message: err?.message || "Unable to calculate an automatic location.",
+        severity: "CRITICAL",
+      });
+    } finally {
+      setAutoLocatingClientId(null);
+    }
+  };
+
+  const clearAssignMode = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("assign");
+    setSearchParams(next, { replace: true });
+  };
+
+  const startAssignMode = (clientId: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("assign", clientId);
+    setSearchParams(next, { replace: true });
+  };
+
+  const assignClientToSeat = async (location: ClientLocation) => {
+    if (!assigningClientId) return;
+    if (location.client_id && location.client_id !== assigningClientId) {
+      addToast({
+        title: "Seat occupied",
+        message: "Choose an empty PC position for manual assignment.",
+        severity: "HIGH",
+      });
+      return;
+    }
+    if (location.client_id === assigningClientId) {
+      addToast({
+        title: "Already here",
+        message: "Select a different seat to move this client.",
+        severity: "HIGH",
+      });
+      return;
+    }
+    const label =
+      assigningClient?.hostname ||
+      (selectedLocation?.client_id === assigningClientId
+        ? client?.hostname
+        : null) ||
+      assigningClientId;
+    if (
+      !window.confirm(
+        `Assign ${label} to ${location.label}?`,
+      )
+    ) {
+      return;
+    }
+    setAssignLoading(true);
+    try {
+      await api.assignClientLocation(assigningClientId, location.id);
+      addToast({
+        title: "Location assigned",
+        message: `${label} is now at ${location.label}.`,
+        severity: "SUCCESS",
+      });
+      clearAssignMode();
+      setSelectedLocationId(location.id);
+      refetch();
+      refetchUnassigned();
+    } catch (err: any) {
+      addToast({
+        title: "Assignment failed",
+        message: err?.message || "Unable to assign this client.",
+        severity: "CRITICAL",
+      });
+    } finally {
+      setAssignLoading(false);
+    }
+  };
+
+  const confirmSelectedAssignment = async () => {
+    if (!selectedLocation?.client_id) return;
+    setActionLoading(true);
+    try {
+      await api.confirmClientLocation(selectedLocation.client_id);
+      addToast({
+        title: "Location confirmed",
+        message: `${client?.hostname || selectedLocation.client_id} is confirmed at ${selectedLocation.label}.`,
+        severity: "SUCCESS",
+      });
+      refetch();
+      refetchUnassigned();
+      refetchCalibration();
+    } catch (err: any) {
+      addToast({
+        title: "Confirm failed",
+        message: err?.message || "Unable to confirm this assignment.",
+        severity: "CRITICAL",
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleStationClick = (station: ClientLocation) => {
+    setSelectedLocationId(station.id);
+    if (assigningClientId && !station.client_id) {
+      void assignClientToSeat(station);
+    }
+  };
+
   if (state.status === "idle" || state.status === "loading") {
     return <Skeleton />;
   }
@@ -261,6 +476,14 @@ export function LocationsPage() {
     ? layout.available_floors
     : [0, 1, 2];
   const emptyFloor = !layout.rooms.length && !layout.aisles.length;
+  const selectedAssignment = resolveLocationAssignment(
+    selectedLocation,
+    client?.location_assignment,
+  );
+  const selectedMethod = assignmentMethodOf(selectedAssignment);
+  const selectedConfidence = formatAssignmentConfidence(
+    selectedAssignment?.confidence ?? null,
+  );
 
   return (
     <div>
@@ -279,16 +502,113 @@ export function LocationsPage() {
           <p
             style={{ color: "var(--text-muted)", marginTop: "var(--space-1)" }}
           >
-            Floors, rooms, aisles, tables, and the 56 PC seats are seeded
-            automatically. Assign clients to empty positions from a client
-            page.
+            Floors, rooms, aisles, tables, and PC seats. Use the assignment
+            queue to place unassigned clients on empty seats.
           </p>
         </div>
         <div style={{ display: "flex", gap: "var(--space-2)" }}>
-          <Button variant="quiet" size="sm" onClick={refetch}>
+          <Button
+            variant="quiet"
+            size="sm"
+            onClick={() => {
+              refetch();
+              refetchUnassigned();
+              refetchCalibration();
+            }}
+          >
             Refresh
           </Button>
         </div>
+      </div>
+
+      <CalibrationSummary report={calibrationState.status === "success" ? calibrationState.data : null} loading={calibrationState.status === "loading" || calibrationState.status === "idle"} error={calibrationState.status === "error" ? calibrationState.error.message : null} />
+
+      {assigningClientId && (
+        <div style={{ marginBottom: "var(--space-4)" }}>
+          <div className="notice notice--info">
+            Assigning{" "}
+            <strong>
+              {assigningClient?.hostname || assigningClientId}
+            </strong>
+            . Select an empty PC seat on the layout
+            {assignLoading ? "…" : "."}{" "}
+            <Button variant="quiet" size="sm" onClick={clearAssignMode}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <div style={{ marginBottom: "var(--space-5)" }}>
+      <SectionCard
+        title={`Location assignment queue (${unassignedItems.length})`}
+        className="floor-vis__queue"
+      >
+        {unassignedItems.length === 0 ? (
+          <div style={{ color: "var(--text-muted)" }}>
+            All managed clients have a location assignment.
+          </div>
+        ) : (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "var(--space-2)",
+            }}
+          >
+            {unassignedItems.map((item) => (
+              <div
+                key={item.id}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: "var(--space-3)",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  padding: "var(--space-2) 0",
+                  borderBottom: "1px solid var(--border)",
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 600 }}>{item.hostname}</div>
+                  <div
+                    style={{
+                      color: "var(--text-muted)",
+                      fontSize: "var(--font-sm)",
+                    }}
+                  >
+                    {item.mac_address} ·{" "}
+                    {formatUnassignedReason(
+                      item.unassigned_reason,
+                      item.localization_confidence,
+                    )}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={autoLocatingClientId !== null || assignLoading}
+                    onClick={() => void tryAutomaticLocation(item)}
+                  >
+                    {autoLocatingClientId === item.id ? "Locating…" : "Try auto location"}
+                  </Button>
+                  <Button
+                    variant={
+                      assigningClientId === item.id ? "primary" : "quiet"
+                    }
+                    size="sm"
+                    disabled={autoLocatingClientId !== null}
+                    onClick={() => startAssignMode(item.id)}
+                  >
+                    {assigningClientId === item.id ? "Selecting seat…" : "Assign manually"}
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </SectionCard>
       </div>
 
       {state.status === "error" && (
@@ -463,6 +783,26 @@ export function LocationsPage() {
           </li>
         ))}
       </ul>
+      <ul className="floor-vis__legend floor-vis__legend-assignment">
+        <li className="floor-vis__legend-item">
+          <span className="station__assignment-glyph" aria-hidden="true">
+            {ASSIGNMENT_METHOD_GLYPH.AUTO}
+          </span>
+          Auto-assigned
+        </li>
+        <li className="floor-vis__legend-item">
+          <span className="station__assignment-glyph" aria-hidden="true">
+            {ASSIGNMENT_METHOD_GLYPH.MANUAL}
+          </span>
+          Manually assigned
+        </li>
+        <li className="floor-vis__legend-item">
+          <span className="station__assignment-glyph" aria-hidden="true">
+            {ASSIGNMENT_METHOD_GLYPH.EMPTY}
+          </span>
+          Empty seat
+        </li>
+      </ul>
 
       {emptyFloor ? (
         <EmptyState
@@ -544,6 +884,12 @@ export function LocationsPage() {
                                           station.health?.status,
                                         showsClients: layout.shows_clients,
                                       });
+                                      const assignment = resolveLocationAssignment(
+                                        station,
+                                      );
+                                      const method = assignmentMethodOf(assignment);
+                                      const assignmentMeta =
+                                        stationAssignmentMeta(assignment);
                                       const visible = stationMatches(
                                         station,
                                         visual,
@@ -558,6 +904,10 @@ export function LocationsPage() {
                                       const neighbor =
                                         station.client_id != null &&
                                         neighborIds.has(station.client_id);
+                                      const title = stationAssignmentTitle(
+                                        station,
+                                        STATION_VISUAL_LABEL[visual],
+                                      );
                                       return (
                                         <button
                                           key={stationKey(station)}
@@ -565,18 +915,24 @@ export function LocationsPage() {
                                           className={[
                                             "station",
                                             `station--${visual}`,
+                                            method
+                                              ? `station--method-${method.toLowerCase()}`
+                                              : "",
                                             visible ? "" : "station--dim",
                                             selected ? "station--selected" : "",
                                             neighbor ? "station--neighbor" : "",
                                           ]
                                             .filter(Boolean)
                                             .join(" ")}
-                                          title={`${station.label} · ${STATION_VISUAL_LABEL[visual]}`}
-                                          aria-label={`${station.label}, ${STATION_VISUAL_LABEL[visual]}`}
-                                          onClick={() =>
-                                            setSelectedLocationId(station.id)
-                                          }
+                                          title={title}
+                                          aria-label={title}
+                                          onClick={() => handleStationClick(station)}
                                         >
+                                          <span className="station__method" aria-hidden="true">
+                                            {method
+                                              ? ASSIGNMENT_METHOD_GLYPH[method]
+                                              : ASSIGNMENT_METHOD_GLYPH.EMPTY}
+                                          </span>
                                           <span className="station__name">
                                             {stationSeatLabel(
                                               station,
@@ -585,7 +941,9 @@ export function LocationsPage() {
                                           </span>
                                           <span className="station__meta">
                                             {layout.shows_clients && station.client_id
-                                              ? STATION_VISUAL_LABEL[visual]
+                                              ? assignmentMeta
+                                                ? `${assignmentMeta} · ${STATION_VISUAL_LABEL[visual]}`
+                                                : STATION_VISUAL_LABEL[visual]
                                               : `P${station.position ?? "—"}`}
                                           </span>
                                         </button>
@@ -611,13 +969,28 @@ export function LocationsPage() {
           >
             {!selectedLocation ? (
               <div style={{ color: "var(--text-muted)" }}>
-                Select a PC position to inspect it.
+                {assigningClientId
+                  ? "Select an empty PC position to place the client."
+                  : "Select a PC position to inspect it."}
               </div>
             ) : (
               <div>
                 <div style={{ color: "var(--text-muted)" }}>
                   {locationDescription(selectedLocation)}
                 </div>
+                {assigningClientId && !selectedLocation.client_id && (
+                  <div style={{ marginTop: "var(--space-3)" }}>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      disabled={assignLoading}
+                      onClick={() => void assignClientToSeat(selectedLocation)}
+                    >
+                      Assign{" "}
+                      {assigningClient?.hostname || assigningClientId} here
+                    </Button>
+                  </div>
+                )}
                 <dl
                   className="floor-vis__panel-grid"
                   style={{ marginTop: "var(--space-3)" }}
@@ -633,6 +1006,49 @@ export function LocationsPage() {
                   <PanelRow label="IP" value={client?.ip_address || "—"} />
                   <PanelRow label="MAC" value={client?.mac_address || "—"} />
                   <PanelRow label="OS" value={client?.os.system || "—"} />
+                  {selectedLocation.client_id && (
+                    <>
+                      <PanelRow
+                        label="Assignment"
+                        value={
+                          selectedMethod ? (
+                            <span className="station__assignment">
+                              <span
+                                className="station__assignment-glyph"
+                                aria-hidden="true"
+                              >
+                                {ASSIGNMENT_METHOD_GLYPH[selectedMethod]}
+                              </span>
+                              {selectedMethod}
+                              {selectedAssignment?.verified
+                                ? " · verified"
+                                : selectedMethod === "AUTO"
+                                  ? " · unconfirmed"
+                                  : ""}
+                            </span>
+                          ) : (
+                            "—"
+                          )
+                        }
+                      />
+                      <PanelRow
+                        label="Confidence"
+                        value={selectedConfidence || "—"}
+                      />
+                      <PanelRow
+                        label="Assigned by"
+                        value={selectedAssignment?.assigned_by || "—"}
+                      />
+                      <PanelRow
+                        label="Source"
+                        value={selectedAssignment?.source || "—"}
+                      />
+                      <PanelRow
+                        label="Assigned at"
+                        value={selectedAssignment?.assigned_at || "—"}
+                      />
+                    </>
+                  )}
                   <PanelRow
                     label="Floor"
                     value={String(selectedLocation.floor)}
@@ -696,6 +1112,55 @@ export function LocationsPage() {
                     value={client?.connection.last_connected_at || "—"}
                   />
                 </dl>
+
+                {selectedLocation.client_id &&
+                  selectedMethod === "AUTO" &&
+                  !selectedAssignment?.verified && (
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "var(--space-2)",
+                        flexWrap: "wrap",
+                        marginTop: "var(--space-3)",
+                      }}
+                    >
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        disabled={actionLoading}
+                        onClick={() => void confirmSelectedAssignment()}
+                      >
+                        Confirm
+                      </Button>
+                      <Button
+                        variant="quiet"
+                        size="sm"
+                        disabled={actionLoading}
+                        onClick={() =>
+                          startAssignMode(selectedLocation.client_id!)
+                        }
+                      >
+                        Move
+                      </Button>
+                    </div>
+                  )}
+
+                {selectedLocation.client_id &&
+                  (selectedMethod === "MANUAL" ||
+                    selectedAssignment?.verified) && (
+                    <div style={{ marginTop: "var(--space-3)" }}>
+                      <Button
+                        variant="quiet"
+                        size="sm"
+                        disabled={actionLoading}
+                        onClick={() =>
+                          startAssignMode(selectedLocation.client_id!)
+                        }
+                      >
+                        Move
+                      </Button>
+                    </div>
+                  )}
 
                 {neighborsState.status === "success" &&
                   neighborsState.data.items.length > 0 && (
@@ -825,6 +1290,77 @@ export function LocationsPage() {
           </SectionCard>
         </div>
       )}
+    </div>
+  );
+}
+
+function CalibrationSummary({
+  report,
+  loading,
+  error,
+}: {
+  report: CalibrationReport | null;
+  loading: boolean;
+  error: string | null;
+}) {
+  if (loading) {
+    return <div style={{ marginBottom: "var(--space-5)" }}><Skeleton variant="row" width="100%" /></div>;
+  }
+  if (error) {
+    return (
+      <div className="notice notice--warning" style={{ marginBottom: "var(--space-5)" }}>
+        Calibration data is unavailable: {error}
+      </div>
+    );
+  }
+  if (!report) return null;
+
+  const { summary } = report;
+  return (
+    <div style={{ marginBottom: "var(--space-5)" }}>
+      <SectionCard title="Localization calibration">
+        <p style={{ color: "var(--text-muted)", marginTop: 0 }}>
+          Confirmed automatic assignments compare the calculated position with the physical seat.
+        </p>
+        <div className="floor-vis__legend" style={{ marginBottom: "var(--space-3)" }}>
+          <span><strong>{report.sample_count}</strong> verified sample{report.sample_count === 1 ? "" : "s"}</span>
+          <span><strong>{formatCoordinate(summary.mean_distance)}</strong> mean distance error</span>
+          <span style={{ color: summary.systematic_transformation_signal ? "var(--danger)" : "var(--success)" }}>
+            {summary.systematic_transformation_signal ? "Offset signal detected" : "No offset signal"}
+          </span>
+        </div>
+        <div style={{ color: "var(--text-muted)", marginBottom: "var(--space-3)" }}>
+          Mean axis error: Δx {formatCoordinate(summary.mean_error.x)}, Δy {formatCoordinate(summary.mean_error.y)}, Δz {formatCoordinate(summary.mean_error.z)}. {summary.interpretation}
+        </div>
+        {report.comparisons.length > 0 && (
+          <div style={{ overflowX: "auto" }}>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Client</th>
+                  <th>Confirmed seat</th>
+                  <th>Δx</th>
+                  <th>Δy</th>
+                  <th>Δz</th>
+                  <th>Distance</th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.comparisons.slice(0, 10).map((comparison) => (
+                  <tr key={`${comparison.history_id}-${comparison.client_id}`}>
+                    <td>{comparison.hostname || comparison.client_id}</td>
+                    <td>{comparison.location_label}</td>
+                    <td>{formatCoordinate(comparison.error.dx)}</td>
+                    <td>{formatCoordinate(comparison.error.dy)}</td>
+                    <td>{formatCoordinate(comparison.error.dz)}</td>
+                    <td>{formatCoordinate(comparison.error.distance)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </SectionCard>
     </div>
   );
 }

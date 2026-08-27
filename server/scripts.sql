@@ -36,6 +36,16 @@ CREATE TABLE IF NOT EXISTS clients (
     os_version VARCHAR(255),
     os_machine VARCHAR(100),
     location_id INT NULL,
+    location_assignment_method VARCHAR(16) NULL,
+    location_assignment_status VARCHAR(16) NULL,
+    location_confidence DOUBLE NULL,
+    location_verified BOOLEAN NOT NULL DEFAULT FALSE,
+    location_assigned_at DATETIME NULL,
+    location_assigned_by VARCHAR(255) NULL,
+    location_last_calculated_at DATETIME NULL,
+    location_source VARCHAR(64) NULL,
+    location_evidence TEXT NULL,
+    location_failure_reason VARCHAR(255) NULL,
     health_cpu_percent DOUBLE NULL,
     health_memory_percent DOUBLE NULL,
     health_disk_percent DOUBLE NULL,
@@ -45,7 +55,10 @@ CREATE TABLE IF NOT EXISTS clients (
         ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (location_id)
         REFERENCES locations(id)
-        ON DELETE SET NULL
+        ON DELETE SET NULL,
+    INDEX idx_clients_location_assignment
+        (location_assignment_method, location_assignment_status),
+    INDEX idx_clients_location_verified (location_verified)
 );
 
 CREATE TABLE IF NOT EXISTS client_location_history (
@@ -55,10 +68,17 @@ CREATE TABLE IF NOT EXISTS client_location_history (
     assigned_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     unassigned_at DATETIME NULL,
     assigned_by VARCHAR(255) NULL,
+    assignment_method VARCHAR(16) NULL,
+    assignment_status VARCHAR(16) NULL,
+    confidence DOUBLE NULL,
+    verified BOOLEAN NOT NULL DEFAULT FALSE,
+    source VARCHAR(64) NULL,
+    evidence TEXT NULL,
     FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
     FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE RESTRICT,
     INDEX idx_location_history_client (client_id, assigned_at),
-    INDEX idx_location_history_location (location_id, assigned_at)
+    INDEX idx_location_history_location (location_id, assigned_at),
+    INDEX idx_location_history_method (assignment_method, assignment_status)
 );
 
 CREATE TABLE IF NOT EXISTS connections (

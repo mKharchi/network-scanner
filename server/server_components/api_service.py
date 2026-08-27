@@ -24,6 +24,17 @@ from server_components.center_layout import ASSIGNABLE_LOCATION_TYPES, LOCATION_
 from server_components.physical_layout import available_floors, build_floor_layout
 from server_components.physical_neighbors import classify_physical_neighbor, neighbor_sort_key
 from server_components.client_health import health_payload
+from server_components.location_assignment import (
+    ASSIGNMENT_METHOD_AUTO,
+    ASSIGNMENT_METHOD_MANUAL,
+    ASSIGNMENT_STATUS_ASSIGNED,
+    ASSIGNMENT_STATUS_CONFIRMED,
+    SOURCE_ADMINISTRATOR,
+    assignment_payload,
+    normalize_assignment_method,
+    normalize_assignment_status,
+    serialize_evidence,
+)
 from server_components.server_lib import (
     clients as memory_clients,
     client_quarantine_status,
@@ -84,7 +95,52 @@ def _location_from_row(row: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]
         location["client_state"] = row.get("client_state", "OFFLINE")
         location["health"] = row.get("health")
         location["health_status"] = (row.get("health") or {}).get("status")
+        assignment = _location_assignment_from_row(row)
+        if assignment is not None:
+            location["assignment"] = assignment
     return location
+
+
+def _location_assignment_from_row(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Extract hybrid assignment metadata from a clients or history row."""
+    method = row.get("location_assignment_method")
+    if method is None:
+        method = row.get("assignment_method")
+    status = row.get("location_assignment_status")
+    if status is None:
+        status = row.get("assignment_status")
+    confidence = row.get("location_confidence")
+    if confidence is None and "confidence" in row:
+        confidence = row.get("confidence")
+    verified = row.get("location_verified")
+    if verified is None and "verified" in row:
+        verified = row.get("verified")
+    assigned_at = row.get("location_assigned_at")
+    if assigned_at is None:
+        assigned_at = row.get("assigned_at")
+    assigned_by = row.get("location_assigned_by")
+    if assigned_by is None:
+        assigned_by = row.get("assigned_by")
+    source = row.get("location_source")
+    if source is None:
+        source = row.get("source")
+    evidence = row.get("location_evidence")
+    if evidence is None:
+        evidence = row.get("evidence")
+    last_calculated_at = row.get("location_last_calculated_at")
+    failure_reason = row.get("location_failure_reason")
+    return assignment_payload(
+        method=method,
+        status=status,
+        confidence=_numeric(confidence),
+        verified=bool(verified),
+        assigned_at=_iso_utc(assigned_at),
+        assigned_by=assigned_by,
+        last_calculated_at=_iso_utc(last_calculated_at),
+        source=source,
+        evidence=evidence,
+        failure_reason=failure_reason,
+    )
 
 
 def _numeric(value: Any) -> Optional[float]:
@@ -155,6 +211,16 @@ def _client_location_from_row(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             "position": row.get("location_position"),
             "label": row.get("location_label"),
             "client_id": row.get("client_id"),
+            "location_assignment_method": row.get("location_assignment_method"),
+            "location_assignment_status": row.get("location_assignment_status"),
+            "location_confidence": row.get("location_confidence"),
+            "location_verified": row.get("location_verified"),
+            "location_assigned_at": row.get("location_assigned_at"),
+            "location_assigned_by": row.get("location_assigned_by"),
+            "location_last_calculated_at": row.get("location_last_calculated_at"),
+            "location_source": row.get("location_source"),
+            "location_evidence": row.get("location_evidence"),
+            "location_failure_reason": row.get("location_failure_reason"),
         }
     )
 
@@ -168,7 +234,12 @@ def list_locations(*, assignable_only: bool = False) -> List[Dict[str, Any]]:
         cursor.execute(
             """SELECT l.*, c.client_id, c.hostname, c.mac,
                       c.health_cpu_percent, c.health_memory_percent,
-                      c.health_disk_percent, c.health_updated_at
+                      c.health_disk_percent, c.health_updated_at,
+                      c.location_assignment_method, c.location_assignment_status,
+                      c.location_confidence, c.location_verified,
+                      c.location_assigned_at, c.location_assigned_by,
+                      c.location_last_calculated_at, c.location_source,
+                      c.location_evidence, c.location_failure_reason
                FROM locations l LEFT JOIN clients c ON c.location_id = l.id
                ORDER BY l.floor, l.zone_type, l.zone_name, l.aisle, l.table_no, l.row_no, l.position"""
         )
@@ -213,7 +284,12 @@ def get_location(location_id: int) -> Optional[Dict[str, Any]]:
         cursor.execute(
             """SELECT l.*, c.client_id, c.hostname, c.mac,
                       c.health_cpu_percent, c.health_memory_percent,
-                      c.health_disk_percent, c.health_updated_at
+                      c.health_disk_percent, c.health_updated_at,
+                      c.location_assignment_method, c.location_assignment_status,
+                      c.location_confidence, c.location_verified,
+                      c.location_assigned_at, c.location_assigned_by,
+                      c.location_last_calculated_at, c.location_source,
+                      c.location_evidence, c.location_failure_reason
                FROM locations l LEFT JOIN clients c ON c.location_id = l.id
                WHERE l.id = %s""",
             (location_id,),
@@ -261,7 +337,12 @@ def get_client_location(client_id: str) -> Optional[Dict[str, Any]]:
     try:
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
-            """SELECT l.*, c.client_id
+            """SELECT l.*, c.client_id,
+                      c.location_assignment_method, c.location_assignment_status,
+                      c.location_confidence, c.location_verified,
+                      c.location_assigned_at, c.location_assigned_by,
+                      c.location_last_calculated_at, c.location_source,
+                      c.location_evidence, c.location_failure_reason
                FROM clients c LEFT JOIN locations l ON l.id = c.location_id
                WHERE c.client_id = %s""",
             (client_id,),
@@ -280,6 +361,8 @@ def get_client_location_history(client_id: str) -> List[Dict[str, Any]]:
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
             """SELECT h.id, h.assigned_at, h.unassigned_at, h.assigned_by,
+                      h.assignment_method, h.assignment_status, h.confidence,
+                      h.verified, h.source, h.evidence,
                       l.id AS location_id, l.floor, l.zone_type, l.zone_name,
                       l.aisle, l.table_no, l.row_no, l.position, l.label
                FROM client_location_history h
@@ -295,6 +378,7 @@ def get_client_location_history(client_id: str) -> List[Dict[str, Any]]:
                 "assigned_at": _iso_utc(row["assigned_at"]),
                 "unassigned_at": _iso_utc(row["unassigned_at"]),
                 "assigned_by": row["assigned_by"],
+                "assignment": _location_assignment_from_row(row),
                 "location": _location_from_row({**row, "id": row["location_id"]}),
             }
             history.append(item)
@@ -363,13 +447,43 @@ def assign_client_location(
     client_id: str,
     location_id: int,
     assigned_by: Optional[str] = None,
+    *,
+    method: str = ASSIGNMENT_METHOD_MANUAL,
+    status: str = ASSIGNMENT_STATUS_ASSIGNED,
+    confidence: Optional[float] = None,
+    verified: Optional[bool] = None,
+    source: Optional[str] = None,
+    evidence: Any = None,
+    last_calculated_at: Optional[Any] = None,
 ) -> Dict[str, Any]:
+    """Assign a client to a PC position and record hybrid assignment metadata.
+
+    Existing operator PATCH/PUT callers remain MANUAL + ASSIGNED. Automatic
+    localization (Phase 3) passes method=AUTO with confidence/evidence.
+    """
+    assignment_method = normalize_assignment_method(method)
+    assignment_status = normalize_assignment_status(status)
+    if verified is None:
+        verified = assignment_method == ASSIGNMENT_METHOD_MANUAL
+    if source is None:
+        source = (
+            SOURCE_ADMINISTRATOR
+            if assignment_method == ASSIGNMENT_METHOD_MANUAL
+            else "localization_engine"
+        )
+    evidence_json = serialize_evidence(evidence)
+
     conn = get_connection()
     if not conn:
         raise ValueError("Database unavailable.")
     try:
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT id, client_id, location_id FROM clients WHERE client_id = %s", (client_id,))
+        cursor.execute(
+            """SELECT id, client_id, location_id,
+                      location_assignment_method, location_assignment_status
+               FROM clients WHERE client_id = %s""",
+            (client_id,),
+        )
         client = cursor.fetchone()
         if not client:
             raise ValueError(f"Client '{client_id}' not found.")
@@ -390,19 +504,225 @@ def assign_client_location(
             occupant_name = occupant.get("hostname") or occupant["client_id"]
             raise ValueError(f"This physical position is already assigned to {occupant_name}.")
 
-        if client["location_id"] != location_id:
+        location_changed = client["location_id"] != location_id
+        if location_changed:
             cursor.execute(
                 "UPDATE client_location_history SET unassigned_at = CURRENT_TIMESTAMP WHERE client_id = %s AND unassigned_at IS NULL",
                 (client["id"],),
             )
-            cursor.execute("UPDATE clients SET location_id = %s WHERE id = %s", (location_id, client["id"]))
             cursor.execute(
-                """INSERT INTO client_location_history (client_id, location_id, assigned_by)
-                   VALUES (%s, %s, %s)""",
-                (client["id"], location_id, assigned_by),
+                """UPDATE clients
+                   SET location_id = %s,
+                       location_assignment_method = %s,
+                       location_assignment_status = %s,
+                       location_confidence = %s,
+                       location_verified = %s,
+                       location_assigned_at = CURRENT_TIMESTAMP,
+                       location_assigned_by = %s,
+                       location_last_calculated_at = %s,
+                       location_source = %s,
+                       location_evidence = %s,
+                       location_failure_reason = NULL
+                   WHERE id = %s""",
+                (
+                    location_id,
+                    assignment_method,
+                    assignment_status,
+                    confidence,
+                    bool(verified),
+                    assigned_by,
+                    last_calculated_at,
+                    source,
+                    evidence_json,
+                    client["id"],
+                ),
+            )
+            cursor.execute(
+                """INSERT INTO client_location_history (
+                       client_id, location_id, assigned_by,
+                       assignment_method, assignment_status, confidence,
+                       verified, source, evidence
+                   ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (
+                    client["id"],
+                    location_id,
+                    assigned_by,
+                    assignment_method,
+                    assignment_status,
+                    confidence,
+                    bool(verified),
+                    source,
+                    evidence_json,
+                ),
+            )
+        else:
+            # Same seat: refresh assignment metadata (e.g. confirm / recalculate accept).
+            cursor.execute(
+                """UPDATE clients
+                   SET location_assignment_method = %s,
+                       location_assignment_status = %s,
+                       location_confidence = %s,
+                       location_verified = %s,
+                       location_assigned_at = COALESCE(location_assigned_at, CURRENT_TIMESTAMP),
+                       location_assigned_by = COALESCE(%s, location_assigned_by),
+                       location_last_calculated_at = COALESCE(%s, location_last_calculated_at),
+                       location_source = %s,
+                       location_evidence = %s,
+                       location_failure_reason = NULL
+                   WHERE id = %s""",
+                (
+                    assignment_method,
+                    assignment_status,
+                    confidence,
+                    bool(verified),
+                    assigned_by,
+                    last_calculated_at,
+                    source,
+                    evidence_json,
+                    client["id"],
+                ),
             )
         conn.commit()
-        return _location_from_row({**location, "client_id": client_id}) or {}
+        try:
+            from server_components import event_broadcaster
+
+            event_broadcaster.broadcast_client_location_updated(
+                client_id=client_id,
+                location=_location_from_row({
+                    **location,
+                    "client_id": client_id,
+                    "location_assignment_method": assignment_method,
+                    "location_assignment_status": assignment_status,
+                    "location_confidence": confidence,
+                    "location_verified": bool(verified),
+                    "location_assigned_at": datetime.now(timezone.utc),
+                    "location_assigned_by": assigned_by,
+                    "location_last_calculated_at": last_calculated_at,
+                    "location_source": source,
+                    "location_evidence": evidence_json,
+                }),
+                assignment=assignment_payload(
+                    method=assignment_method,
+                    status=assignment_status,
+                    confidence=confidence,
+                    verified=bool(verified),
+                    assigned_at=datetime.now(timezone.utc).isoformat(),
+                    assigned_by=assigned_by,
+                    last_calculated_at=_iso_utc(last_calculated_at),
+                    source=source,
+                    evidence=evidence_json,
+                ),
+                previous_location_id=client["location_id"] if location_changed else location_id,
+                change="moved" if location_changed and client["location_id"] is not None else "assigned",
+            )
+        except Exception:
+            # Database assignment remains authoritative if SSE delivery fails.
+            pass
+        assigned = _location_from_row({
+            **location,
+            "client_id": client_id,
+            "location_assignment_method": assignment_method,
+            "location_assignment_status": assignment_status,
+            "location_confidence": confidence,
+            "location_verified": bool(verified),
+            "location_assigned_at": datetime.now(timezone.utc),
+            "location_assigned_by": assigned_by,
+            "location_last_calculated_at": last_calculated_at,
+            "location_source": source,
+            "location_evidence": evidence_json,
+        }) or {}
+        return assigned
+    finally:
+        conn.close()
+
+
+def confirm_client_location(
+    client_id: str,
+    *,
+    confirmed_by: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Mark the current client location as administrator-confirmed.
+
+    Automatic assignments stay method=AUTO but become CONFIRMED + verified so
+    they are treated as trusted spatial references. Manual seats are also
+    confirmable (idempotent).
+    """
+    conn = get_connection()
+    if not conn:
+        raise ValueError("Database unavailable.")
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT c.id, c.client_id, c.location_id,
+                   c.location_assignment_method, c.location_assignment_status,
+                   c.location_confidence, c.location_verified,
+                   c.location_assigned_at, c.location_assigned_by,
+                   c.location_last_calculated_at, c.location_source,
+                   c.location_evidence,
+                   l.*
+            FROM clients c
+            LEFT JOIN locations l ON l.id = c.location_id
+            WHERE c.client_id = %s
+            """,
+            (client_id,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            raise ValueError(f"Client '{client_id}' not found.")
+        if row.get("location_id") is None:
+            raise ValueError(f"Client '{client_id}' has no location to confirm.")
+
+        method = normalize_assignment_method(
+            row.get("location_assignment_method"),
+            default=ASSIGNMENT_METHOD_AUTO,
+        )
+        operator = confirmed_by or row.get("location_assigned_by") or "local-network-operator"
+        cursor.execute(
+            """
+            UPDATE clients
+            SET location_assignment_status = %s,
+                location_verified = TRUE,
+                location_assigned_by = COALESCE(%s, location_assigned_by),
+                location_failure_reason = NULL
+            WHERE id = %s
+            """,
+            (ASSIGNMENT_STATUS_CONFIRMED, operator, row["id"]),
+        )
+        cursor.execute(
+            """
+            UPDATE client_location_history
+            SET assignment_status = %s,
+                verified = TRUE,
+                assigned_by = COALESCE(%s, assigned_by)
+            WHERE client_id = %s AND unassigned_at IS NULL
+            """,
+            (ASSIGNMENT_STATUS_CONFIRMED, operator, row["id"]),
+        )
+        conn.commit()
+        confirmed_location = _location_from_row({
+            **row,
+            "id": row["location_id"],
+            "client_id": client_id,
+            "location_assignment_method": method,
+            "location_assignment_status": ASSIGNMENT_STATUS_CONFIRMED,
+            "location_verified": True,
+            "location_assigned_by": operator,
+            "location_failure_reason": None,
+        }) or {}
+        try:
+            from server_components import event_broadcaster
+
+            event_broadcaster.broadcast_client_location_updated(
+                client_id=client_id,
+                location=confirmed_location,
+                assignment=confirmed_location.get("assignment"),
+                previous_location_id=row["location_id"],
+                change="confirmed",
+            )
+        except Exception:
+            pass
+        return confirmed_location
     finally:
         conn.close()
 
@@ -678,6 +998,11 @@ def list_clients(
                    c.created_at, c.updated_at,
                    c.health_cpu_percent, c.health_memory_percent,
                    c.health_disk_percent, c.health_updated_at,
+                   c.location_assignment_method, c.location_assignment_status,
+                   c.location_confidence, c.location_verified,
+                   c.location_assigned_at, c.location_assigned_by,
+                   c.location_last_calculated_at, c.location_source,
+                   c.location_evidence, c.location_failure_reason,
                    l.id AS location_id, l.floor AS location_floor,
                    l.zone_type AS location_zone_type, l.zone_name AS location_zone_name,
                    l.location_type AS location_type,
@@ -744,6 +1069,7 @@ def list_clients(
                 },
                 "connection": conn_obj,
                 "location": _client_location_from_row(r),
+                "location_assignment": _location_assignment_from_row(r),
                 "health": _health_from_row(
                     r,
                     client_id=cid,
@@ -757,6 +1083,135 @@ def list_clients(
         conn.close()
 
     return items
+
+
+def list_unassigned_clients(limit: int = 100) -> List[Dict[str, Any]]:
+    """Clients with no seat — the manual location-assignment queue."""
+    items = list_clients(location_filter="unassigned", limit=max(1, min(limit, 500)))
+    queue: List[Dict[str, Any]] = []
+    for item in items:
+        assignment = item.get("location_assignment") or {}
+        reason = assignment.get("failure_reason") or "unassigned"
+        queue.append({
+            **item,
+            "unassigned_reason": reason,
+            "localization_confidence": assignment.get("confidence"),
+        })
+    return queue
+
+
+def get_client_localization_debug(client_id: str) -> Optional[Dict[str, Any]]:
+    """Return the raw client-to-location chain for coordinate validation.
+
+    This endpoint deliberately reports the stored values without changing the
+    assignment or applying a second localization algorithm.
+    """
+    conn = get_connection()
+    if not conn:
+        return None
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT c.id, c.client_id, c.hostname, c.mac, c.ip, c.updated_at,
+                   c.location_assignment_method, c.location_assignment_status,
+                   c.location_confidence, c.location_verified,
+                   c.location_assigned_at, c.location_assigned_by,
+                   c.location_last_calculated_at, c.location_source,
+                   c.location_evidence, c.location_failure_reason,
+                   l.id AS location_id, l.label AS location_label,
+                   l.floor, l.zone_type, l.zone_name, l.location_type,
+                   l.aisle, l.table_no, l.row_no, l.position,
+                   l.x, l.y, l.z, l.metadata
+            FROM clients c
+            LEFT JOIN locations l ON l.id = c.location_id
+            WHERE c.client_id = %s
+            """,
+            (client_id,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+
+        floor = row.get("floor")
+        coordinates = {
+            "x": _numeric(row.get("x")),
+            "y": _numeric(row.get("y")),
+            "z": _numeric(row.get("z")),
+        }
+        return {
+            "client": {
+                "database_id": row.get("id"),
+                "client_id": row.get("client_id"),
+                "hostname": row.get("hostname") or "Unknown",
+                "mac": _format_mac(row.get("mac")),
+                "ip": row.get("ip"),
+            },
+            "location": None if row.get("location_id") is None else {
+                "id": row.get("location_id"),
+                "label": row.get("location_label"),
+                "floor": floor,
+                "zone_type": row.get("zone_type"),
+                "zone_name": row.get("zone_name"),
+                "location_type": row.get("location_type"),
+                "aisle": row.get("aisle"),
+                "table": row.get("table_no"),
+                "row": row.get("row_no"),
+                "position": row.get("position"),
+            },
+            "location_assignment": _location_assignment_from_row(row),
+            "server_coordinates": coordinates,
+            "coordinate_system": {
+                "name": "center-layout-v1",
+                "unit": "relative",
+                "origin": f"floor-{floor}-origin" if floor is not None else None,
+                "axis": {"x": "layout-horizontal", "y": "layout-depth", "z": "floor-elevation"},
+                "floor_height": 3.0,
+            },
+            "render_coordinates": None,
+            "transformation": {
+                "name": "digital-twin-isometric-projection",
+                "renderer": "server/gui/src/pages/DigitalTwin.tsx",
+                "note": "The final screen pixel coordinates depend on camera yaw, pitch, zoom, and pan.",
+            },
+            "last_updated": _iso_utc(row.get("updated_at")),
+        }
+    finally:
+        conn.close()
+
+
+def get_calibration_report(*, client_id: Optional[str] = None, limit: int = 200) -> Dict[str, Any]:
+    """Compare confirmed AUTO estimates with their confirmed physical positions."""
+    from server_components.calibration import build_calibration_report
+
+    conn = get_connection()
+    if not conn:
+        return build_calibration_report([])
+    try:
+        cursor = conn.cursor(dictionary=True)
+        query = """
+            SELECT h.id AS history_id, c.client_id, c.hostname,
+                   h.location_id, h.assigned_at, h.assignment_method,
+                   h.assignment_status, h.verified, h.evidence,
+                   l.label AS location_label, l.x AS actual_x,
+                   l.y AS actual_y, l.z AS actual_z
+            FROM client_location_history h
+            JOIN clients c ON c.id = h.client_id
+            JOIN locations l ON l.id = h.location_id
+            WHERE h.assignment_method = 'AUTO'
+              AND h.assignment_status = 'CONFIRMED'
+              AND h.verified = TRUE
+        """
+        params: list[Any] = []
+        if client_id:
+            query += " AND c.client_id = %s"
+            params.append(client_id)
+        query += " ORDER BY h.assigned_at DESC LIMIT %s"
+        params.append(max(1, min(int(limit), 1000)))
+        cursor.execute(query, tuple(params))
+        return build_calibration_report(cursor.fetchall() or [])
+    finally:
+        conn.close()
 
 
 def get_client_detail(client_id: str) -> Optional[Dict[str, Any]]:
@@ -777,6 +1232,11 @@ def get_client_detail(client_id: str) -> Optional[Dict[str, Any]]:
                    c.created_at, c.updated_at,
                    c.health_cpu_percent, c.health_memory_percent,
                    c.health_disk_percent, c.health_updated_at,
+                   c.location_assignment_method, c.location_assignment_status,
+                   c.location_confidence, c.location_verified,
+                   c.location_assigned_at, c.location_assigned_by,
+                   c.location_last_calculated_at, c.location_source,
+                   c.location_evidence, c.location_failure_reason,
                    l.id AS location_id, l.floor AS location_floor,
                    l.zone_type AS location_zone_type, l.zone_name AS location_zone_name,
                    l.location_type AS location_type,
@@ -827,6 +1287,7 @@ def get_client_detail(client_id: str) -> Optional[Dict[str, Any]]:
             },
             "connection": conn_obj,
             "location": _client_location_from_row(r),
+            "location_assignment": _location_assignment_from_row(r),
             "health": _health_from_row(
                 r,
                 client_id=client_id,
@@ -1876,4 +2337,37 @@ def trigger_spatial_scan_evaluation() -> List[Dict[str, Any]]:
     """Evaluate spatial coordinates and rogue scores across all network devices."""
     from server_components import spatial_engine
     return spatial_engine.evaluate_all_devices()
+
+
+def get_spatial_scene(floor: Optional[int] = None) -> Dict[str, Any]:
+    """Retrieve full 3D digital twin scene graph for physical/AR rendering."""
+    from server_components import spatial_engine
+    return spatial_engine.get_spatial_scene(floor=floor)
+
+
+def get_spatial_topology() -> Dict[str, Any]:
+    """Retrieve network graph topology separating physical, logical, and wireless links."""
+    from server_components import spatial_engine
+    return spatial_engine.get_spatial_topology()
+
+
+def get_spatial_threats() -> List[Dict[str, Any]]:
+    """Retrieve active spatial threat markers with 3D anchors and risk scores."""
+    from server_components import spatial_engine
+    return spatial_engine.get_spatial_threats()
+
+
+def get_spatial_replay(
+    from_time: Optional[str] = None,
+    to_time: Optional[str] = None,
+    interval_seconds: int = 60,
+) -> Dict[str, Any]:
+    """Generate time-replay frames of spatial movements and security events."""
+    from server_components import spatial_engine
+    return spatial_engine.get_spatial_replay(
+        from_time=from_time,
+        to_time=to_time,
+        interval_seconds=interval_seconds,
+    )
+
 

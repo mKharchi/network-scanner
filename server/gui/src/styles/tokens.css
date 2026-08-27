@@ -78,7 +78,7 @@
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.05);
 
   /* ── Layout ─────────────────────────────────────────────── */
-  --sidebar-w:       220px;
+  --sidebar-w:       20%;
   --header-h:        65px;
   --content-max-w:   90rem;
   --page-px:         1.5rem;   /* 24px desktop */
