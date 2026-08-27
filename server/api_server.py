@@ -217,6 +217,17 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 self.send_data(action)
                 return
 
+            # 3a. Development-only localization validation chain
+            m = re.match(r"^/api/v1/debug/clients/([^/]+)/localization$", path)
+            if m:
+                client_id = urllib.parse.unquote(m.group(1))
+                debug_data = api_service.get_client_localization_debug(client_id)
+                if not debug_data:
+                    self.send_error_response(404, "NOT_FOUND", f"Client '{client_id}' not found.")
+                    return
+                self.send_data(debug_data)
+                return
+
             # 4. Clients
             if path == "/api/v1/clients":
                 state_filter = get_param("state")
