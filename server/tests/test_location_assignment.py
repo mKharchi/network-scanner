@@ -159,6 +159,46 @@ class LocationAssignmentTests(unittest.TestCase):
         self.assertFalse(client_update[4])
 
     @patch("server_components.api_service.get_connection")
+    def test_confirm_auto_assignment_marks_current_history_verified(self, get_connection):
+        cursor = MagicMock()
+        cursor.fetchone.return_value = {
+            "id": 8,
+            "client_id": "client-a",
+            "location_id": 4,
+            "location_assignment_method": "AUTO",
+            "location_assignment_status": "ASSIGNED",
+            "location_confidence": 0.91,
+            "location_verified": False,
+            "location_assigned_at": "2026-08-27T10:00:00+00:00",
+            "location_assigned_by": "localization_engine",
+            "location_last_calculated_at": "2026-08-27T10:00:00+00:00",
+            "location_source": "localization_engine",
+            "location_evidence": '["sensor_match"]',
+            "id": 4,
+            "label": "F1-A1-T1-R1-P1",
+            "floor": 1,
+            "zone_type": "training",
+            "zone_name": None,
+            "aisle": 1,
+            "table_no": 1,
+            "row_no": 1,
+            "position": 1,
+            "location_type": "pc_position",
+        }
+        get_connection.return_value = _connection(cursor)
+
+        confirmed = api_service.confirm_client_location("client-a", confirmed_by="admin")
+
+        self.assertEqual(confirmed["assignment"]["method"], "AUTO")
+        self.assertEqual(confirmed["assignment"]["status"], "CONFIRMED")
+        self.assertTrue(confirmed["assignment"]["verified"])
+        self.assertEqual(confirmed["assignment"]["assigned_by"], "admin")
+        sql_statements = [call.args[0] for call in cursor.execute.call_args_list]
+        self.assertTrue(any("UPDATE clients" in sql and "location_verified = TRUE" in sql for sql in sql_statements))
+        self.assertTrue(any("UPDATE client_location_history" in sql and "verified = TRUE" in sql for sql in sql_statements))
+        get_connection.return_value.commit.assert_called_once()
+
+    @patch("server_components.api_service.get_connection")
     def test_change_location_closes_previous_history_row(self, get_connection):
         cursor = MagicMock()
         cursor.fetchone.side_effect = [

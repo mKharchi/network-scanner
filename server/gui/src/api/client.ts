@@ -508,6 +508,32 @@ export interface ClientLocationHistoryEntry {
   location: ClientLocation;
 }
 
+export interface CalibrationComparison {
+  client_id: string;
+  hostname: string | null;
+  history_id: number;
+  location_id: number;
+  location_label: string;
+  assignment_method: string;
+  assignment_status: string;
+  verified: boolean;
+  assigned_at: string;
+  estimated: { x: number; y: number; z: number };
+  actual: { x: number; y: number; z: number };
+  error: { dx: number; dy: number; dz: number; distance: number };
+}
+
+export interface CalibrationReport {
+  sample_count: number;
+  comparisons: CalibrationComparison[];
+  summary: {
+    mean_error: { x: number; y: number; z: number };
+    mean_distance: number;
+    systematic_transformation_signal: boolean;
+    interpretation: string;
+  };
+}
+
 export type PhysicalNeighborRelationship =
   | 'same_row'
   | 'same_table'

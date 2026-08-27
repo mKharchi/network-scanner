@@ -938,10 +938,10 @@ The final choice should follow the existing architecture.
 
 ### Phase 6 — Confirmation
 
-* [ ] Allow automatic assignments to be confirmed.
-* [ ] Allow automatic assignments to be corrected.
-* [ ] Prevent automatic recalculation from silently overriding manual confirmation.
-* [ ] Record changes.
+* [x] Allow automatic assignments to be confirmed.
+* [x] Allow automatic assignments to be corrected.
+* [x] Prevent automatic recalculation from silently overriding manual confirmation.
+* [x] Record changes through the existing client-location history audit trail.
 
 ### Phase 7 — Real-Time Updates
 
