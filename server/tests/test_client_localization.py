@@ -124,6 +124,37 @@ class AutomaticClientLocalizationTests(unittest.TestCase):
         self.assertFalse(outcome["assigned"])
         self.assertEqual(outcome["reason"], "manual_assignment_protected")
 
+    @patch("server_components.client_localization.get_connection")
+    def test_unconfirmed_auto_location_can_be_recalculated(self, get_connection):
+        cursor = MagicMock()
+        cursor.fetchone.return_value = {
+            "client_id": "client-a",
+            "location_id": 4,
+            "location_assignment_method": "AUTO",
+            "location_assignment_status": "ASSIGNED",
+            "location_verified": False,
+        }
+        get_connection.return_value = _connection(cursor)
+
+        self.assertIsNone(client_localization._client_assignment_guard("client-a"))
+
+    @patch("server_components.client_localization.get_connection")
+    def test_confirmed_auto_location_is_not_overwritten(self, get_connection):
+        cursor = MagicMock()
+        cursor.fetchone.return_value = {
+            "client_id": "client-a",
+            "location_id": 4,
+            "location_assignment_method": "AUTO",
+            "location_assignment_status": "CONFIRMED",
+            "location_verified": True,
+        }
+        get_connection.return_value = _connection(cursor)
+
+        guard = client_localization._client_assignment_guard("client-a")
+
+        self.assertEqual(guard["reason"], "confirmed_assignment_protected")
+        self.assertEqual(guard["location_id"], 4)
+
 
 if __name__ == "__main__":
     unittest.main()

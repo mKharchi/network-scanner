@@ -183,6 +183,12 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 self.send_data({"items": api_service.get_physical_neighbors(client_id)})
                 return
 
+            if path == "/api/locations/calibration":
+                client_id = get_param("client_id")
+                limit = get_int_param("limit", 200)
+                self.send_data(api_service.get_calibration_report(client_id=client_id, limit=limit))
+                return
+
             m = re.match(r"^/api/clients/([^/]+)/location$", path)
             if m:
                 client_id = urllib.parse.unquote(m.group(1))

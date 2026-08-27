@@ -34,6 +34,7 @@ REASON_LOCALIZATION_UNAVAILABLE = "localization_unavailable"
 REASON_LOCATION_OCCUPIED = "location_occupied"
 REASON_ALREADY_ASSIGNED = "already_assigned"
 REASON_MANUAL_PROTECTED = "manual_assignment_protected"
+REASON_CONFIRMED_PROTECTED = "confirmed_assignment_protected"
 REASON_CLIENT_NOT_FOUND = "client_not_found"
 
 
@@ -163,6 +164,11 @@ def calculate_client_location(client_id: str) -> Dict[str, Any]:
             "supporting_sensors": triangulation.get("supporting_sensors") or [],
             "observation_count": len(readings),
             "device_id": device_id,
+            "calculated_coordinates": {
+                "x": triangulation.get("x"),
+                "y": triangulation.get("y"),
+                "z": triangulation.get("z"),
+            },
         }
 
         if not readings or triangulation.get("confidence", 0) <= 0 or triangulation.get("x") is None:
@@ -321,13 +327,18 @@ def _client_assignment_guard(client_id: str) -> Optional[Dict[str, Any]]:
                     "client_id": client_id,
                     "location_id": client["location_id"],
                 }
-            return {
-                "success": False,
-                "assigned": False,
-                "reason": REASON_ALREADY_ASSIGNED,
-                "client_id": client_id,
-                "location_id": client["location_id"],
-            }
+            if verified or status == "CONFIRMED":
+                return {
+                    "success": False,
+                    "assigned": False,
+                    "reason": REASON_CONFIRMED_PROTECTED,
+                    "client_id": client_id,
+                    "location_id": client["location_id"],
+                }
+            # An unconfirmed AUTO assignment is intentionally eligible for a
+            # fresh calculation; the caller may accept a better result or send
+            # the client to the manual correction flow.
+            return None
         return None
     finally:
         conn.close()
