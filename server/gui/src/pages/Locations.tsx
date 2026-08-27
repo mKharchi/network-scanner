@@ -80,6 +80,30 @@ function formatCoordinate(value: number): string {
   return value.toFixed(2);
 }
 
+function automaticLocationFailureMessage(outcome: Record<string, unknown>): string {
+  if (outcome.reason !== "insufficient_evidence") {
+    return typeof outcome.reason === "string"
+      ? formatUnassignedReason(
+          outcome.reason,
+          typeof outcome.confidence === "number" ? outcome.confidence : null,
+        )
+      : "automatic localization could not select a reliable seat";
+  }
+
+  const evidence = outcome.evidence;
+  if (!evidence || typeof evidence !== "object") {
+    return "No usable localization observations are available yet.";
+  }
+  const details = evidence as Record<string, unknown>;
+  if (details.device_id == null) {
+    return "This client has not been discovered as a network device yet, so there are no observations to calculate from.";
+  }
+  if (details.observation_count === 0) {
+    return "This client has been discovered, but no usable sensor observations are available yet.";
+  }
+  return "The available observations do not contain usable coordinates for a reliable location.";
+}
+
 export function LocationsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -94,6 +118,7 @@ export function LocationsPage() {
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
   const [actionLoading, setActionLoading] = useState(false);
   const [assignLoading, setAssignLoading] = useState(false);
+  const [autoLocatingClientId, setAutoLocatingClientId] = useState<string | null>(null);
   const assigningClientId = searchParams.get("assign");
 
   const { state, refetch } = useFetch<FloorLayout>(
@@ -293,6 +318,39 @@ export function LocationsPage() {
     }
   };
 
+  const tryAutomaticLocation = async (queueItem: UnassignedClientQueueItem) => {
+    setAutoLocatingClientId(queueItem.id);
+    try {
+      const outcome = await api.autoAssignClientLocation(queueItem.id);
+      const location = outcome.location as { label?: string } | undefined;
+      if (outcome.assigned === true && location?.label) {
+        addToast({
+          title: "Automatic location assigned",
+          message: `${queueItem.hostname || queueItem.id} was placed at ${location.label}. Select that seat and confirm it after physical verification.`,
+          severity: "SUCCESS",
+        });
+      } else {
+        const reason = automaticLocationFailureMessage(outcome);
+        addToast({
+          title: "Automatic location not assigned",
+          message: `${queueItem.hostname || queueItem.id}: ${reason} Choose Assign manually to place it now.`, 
+          severity: "HIGH",
+        });
+      }
+      refetch();
+      refetchUnassigned();
+      refetchCalibration();
+    } catch (err: any) {
+      addToast({
+        title: "Automatic location failed",
+        message: err?.message || "Unable to calculate an automatic location.",
+        severity: "CRITICAL",
+      });
+    } finally {
+      setAutoLocatingClientId(null);
+    }
+  };
+
   const clearAssignMode = () => {
     const next = new URLSearchParams(searchParams);
     next.delete("assign");
@@ -371,6 +429,7 @@ export function LocationsPage() {
       });
       refetch();
       refetchUnassigned();
+      refetchCalibration();
     } catch (err: any) {
       addToast({
         title: "Confirm failed",
@@ -525,15 +584,26 @@ export function LocationsPage() {
                     )}
                   </div>
                 </div>
-                <Button
-                  variant={
-                    assigningClientId === item.id ? "primary" : "quiet"
-                  }
-                  size="sm"
-                  onClick={() => startAssignMode(item.id)}
-                >
-                  {assigningClientId === item.id ? "Selecting seat…" : "Assign"}
-                </Button>
+                <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={autoLocatingClientId !== null || assignLoading}
+                    onClick={() => void tryAutomaticLocation(item)}
+                  >
+                    {autoLocatingClientId === item.id ? "Locating…" : "Try auto location"}
+                  </Button>
+                  <Button
+                    variant={
+                      assigningClientId === item.id ? "primary" : "quiet"
+                    }
+                    size="sm"
+                    disabled={autoLocatingClientId !== null}
+                    onClick={() => startAssignMode(item.id)}
+                  >
+                    {assigningClientId === item.id ? "Selecting seat…" : "Assign manually"}
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
