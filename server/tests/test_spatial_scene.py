@@ -37,9 +37,9 @@ class SpatialDigitalTwinSceneTests(unittest.TestCase):
             (2, "Restricted Server Zone", "Server-Zone", "zone", 1, 1, 5.0, 5.0, 0.0, 4.0, 4.0, 2.5, 1, "server_room", None, None, None),
         ]
 
-        sensor_desc = [("id",), ("name",), ("sensor_type",), ("location_id",), ("client_id",), ("x",), ("y",), ("z",), ("capabilities",), ("is_active",), ("loc_label",), ("loc_floor",)]
+        sensor_desc = [("id",), ("name",), ("sensor_type",), ("location_id",), ("client_id",), ("x",), ("y",), ("z",), ("capabilities",), ("status",), ("loc_label",), ("loc_floor",)]
         sensor_rows = [
-            ("sensor-1", "Room-1 Sensor", "managed_client", 1, 101, 10.0, 15.0, 2.5, '["arp", "dhcp", "rssi"]', 1, "Room-01", 1),
+            ("sensor-1", "Room-1 Sensor", "managed_client", 1, 101, 10.0, 15.0, 2.5, '["arp", "dhcp", "rssi"]', "ONLINE", "Room-01", 1),
         ]
 
         client_desc = [("id",), ("mac",), ("ip",), ("hostname",), ("os_name",), ("os_version",), ("status",), ("is_quarantined",), ("location_id",), ("agent_role",), ("loc_label",), ("loc_x",), ("loc_y",), ("loc_z",), ("loc_floor",), ("loc_restricted",)]
@@ -80,6 +80,13 @@ class SpatialDigitalTwinSceneTests(unittest.TestCase):
 
         scene = get_spatial_scene(conn=self.mock_conn)
 
+        sensor_query = self.mock_cursor.execute.call_args_list[1].args[0]
+        self.assertIn("s.status", sensor_query)
+        self.assertNotIn("s.is_active", sensor_query)
+        self.assertEqual(
+            next(node for node in scene["nodes"] if node["id"] == "sensor-sensor-1")["status"],
+            "online",
+        )
         self.assertEqual(scene["version"], 1)
         self.assertIn("timestamp", scene)
         self.assertEqual(len(scene["locations"]), 2)

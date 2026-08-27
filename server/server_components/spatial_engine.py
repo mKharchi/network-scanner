@@ -1456,7 +1456,12 @@ def get_spatial_scene(floor: Optional[int] = None, conn=None) -> Dict[str, Any]:
             location_map[loc_id] = loc_obj
 
         # 2. Fetch sensors
-        sensor_query = "SELECT s.*, l.label AS loc_label, l.floor AS loc_floor, l.z AS loc_z FROM sensors s LEFT JOIN locations l ON l.id = s.location_id WHERE s.is_active = TRUE"
+        sensor_query = """
+            SELECT s.*, l.label AS loc_label, l.floor AS loc_floor, l.z AS loc_z
+            FROM sensors s
+            LEFT JOIN locations l ON l.id = s.location_id
+            WHERE UPPER(COALESCE(s.status, 'ONLINE')) = 'ONLINE'
+        """
         cursor.execute(sensor_query)
         raw_sensors = _to_dict_rows(cursor.fetchall(), cursor)
 
@@ -1528,7 +1533,7 @@ def get_spatial_scene(floor: Optional[int] = None, conn=None) -> Dict[str, Any]:
                 "label": s.get("name") or f"Sensor {s['id']}",
                 "type": "sensor",
                 "position": {"x": s_x, "y": s_y, "z": s_z},
-                "status": "online" if s.get("is_active") else "offline",
+                "status": "online" if str(s.get("status") or "ONLINE").upper() == "ONLINE" else "offline",
                 "risk": "low",
                 "confidence": 1.0,
                 "location_label": s.get("loc_label") or "Zone Sensor",
