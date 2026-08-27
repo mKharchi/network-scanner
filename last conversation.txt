@@ -230,3 +230,5 @@ Error ID: 7c3e6f9a-4749-48fe-aa9f-8760b061e910-309
 ⚠ Individual quota reached. Please upgrade your subscription to increase your limits. Resets in
 152h32m33s.
 Error ID: 7c3e6f9a-4749-48fe-aa9f-8760b061e910-358
+
+ This client has not been discovered as a network device yet, so there are no observations to calculate from. Choose Assign manually to place it now.
