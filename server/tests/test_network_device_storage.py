@@ -39,6 +39,8 @@ class FakeCursor:
     def fetchone(self):
         if "FROM clients" in self._last_query:
             return (7,)
+        if "FROM sensors" in self._last_query:
+            return (21,)
         if "FROM network_devices" in self._last_query:
             return (13,)
         return None
@@ -155,8 +157,8 @@ class NetworkDeviceStorageTests(unittest.TestCase):
             for query, params in connection.cursor_instance.executed
             if "INSERT INTO network_device_observations" in query
         )
-        self.assertEqual(observation[:4], (13, "CLIENT_ARP", 7, "172.16.0.102"))
-        self.assertEqual(observation[5:7], ("dynamic", datetime(2026, 8, 17, 10, 0, 0)))
+        self.assertEqual(observation[:5], (13, "CLIENT_ARP", 7, 21, "172.16.0.102"))
+        self.assertEqual(observation[6:8], ("dynamic", datetime(2026, 8, 17, 10, 0, 0)))
 
     def test_handler_uses_registered_connection_mac_not_payload_identity(self):
         received = {}
@@ -326,9 +328,9 @@ class NetworkDeviceStorageTests(unittest.TestCase):
             for query, params in connection.cursor_instance.executed
             if "INSERT INTO network_device_observations" in query
         )
-        self.assertEqual(observation[:3], (13, "SERVER_SCAN", None))
-        self.assertEqual(observation[4], None)
-        self.assertEqual(observation[5], "discovered")
+        self.assertEqual(observation[:4], (13, "SERVER_SCAN", None, None))
+        self.assertEqual(observation[4], "172.16.0.102")
+        self.assertEqual(observation[6], "discovered")
 
     def test_recent_client_observations_keep_latest_record_per_reporting_client(self):
         connection = FakeConnection()
@@ -395,9 +397,9 @@ class NetworkDeviceStorageTests(unittest.TestCase):
             for query, params in connection.cursor_instance.executed
             if "INSERT INTO network_device_observations" in query
         )
-        self.assertEqual(observation[:3], (13, "CLIENT_DHCP", 7))
-        self.assertEqual(observation[3], "172.16.0.102")
-        self.assertEqual(observation[5:7], ("dynamic", datetime(2026, 8, 17, 10, 0, 0)))
+        self.assertEqual(observation[:4], (13, "CLIENT_DHCP", 7, 21))
+        self.assertEqual(observation[4], "172.16.0.102")
+        self.assertEqual(observation[6:8], ("dynamic", datetime(2026, 8, 17, 10, 0, 0)))
 
     def test_store_local_neighbourhood_preserves_arp_and_dhcp_sources(self):
         connection = FakeConnection()
@@ -420,12 +422,13 @@ class NetworkDeviceStorageTests(unittest.TestCase):
             network_device_storage.get_connection = original_get_connection
 
         self.assertEqual(stored, 1)
-        source_types = [
-            params[1]
+        observation_params = [
+            params
             for query, params in connection.cursor_instance.executed
             if "INSERT INTO network_device_observations" in query
         ]
-        self.assertEqual(source_types, ["CLIENT_ARP", "CLIENT_DHCP"])
+        self.assertEqual([params[1] for params in observation_params], ["CLIENT_ARP", "CLIENT_DHCP"])
+        self.assertEqual([params[3] for params in observation_params], [21, 21])
 
     def test_request_client_neighbourhood_returns_completed_or_timeout(self):
         with patch.object(

@@ -322,18 +322,47 @@ export function LocationsPage() {
     setAutoLocatingClientId(queueItem.id);
     try {
       const outcome = await api.autoAssignClientLocation(queueItem.id);
-      const location = outcome.location as { label?: string } | undefined;
+      const location = (outcome.proposed_location || outcome.location) as
+        | { id?: number; label?: string; floor?: number }
+        | undefined;
       if (outcome.assigned === true && location?.label) {
         addToast({
           title: "Automatic location assigned",
           message: `${queueItem.hostname || queueItem.id} was placed at ${location.label}. Select that seat and confirm it after physical verification.`,
           severity: "SUCCESS",
         });
+      } else if (
+        outcome.reason === "low_confidence" &&
+        location?.id != null &&
+        location.label
+      ) {
+        const confidence =
+          typeof outcome.confidence === "number"
+            ? `${Math.round(outcome.confidence * 100)}% confidence`
+            : "low confidence";
+        const accepted = window.confirm(
+          `${queueItem.hostname || queueItem.id} is proposed at ${location.label} (${confidence}).\\n\\nIs this the correct location?`,
+        );
+        if (accepted) {
+          await api.assignClientLocation(queueItem.id, location.id);
+          addToast({
+            title: "Proposed location accepted",
+            message: `${queueItem.hostname || queueItem.id} was assigned to ${location.label}. Confirm it after physical verification.`,
+            severity: "SUCCESS",
+          });
+        } else {
+          startAssignMode(queueItem.id);
+          addToast({
+            title: "Choose the correct location",
+            message: `The proposed location was ${location.label}. Select the correct empty seat on the floor plan.`,
+            severity: "INFO",
+          });
+        }
       } else {
         const reason = automaticLocationFailureMessage(outcome);
         addToast({
-          title: "Automatic location not assigned",
-          message: `${queueItem.hostname || queueItem.id}: ${reason} Choose Assign manually to place it now.`, 
+          title: "No location proposal available",
+          message: `${queueItem.hostname || queueItem.id}: ${reason} Collect more neighbourhood observations or assign manually.`,
           severity: "HIGH",
         });
       }

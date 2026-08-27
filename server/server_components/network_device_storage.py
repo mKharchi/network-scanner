@@ -148,12 +148,29 @@ def _store_observations(reporter_mac, neighbours, source_type, *, observed_at=No
         connection = get_connection()
         cursor = connection.cursor()
         reporter_client_id = None
+        reporter_sensor_id = None
         if reporter_mac:
             cursor.execute("SELECT id FROM clients WHERE mac = %s", (reporter_mac,))
             reporter = cursor.fetchone()
             if not reporter:
                 raise ValueError("reporting client is not registered")
             reporter_client_id = reporter[0]
+
+            # A located reporting client is also a physical endpoint sensor.
+            # Keep the observation linked to that sensor so spatial consumers
+            # can use its coordinates and sensor identity directly.
+            cursor.execute(
+                "SELECT id FROM sensors WHERE client_id = %s LIMIT 1",
+                (reporter_client_id,),
+            )
+            sensor = cursor.fetchone()
+            reporter_sensor_id = sensor[0] if sensor else None
+            if reporter_sensor_id is None:
+                LOGGER.warning(
+                    "No sensor is registered for reporting client %s; "
+                    "observation will retain its client attribution only.",
+                    reporter_mac,
+                )
 
         updated_device_ids = set()
         for neighbour in neighbours:
@@ -164,14 +181,15 @@ def _store_observations(reporter_mac, neighbours, source_type, *, observed_at=No
             cursor.execute(
                 """
                 INSERT INTO network_device_observations (
-                    device_id, source_type, source_client_id, ip_address,
+                    device_id, source_type, source_client_id, sensor_id, ip_address,
                     interface_name, entry_type, observed_at, rssi, switch_port
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     device_id,
                     source_type,
                     reporter_client_id,
+                    reporter_sensor_id,
                     neighbour["ip_address"],
                     neighbour.get("interface"),
                     neighbour["entry_type"],
@@ -202,6 +220,54 @@ def _store_observations(reporter_mac, neighbours, source_type, *, observed_at=No
             connection.close()
 
 
+def _schedule_location_retries_for_neighbours(neighbours):
+    """Retry pending managed-client localization after fresh sensor evidence."""
+    macs = [
+        _normalise_mac_address(neighbour.get("mac_address"))
+        for neighbour in neighbours
+        if isinstance(neighbour, dict)
+    ]
+    macs = list(dict.fromkeys(mac for mac in macs if mac))
+    if not macs:
+        return
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_connection()
+        cursor = connection.cursor()
+        placeholders = ", ".join(["%s"] * len(macs))
+        cursor.execute(
+            f"""
+            SELECT client_id
+            FROM clients
+            WHERE mac IN ({placeholders})
+              AND location_id IS NULL
+            """,
+            macs,
+        )
+        client_ids = [row[0] for row in cursor.fetchall()]
+    except Exception as error:
+        LOGGER.warning("Could not identify clients for automatic localization retry: %s", error)
+        return
+    finally:
+        if cursor:
+            cursor.close()
+        if connection and connection.is_connected():
+            connection.close()
+
+    if not client_ids:
+        return
+    try:
+        from server_components.client_localization import (
+            schedule_automatic_client_location_assignment,
+        )
+        for client_id in client_ids:
+            schedule_automatic_client_location_assignment(client_id)
+    except Exception as error:
+        LOGGER.warning("Could not schedule automatic localization retry: %s", error)
+
+
 def store_client_neighbour_observations(reporter_mac, neighbours, *, observed_at=None):
     """Upsert devices and append immutable observations from one client report."""
     reporter_mac = _normalise_mac_address(reporter_mac)
@@ -210,6 +276,7 @@ def store_client_neighbour_observations(reporter_mac, neighbours, *, observed_at
     stored = _store_observations(
         reporter_mac, neighbours, "CLIENT_ARP", observed_at=observed_at
     )
+    _schedule_location_retries_for_neighbours(neighbours)
     LOGGER.info(
         "Stored %d client ARP observation(s) from reporting client %s.",
         stored,
@@ -226,6 +293,7 @@ def store_client_dhcp_observations(reporter_mac, neighbours, *, observed_at=None
     stored = _store_observations(
         reporter_mac, neighbours, "CLIENT_DHCP", observed_at=observed_at
     )
+    _schedule_location_retries_for_neighbours(neighbours)
     LOGGER.info(
         "Stored %d client DHCP observation(s) from reporting client %s.",
         stored,
@@ -267,6 +335,7 @@ def store_client_neighbourhood_observations(reporter_mac, neighbours, *, observe
         _store_observations(
             reporter_mac, dhcp_neighbours, "CLIENT_DHCP", observed_at=observed_at
         )
+    _schedule_location_retries_for_neighbours(neighbours)
     LOGGER.info(
         "Stored %d client neighbourhood device(s) from %s (%d ARP, %d DHCP source rows).",
         len(neighbours),

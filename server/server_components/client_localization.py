@@ -221,15 +221,20 @@ def calculate_client_location(client_id: str) -> Dict[str, Any]:
             }
 
         evidence["matched_location_label"] = nearest.get("label")
+        proposed_location = {
+            "id": nearest["id"],
+            "label": nearest.get("label"),
+            "floor": nearest.get("floor"),
+        }
+        confidence = float(triangulation.get("confidence") or 0.0)
         return {
+            # ``success`` means a candidate was calculated. The caller still
+            # gates unattended assignment by the configured confidence threshold.
             "success": True,
             "location_id": nearest["id"],
-            "location": {
-                "id": nearest["id"],
-                "label": nearest.get("label"),
-                "floor": nearest.get("floor"),
-            },
-            "confidence": float(triangulation.get("confidence") or 0.0),
+            "location": proposed_location,
+            "proposed_location": proposed_location,
+            "confidence": confidence,
             "source": "automatic",
             "evidence": evidence,
             "reason": None,
@@ -395,6 +400,8 @@ def try_automatic_client_location_assignment(
             "confidence": confidence,
             "threshold": min_confidence,
             "location_id": result.get("location_id"),
+            "location": result.get("location"),
+            "proposed_location": result.get("proposed_location") or result.get("location"),
             "evidence": result.get("evidence"),
             "localization": result,
         }
