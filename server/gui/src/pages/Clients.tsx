@@ -255,7 +255,7 @@ export function ClientsPage() {
         location: locationFilter || undefined,
       }),
     [stateFilter, search, locationFilter],
-    ['app:client_status', 'client_status'],
+    ['app:client_status'],
   );
 
   const handleSort = (key: string) => {

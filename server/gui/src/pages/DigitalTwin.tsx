@@ -12,6 +12,7 @@ import {
 } from '../api/client';
 import { Card, MetricCard } from '../components/Card';
 import { Badge } from '../components/Badge';
+import { Notice } from '../components/States';
 import { Button } from '../components/Button';
 import {
   TbEye,
@@ -50,6 +51,7 @@ export function DigitalTwinPage() {
   const [sensorsList, setSensorsList] = useState<SpatialSensor[]>([]);
   const [eventsList, setEventsList] = useState<SpatialLocationEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sceneLoadError, setSceneLoadError] = useState<string | null>(null);
 
   // View & Filter states
   const [viewMode, setViewMode] = useState<ViewMode>('physical');
@@ -125,6 +127,7 @@ export function DigitalTwinPage() {
   const loadSceneData = async () => {
     try {
       setLoading(true);
+      setSceneLoadError(null);
       const [spatialData, replayData, rogueData, sensorData, eventData] = await Promise.all([
         api.getSpatialScene(selectedFloor !== 'all' ? { floor: selectedFloor } : undefined).catch(() => null),
         api.getSpatialReplay().catch(() => null),
@@ -151,6 +154,15 @@ export function DigitalTwinPage() {
         );
         return;
       }
+
+      setScene(null);
+      setSelectedNodeId(null);
+      setSceneLoadError(
+        spatialData
+          ? 'The server returned no spatial locations for this view.'
+          : 'The spatial scene could not be loaded from the server.',
+      );
+      return;
 
       // Ground floor 0 is the entrance/common level; floors 1 and 2 are the
       // two training levels shown in the Locations page.
@@ -1157,6 +1169,16 @@ export function DigitalTwinPage() {
           </Button>
         </div>
       </div>
+
+      {sceneLoadError && (
+        <Notice
+          variant="warning"
+          title="Spatial scene unavailable"
+          action={<Button variant="secondary" size="sm" onClick={loadSceneData}>Retry</Button>}
+        >
+          {sceneLoadError} No devices, sensors, or network links are shown until the server supplies real scene data.
+        </Notice>
+      )}
 
       {/* Top 4 Spatial Metrics Bar */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 'var(--space-3)' }}>

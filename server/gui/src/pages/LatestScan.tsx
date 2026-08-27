@@ -28,7 +28,7 @@ export function LatestScanPage() {
   const { state, refetch } = useFetch(
     () => api.getLatestScan(),
     [],
-    ["app:network_update", "network_update"]
+    ["app:network_update"]
   );
   const handleSort = (key: string) => {
     if (sortKey === key) {

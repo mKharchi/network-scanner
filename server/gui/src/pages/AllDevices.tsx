@@ -28,7 +28,7 @@ export function AllDevicesPage() {
   const { state, refetch } = useFetch(
     () => api.listNetworkDevices({ limit: 500 }),
     [],
-    ["app:network_update", "network_update", "client_neighbourhood_update"]
+    ["app:network_update"]
   );
 
   const handleSort = (key: string) => {
