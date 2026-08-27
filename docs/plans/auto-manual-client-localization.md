@@ -888,53 +888,53 @@ The final choice should follow the existing architecture.
 
 ### Phase 1 — Inspect Existing Localization
 
-* [ ] Identify current client-location relationship.
-* [ ] Identify automatic localization function.
-* [ ] Identify location model.
-* [ ] Identify center layout data.
-* [ ] Identify coordinate representation.
-* [ ] Identify current assignment API.
-* [ ] Identify current visualization component.
+* [x] Identify current client-location relationship.
+* [x] Identify automatic localization function.
+* [x] Identify location model.
+* [x] Identify center layout data.
+* [x] Identify coordinate representation.
+* [x] Identify current assignment API.
+* [x] Identify current visualization component.
 
 **Do not rewrite the existing localization system.**
 
 ### Phase 2 — Assignment Model
 
-* [ ] Add assignment method.
-* [ ] Add assignment status.
-* [ ] Add confidence.
-* [ ] Add verification state.
-* [ ] Add assignment timestamp.
-* [ ] Add assigning administrator.
-* [ ] Preserve localization evidence where available.
+* [x] Add assignment method.
+* [x] Add assignment status.
+* [x] Add confidence.
+* [x] Add verification state.
+* [x] Add assignment timestamp.
+* [x] Add assigning administrator.
+* [x] Preserve localization evidence where available.
 
 ### Phase 3 — Automatic Assignment
 
-* [ ] Run localization when a client becomes eligible.
-* [ ] Apply confidence threshold.
-* [ ] Assign automatically when confidence is sufficient.
-* [ ] Send low-confidence clients to the manual queue.
-* [ ] Store the reason when automatic assignment fails.
+* [x] Run localization when a client becomes eligible.
+* [x] Apply confidence threshold.
+* [x] Assign automatically when confidence is sufficient.
+* [x] Send low-confidence clients to the manual queue.
+* [x] Store the reason when automatic assignment fails.
 
 ### Phase 4 — Manual Assignment
 
-* [ ] Create unassigned-client queue.
-* [ ] Add Assign button.
-* [ ] Open center layout.
-* [ ] Select location.
-* [ ] Confirm assignment.
-* [ ] Record administrator and timestamp.
+* [x] Create unassigned-client queue.
+* [x] Add Assign button.
+* [x] Open center layout.
+* [x] Select location.
+* [x] Confirm assignment.
+* [x] Record administrator and timestamp.
 
 ### Phase 5 — Center Visualization
 
-* [ ] Display assigned clients.
-* [ ] Display automatically assigned clients differently.
-* [ ] Display manually assigned clients.
-* [ ] Show client identity.
-* [ ] Show confidence.
-* [ ] Show assignment method.
-* [ ] Add client selection.
-* [ ] Add location inspection.
+* [x] Display assigned clients.
+* [x] Display automatically assigned clients differently.
+* [x] Display manually assigned clients.
+* [x] Show client identity.
+* [x] Show confidence.
+* [x] Show assignment method.
+* [x] Add client selection.
+* [x] Add location inspection.
 
 ### Phase 6 — Confirmation
 

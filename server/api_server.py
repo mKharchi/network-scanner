@@ -229,6 +229,12 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 return
 
             # 4. Clients
+            if path in {"/api/clients/unassigned", "/api/v1/clients/unassigned"}:
+                limit = get_int_param("limit", 100)
+                items = api_service.list_unassigned_clients(limit=limit)
+                self.send_data({"items": items, "total": len(items)})
+                return
+
             if path == "/api/v1/clients":
                 state_filter = get_param("state")
                 search = get_param("search")
@@ -588,6 +594,41 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     self.send_error_response(400, "INVALID_LOCATION", str(exc))
                     return
                 self.send_data(location, status_code=201)
+                return
+
+            m = re.match(r"^/api/clients/([^/]+)/location/auto$", path)
+            if m:
+                client_id = urllib.parse.unquote(m.group(1))
+                try:
+                    from server_components.client_localization import (
+                        try_automatic_client_location_assignment,
+                    )
+                    outcome = try_automatic_client_location_assignment(client_id)
+                except Exception as exc:  # noqa: BLE001
+                    self.send_error_response(500, "LOCALIZATION_FAILED", str(exc))
+                    return
+                if outcome.get("reason") == "client_not_found":
+                    self.send_error_response(404, "NOT_FOUND", f"Client '{client_id}' not found.")
+                    return
+                self.send_data(outcome)
+                return
+
+            m = re.match(r"^/api/clients/([^/]+)/location/confirm$", path)
+            if m:
+                client_id = urllib.parse.unquote(m.group(1))
+                try:
+                    location = api_service.confirm_client_location(
+                        client_id,
+                        confirmed_by=self.headers.get("X-Operator-Id")
+                        or "local-network-operator",
+                    )
+                except ValueError as exc:
+                    message = str(exc)
+                    code = "NOT_FOUND" if "not found" in message.lower() else "INVALID_LOCATION"
+                    status = 404 if code == "NOT_FOUND" else 400
+                    self.send_error_response(status, code, message)
+                    return
+                self.send_data({"location": location})
                 return
 
             if path == "/api/actions":
