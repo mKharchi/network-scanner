@@ -167,6 +167,28 @@ export interface ForbiddenProcessRule {
   description: string | null;
 }
 
+export interface ClientLocalizationDebug {
+  client: {
+    database_id: number;
+    client_id: string;
+    hostname: string;
+    mac: string | null;
+    ip: string | null;
+  };
+  location: (ClientLocation & { table?: number | null; row?: number | null }) | null;
+  server_coordinates: { x: number | null; y: number | null; z: number | null };
+  coordinate_system: {
+    name: string;
+    unit: string;
+    origin: string | null;
+    axis: Record<string, string>;
+    floor_height: number;
+  };
+  render_coordinates: { x: number; y: number; z: number } | null;
+  transformation: { name: string; renderer: string; note: string };
+  last_updated: string | null;
+}
+
 export interface ClientConnection {
   state: "ONLINE" | "OFFLINE" | "ISOLATED";
   last_connected_at: string | null;
@@ -688,6 +710,9 @@ export const api = {
         cursor: params?.cursor ?? "",
       },
     ),
+
+  getClientLocalizationDebug: (clientId: string) =>
+    get<ClientLocalizationDebug>(`/debug/clients/${encodeURIComponent(clientId)}/localization`),
 
   getClient: (clientId: string) =>
     get<{

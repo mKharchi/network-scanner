@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 import {
   api,
@@ -40,6 +41,7 @@ type CameraPreset = 'iso' | 'top' | 'front' | 'threats';
 
 export function DigitalTwinPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   // Data states
   const [scene, setScene] = useState<SpatialSceneResponse | null>(null);
@@ -57,7 +59,8 @@ export function DigitalTwinPage() {
   const FLOOR_HEIGHT = 3;
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(() => searchParams.get('search') || '');
+  const requestedClientId = searchParams.get('client');
   const [showLinks, setShowLinks] = useState(true);
   const [showLabels, setShowLabels] = useState<'threats' | 'all' | 'none'>('threats');
 
@@ -1067,14 +1070,22 @@ export function DigitalTwinPage() {
   // centered as soon as the query uniquely identifies it.
   useEffect(() => {
     const query = searchQuery.trim().toLowerCase();
-    if (!query || !scene) return;
+    if (!scene) return;
     const exactMatches = scene.nodes.filter((node) =>
+      requestedClientId && node.metadata?.client_id === requestedClientId,
+    );
+    if (exactMatches.length === 1) {
+      focusOnNode(exactMatches[0]);
+      return;
+    }
+    if (!query) return;
+    const queryMatches = scene.nodes.filter((node) =>
       [node.ip, node.mac, node.name, node.label]
         .filter(Boolean)
         .some((value) => value!.toLowerCase() === query),
     );
-    if (exactMatches.length === 1) focusOnNode(exactMatches[0]);
-  }, [searchQuery, scene]);
+    if (queryMatches.length === 1) focusOnNode(queryMatches[0]);
+  }, [searchQuery, requestedClientId, scene]);
 
   const triggerIsolation = async (clientId: string) => {
     try {

@@ -265,6 +265,14 @@ function Sidebar({ isOpen = false, newAlertCount = 0, onClose }: SidebarProps) {
          <HiOutlineSquare3Stack3D />
           3D Digital Twin & AR
         </NavLink>
+        <NavLink
+          to="/client-localization"
+          onClick={onClose}
+          className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
+        >
+          <TbMapPin />
+          Client Localization
+        </NavLink>
 
         <span
           className="sidebar__section-label"
