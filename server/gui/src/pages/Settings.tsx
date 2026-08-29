@@ -6,6 +6,7 @@ import { SectionCard } from '../components/Card';
 import { Button } from '../components/Button';
 import { SkeletonTable, ErrorState, Notice } from '../components/States';
 import { DAY_NAMES, formatDateTime } from '../utils/format';
+import '../styles/operations.css';
 
 interface WorkingHoursData {
   rules: { day_of_week: number; start_time: string; end_time: string; enabled: boolean }[];
@@ -102,13 +103,13 @@ export function SettingsPage() {
 
   return (
     <div>
-      <div className="page-header">
+      <div className="page-header operations-page-header">
         <div>
-          <h1 className="page-title">Monitoring Policies & Settings</h1>
-          <p className="page-description">
-            Read-only configuration policies enforced across network clients and alerts.
-          </p>
+          <span className="eyebrow eyebrow--accent">SYSTEM / GOVERNANCE</span>
+          <h1 className="page-title">Monitoring policies</h1>
+          <p className="page-description">Configure the policies enforced across client agents and security alerts.</p>
         </div>
+        <div className="operations-page-header__actions">
         <Button
           variant="quiet"
           size="sm"
@@ -119,6 +120,7 @@ export function SettingsPage() {
         >
           Refresh All
         </Button>
+        </div>
       </div>
 
       {isStale && (

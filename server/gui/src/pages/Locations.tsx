@@ -30,6 +30,7 @@ import {
   stationAssignmentTitle,
 } from "../utils/stationAssignment";
 import "../styles/floor-visualization.css";
+import "../styles/operations.css";
 
 const NEIGHBOR_RELATIONSHIP_LABELS: Record<
   PhysicalNeighbor["relationship"],
@@ -558,7 +559,8 @@ export function LocationsPage() {
           flexWrap: "wrap",
         }}
       >
-        <div>
+        <div className="client-page-header__copy">
+          <span className="eyebrow eyebrow--accent">SPATIAL INTELLIGENCE / LOCATIONS</span>
           <h1 className="page-title">Center layout</h1>
           <p
             style={{ color: "var(--text-muted)", marginTop: "var(--space-1)" }}

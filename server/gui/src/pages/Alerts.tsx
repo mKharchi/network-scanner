@@ -8,6 +8,8 @@ import { DataTable, type Column } from '../components/DataTable';
 import { SectionCard } from '../components/Card';
 import { SkeletonTable, ErrorState, EmptyState, Notice } from '../components/States';
 import { formatDateTime, formatRelative } from '../utils/format';
+import { MetricCard } from '../components/Card';
+import '../styles/operations.css';
 
 export function AlertsPage() {
   const navigate = useNavigate();
@@ -51,6 +53,10 @@ export function AlertsPage() {
         ? alertListState.staleData.items
         : [];
 
+  const newCount = alerts.filter((alert) => alert.status === 'NEW').length;
+  const highCount = alerts.filter((alert) => alert.severity === 'HIGH' || alert.severity === 'CRITICAL').length;
+  const affectedClients = new Set(alerts.map((alert) => alert.client?.id).filter(Boolean)).size;
+
   const columns: Column<Alert>[] = [
     {
       key: 'title',
@@ -91,16 +97,19 @@ export function AlertsPage() {
 
   return (
     <div>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Security & System Alerts</h1>
-          <p className="page-description">
-            Operational anomalies, forbidden process executions, and connection incidents.
-          </p>
+      <div className="page-header operations-page-header">
+        <div className='client-page-header__copy'>
+          <span className="eyebrow eyebrow--accent">SECURITY / INCIDENT INTELLIGENCE</span>
+          <h1 className="page-title">Attention required</h1>
+          <p className="page-description">Investigate operational anomalies, client incidents, and security signals across the infrastructure.</p>
         </div>
-        <Button variant="quiet" size="sm" onClick={refetchAlerts}>
-          Refresh
-        </Button>
+      </div>
+
+      <div className="operations-metric-grid" aria-label="Alert overview">
+        <MetricCard label="Visible events" value={alerts.length} context="Matching the current filters" />
+        <MetricCard label="New" value={newCount} valueVariant={newCount > 0 ? 'danger' : 'success'} context="Awaiting operator review" />
+        <MetricCard label="High priority" value={highCount} valueVariant={highCount > 0 ? 'warning' : 'success'} context="High or critical severity" />
+        <MetricCard label="Affected clients" value={affectedClients} valueVariant="info" context="Distinct client targets" />
       </div>
 
       {alertListState.status === 'error' && (
@@ -110,14 +119,12 @@ export function AlertsPage() {
       )}
 
       {/* Filter Toolbar */}
-      <div
-        style={{
-          display: 'flex',
-          gap: 'var(--space-3)',
-          marginBottom: 'var(--space-5)',
-          flexWrap: 'wrap',
-        }}
-      >
+      <div className="operations-toolbar">
+        <div className="operations-toolbar__label">
+          <span className="eyebrow">INCIDENT QUEUE</span>
+          <strong>{newCount > 0 ? `${newCount} event${newCount === 1 ? '' : 's'} need review` : 'No new events need review'}</strong>
+        </div>
+        <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
         <select
           value={severityFilter}
           onChange={(e) => setSeverityFilter(e.target.value)}
@@ -160,6 +167,7 @@ export function AlertsPage() {
           <option value="ACKNOWLEDGED">Acknowledged</option>
           <option value="RESOLVED">Resolved</option>
         </select>
+        </div>
       </div>
 
       {/* Table */}

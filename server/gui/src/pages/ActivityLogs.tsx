@@ -7,6 +7,8 @@ import { DataTable, type Column } from '../components/DataTable';
 import { SectionCard } from '../components/Card';
 import { SkeletonTable, ErrorState, EmptyState, Notice } from '../components/States';
 import { formatDateTime, formatRelative } from '../utils/format';
+import { MetricCard } from '../components/Card';
+import '../styles/operations.css';
 
 interface ActivityItem {
   time: string;
@@ -87,16 +89,18 @@ export function ActivityLogsPage() {
 
   return (
     <div>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Activity Logs</h1>
-          <p className="page-description">
-            Periodic client activity audits, including running processes and shell executions.
-          </p>
+      <div className="page-header operations-page-header">
+        <div className='client-page-header__copy'>
+          <span className="eyebrow eyebrow--accent">OPERATIONS / ACTIVITY</span>
+          <h1 className="page-title">Activity intelligence</h1>
+          <p className="page-description">Periodic client activity audits, process snapshots, and shell execution evidence.</p>
         </div>
-        <Button variant="quiet" size="sm" onClick={refetchLogs}>
-          Refresh
-        </Button>
+      </div>
+      <div className="operations-metric-grid">
+        <MetricCard label="Activity records" value={logs.length} context="Matching the current period" />
+        <MetricCard label="Reporting clients" value={new Set(logs.map((log) => log.client?.id).filter(Boolean)).size} valueVariant="info" context="Distinct agents" />
+        <MetricCard label="Latest received" value={logs.length ? formatRelative(logs[0].received_at) : '—'} context="Most recent record" />
+        <MetricCard label="Period filter" value={periodFilter || 'ALL'} context="Current view scope" />
       </div>
 
       {logsListState.status === 'error' && (
