@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, type ClientLocalizationDebug, type ManagedClientSummary } from "../api/client";
 import { useFetch } from "../hooks/useFetch";
+import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { Button } from "../components/Button";
 import { SectionCard } from "../components/Card";
 import { EmptyState, ErrorState, Notice, Skeleton } from "../components/States";
@@ -23,12 +24,13 @@ function DataRow({ label, value }: { label: string; value: ReactNode }) {
 export function ClientLocalizationPage() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search);
   const [selectedClientId, setSelectedClientId] = useState<string>("");
   const [highlighted, setHighlighted] = useState(false);
 
   const { state: clientsState, refetch: refetchClients } = useFetch<{ items: ManagedClientSummary[] }>(
-    () => api.getClients({ search: search || undefined, limit: 200 }),
-    [search],
+    () => api.getClients({ search: debouncedSearch || undefined, limit: 200 }),
+    [debouncedSearch],
     ["app:client_status"],
   );
 
