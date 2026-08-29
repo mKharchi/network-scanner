@@ -2415,3 +2415,89 @@ def get_spatial_replay(
     )
 
 
+# ============================================================================
+# DEVICE INTELLIGENCE & CLASSIFICATION API SERVICE FUNCTIONS
+# ============================================================================
+
+def _resolve_device_db_id(device_identifier: Any) -> Optional[int]:
+    """Resolve device DB integer ID from either numeric ID or MAC address string."""
+    conn = get_connection()
+    if not conn:
+        return None
+    try:
+        cursor = conn.cursor(dictionary=True)
+        if isinstance(device_identifier, int) or (isinstance(device_identifier, str) and device_identifier.isdigit()):
+            cursor.execute("SELECT id FROM network_devices WHERE id = %s", (int(device_identifier),))
+        else:
+            norm_mac = _format_mac(str(device_identifier))
+            cursor.execute("SELECT id FROM network_devices WHERE mac_address = %s", (norm_mac,))
+        row = cursor.fetchone()
+        return row["id"] if row else None
+    except Exception:
+        return None
+    finally:
+        conn.close()
+
+
+def get_device_classification_by_identifier(device_identifier: Any) -> Optional[Dict[str, Any]]:
+    """Retrieve ML/Rule classification, confidence, probabilities, and evidence for a device."""
+    dev_id = _resolve_device_db_id(device_identifier)
+    if not dev_id:
+        return None
+    from server_components.device_intelligence import get_device_intelligence_service
+    service = get_device_intelligence_service()
+    return service.classify_device(dev_id, force=False)
+
+
+def classify_device_by_identifier(device_identifier: Any, force: bool = True) -> Optional[Dict[str, Any]]:
+    """Trigger on-demand ML/Rule classification for a device."""
+    dev_id = _resolve_device_db_id(device_identifier)
+    if not dev_id:
+        return None
+    from server_components.device_intelligence import get_device_intelligence_service
+    service = get_device_intelligence_service()
+    return service.classify_device(dev_id, force=force)
+
+
+def record_device_human_label_by_identifier(
+    device_identifier: Any,
+    label: str,
+    confirmed_by: Optional[str] = "admin",
+    notes: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Record verified ground-truth label from human administrator."""
+    dev_id = _resolve_device_db_id(device_identifier)
+    if not dev_id:
+        return None
+    from server_components.device_intelligence import get_device_intelligence_service
+    service = get_device_intelligence_service()
+    return service.verify_device_label(
+        device_id=dev_id,
+        label=label,
+        confirmed_by=confirmed_by,
+        notes=notes,
+    )
+
+
+def get_classification_review_queue(limit: int = 50) -> List[Dict[str, Any]]:
+    """Retrieve devices needing classification review."""
+    from server_components.device_intelligence import get_device_intelligence_service
+    service = get_device_intelligence_service()
+    return service.get_review_queue(limit=limit)
+
+
+def get_classification_stats() -> Dict[str, Any]:
+    """Retrieve aggregate classification stats, confidence tiers, and model distribution."""
+    from server_components.device_intelligence import get_device_intelligence_service
+    service = get_device_intelligence_service()
+    return service.get_statistics()
+
+
+def retrain_classification_model() -> Dict[str, Any]:
+    """Trigger model validation and retraining checkpoint."""
+    from server_components.device_intelligence import get_device_intelligence_service
+    service = get_device_intelligence_service()
+    return service.retrain_model_pipeline()
+
+
+

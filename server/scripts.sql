@@ -346,6 +346,44 @@ CREATE TABLE IF NOT EXISTS daily_network_scan_files (
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
         ON UPDATE CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS device_classifications (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    device_id BIGINT NOT NULL UNIQUE,
+    predicted_class VARCHAR(64) NOT NULL,
+    confidence DOUBLE NOT NULL,
+    model_version VARCHAR(64) NOT NULL,
+    source ENUM('ML', 'RULE', 'HUMAN', 'HYBRID') NOT NULL DEFAULT 'ML',
+    features_version VARCHAR(32) NOT NULL DEFAULT 'v1',
+    evidence TEXT NULL,
+    rule_prediction VARCHAR(64) NULL,
+    ml_prediction VARCHAR(64) NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+    probabilities TEXT NULL,
+    classified_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (device_id) REFERENCES network_devices(id) ON DELETE CASCADE,
+    INDEX idx_device_classifications_class (predicted_class),
+    INDEX idx_device_classifications_confidence (confidence),
+    INDEX idx_device_classifications_source (source),
+    INDEX idx_device_classifications_status (status)
+);
+
+CREATE TABLE IF NOT EXISTS device_labels (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    device_id BIGINT NOT NULL,
+    label VARCHAR(64) NOT NULL,
+    source VARCHAR(32) NOT NULL DEFAULT 'ADMIN',
+    confirmed_by VARCHAR(255) NULL,
+    notes TEXT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (device_id) REFERENCES network_devices(id) ON DELETE CASCADE,
+    INDEX idx_device_labels_device (device_id),
+    INDEX idx_device_labels_label (label),
+    INDEX idx_device_labels_created (created_at)
+);
+
 INSERT IGNORE INTO forbidden_processes (process_name, severity, enabled, description) VALUES ('discord', 'HIGH', TRUE, 'Social media/gaming communication platform - not authorized for work use');
 
 -- day_of_week uses Python's datetime.weekday(): Monday=0 through Sunday=6.
