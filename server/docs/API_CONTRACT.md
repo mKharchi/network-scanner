@@ -259,6 +259,138 @@
 
 ---
 
+### 2.3b Device Intelligence & ML Classification
+
+#### `GET /api/v1/devices/{device_id}/classification`
+* **Description:** Retrieves the active ML/Hybrid device classification, calibrated confidence, probability distribution across classes, model version, and evidence chain.
+* **Success Response (200 OK):**
+  ```json
+  {
+    "data": {
+      "device_id": 42,
+      "predicted_class": "ANDROID_MOBILE",
+      "confidence": 0.94,
+      "source": "HYBRID",
+      "model_version": "device-classifier-v1",
+      "status": "ACTIVE",
+      "probabilities": {
+        "ANDROID_MOBILE": 0.93,
+        "WINDOWS_WORKSTATION": 0.01,
+        "APPLE_MOBILE": 0.02,
+        "UNKNOWN": 0.04
+      },
+      "evidence": [
+        "rule.android.dhcp_or_vendor_or_hostname",
+        "ml.prediction:ANDROID_MOBILE:0.93",
+        "decision.consensus_agreement"
+      ]
+    },
+    "meta": {}
+  }
+  ```
+
+#### `POST /api/v1/devices/{device_id}/classify`
+* **Description:** Forces an on-demand reclassification of the device against latest observations and features.
+* **Success Response (200 OK):** Same structure as `GET /classification`.
+
+#### `POST /api/v1/devices/{device_id}/label`
+* **Description:** Records an administrator verified ground-truth label for the device, immediately updating the classification record (`source='HUMAN'`) and feeding the training ground truth.
+* **Request Body:**
+  ```json
+  {
+    "label": "SMART_TV_MEDIA",
+    "confirmed_by": "admin",
+    "notes": "Verified living room Samsung Smart TV"
+  }
+  ```
+* **Success Response (201 Created):**
+  ```json
+  {
+    "data": {
+      "device_id": 42,
+      "predicted_class": "SMART_TV_MEDIA",
+      "confidence": 1.0,
+      "source": "HUMAN",
+      "model_version": "device-classifier-v1",
+      "status": "ACTIVE",
+      "evidence": ["human.verified_label"]
+    },
+    "meta": {}
+  }
+  ```
+
+#### `GET /api/v1/classification/review` (or `/api/v1/devices/classification-review`)
+* **Description:** Lists devices requiring human verification (low confidence $< 0.70$, rule/ML conflicts, or `UNKNOWN`).
+* **Query Parameters:** `limit` (int, default 50).
+* **Success Response (200 OK):**
+  ```json
+  {
+    "data": {
+      "items": [
+        {
+          "device_id": 15,
+          "mac_address": "AA:BB:CC:DD:EE:FF",
+          "hostname": "Unknown",
+          "vendor": "Espressif",
+          "predicted_class": "IOT_DEVICE",
+          "confidence": 0.65,
+          "source": "HYBRID",
+          "status": "NEEDS_REVIEW"
+        }
+      ],
+      "total": 1
+    },
+    "meta": {}
+  }
+  ```
+
+#### `GET /api/v1/classification/stats`
+* **Description:** Provides summary counts, class distributions, confidence tiers, human label totals, and current model version.
+* **Success Response (200 OK):**
+  ```json
+  {
+    "data": {
+      "total_devices": 128,
+      "total_classified": 120,
+      "class_distribution": {
+        "WINDOWS_WORKSTATION": 45,
+        "ANDROID_MOBILE": 32,
+        "APPLE_MOBILE": 18,
+        "PRINTER": 8,
+        "SMART_TV_MEDIA": 6,
+        "NETWORK_DEVICE": 5,
+        "IOT_DEVICE": 4,
+        "UNKNOWN": 2
+      },
+      "high_confidence_count": 98,
+      "medium_confidence_count": 18,
+      "low_confidence_count": 4,
+      "needs_review_count": 5,
+      "average_confidence": 0.9124,
+      "human_labels_count": 12,
+      "model_version": "device-classifier-v1"
+    },
+    "meta": {}
+  }
+  ```
+
+#### `POST /api/v1/classification/retrain`
+* **Description:** Triggers benchmark evaluation and model version verification against collected human ground truth.
+* **Success Response (200 OK):**
+  ```json
+  {
+    "data": {
+      "status": "SUCCESS",
+      "model_version": "device-classifier-v1",
+      "human_labels_count": 12,
+      "benchmark_evaluation": { ... }
+    },
+    "meta": {}
+  }
+  ```
+
+---
+
 ### 2.4 DHCP Activity
 
 #### `GET /api/v1/network/dhcp`

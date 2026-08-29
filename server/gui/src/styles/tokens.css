@@ -1,115 +1,139 @@
 /* ============================================================
-   Design Tokens — Network Monitoring GUI
-   All component code must reference these variables,
-   never raw hex or arbitrary values.
+   Design Tokens — Deep Navy Network Intelligence Platform
+   All component code must reference these variables.
    ============================================================ */
 
 :root {
-  /* ── Colour: surface ────────────────────────────────────── */
-  --canvas:        #F8FAFC;
-  --surface:       #FFFFFF;
-  --surface-muted: #F1F5F9;
-  --border:        #CBD5E1;
-  --border-subtle: #E2E8F0;
+  /* ── Deep Navy Brand & Surface Palette ────────────────────── */
+  --deep-card-navy:       #1B326B;
+  --dark-background-navy: #081329;
+  --dark-surface-elevated: #11224D;
+  --accent-blue:          #2563EB;
+  --accent-blue-hover:    #1D4ED8;
+  --accent-blue-subtle:   rgba(37, 99, 235, 0.18);
+  --white:                #FFFFFF;
+  --muted-text:           #94A3B8;
+  --faint-text:           #64748B;
+  --badge-background:     rgba(255, 255, 255, 0.12);
+  --badge-solid:          #2C4175;
+  --navy-border:          rgba(255, 255, 255, 0.14);
+  --navy-border-subtle:   rgba(255, 255, 255, 0.08);
 
-  /* ── Colour: text ───────────────────────────────────────── */
-  --text:          #0F172A;
-  --text-muted:    #475569;
-  --text-faint:    #94A3B8;
+  /* ── Theme Surfaces ───────────────────────────────────────── */
+  --canvas:               #081329;
+  --surface:              #11224D;
+  --surface-muted:        #1B326B;
+  --surface-card:         #1B326B;
+  --surface-card-subtle:  #162955;
+  --border:               rgba(255, 255, 255, 0.14);
+  --border-subtle:        rgba(255, 255, 255, 0.08);
+  --border-hover:         rgba(37, 99, 235, 0.6);
 
-  /* ── Colour: brand / action ─────────────────────────────── */
-  --primary:       #1D4ED8;
-  --primary-hover: #1E40AF;
-  --focus:         #2563EB;
+  /* ── Typography & Text Colors ─────────────────────────────── */
+  --text:                 #FFFFFF;
+  --text-primary:         #FFFFFF;
+  --text-secondary:       #94A3B8;
+  --text-muted:           #94A3B8;
+  --text-faint:           #64748B;
+  --text-on-accent:       #FFFFFF;
 
-  /* ── Colour: semantic state ─────────────────────────────── */
-  --success:       #15803D;
-  --success-bg:    #DCFCE7;
-  --warning:       #B45309;
-  --warning-bg:    #FEF3C7;
-  --danger:        #B91C1C;
-  --danger-bg:     #FEE2E2;
-  --info:          #0369A1;
-  --info-bg:       #E0F2FE;
-  --border-hover:  #94A3B8;
+  /* ── Actions & Highlights ─────────────────────────────────── */
+  --primary:              #2563EB;
+  --primary-hover:        #1D4ED8;
+  --focus:                #2563EB;
+  --focus-ring:           0 0 0 3px rgba(37, 99, 235, 0.45);
 
-  /* Compatibility aliases used by spatial views. */
-  --color-primary-500: var(--primary);
-  --color-warning-500: var(--warning);
-  --color-danger-500: var(--danger);
-  --color-bg-secondary: var(--surface-muted);
-  --color-text-muted: var(--text-muted);
-  --color-border: var(--border);
+  /* ── Semantic State Colors ────────────────────────────────── */
+  --success:              #10B981;
+  --success-bg:           rgba(16, 185, 129, 0.15);
+  --success-border:       rgba(16, 185, 129, 0.35);
+  --warning:              #F59E0B;
+  --warning-bg:           rgba(245, 158, 11, 0.15);
+  --warning-border:       rgba(245, 158, 11, 0.35);
+  --danger:               #EF4444;
+  --danger-bg:            rgba(239, 68, 68, 0.15);
+  --danger-border:        rgba(239, 68, 68, 0.35);
+  --critical:             #F43F5E;
+  --critical-bg:          rgba(244, 63, 94, 0.2);
+  --critical-border:      rgba(244, 63, 94, 0.45);
+  --info:                 #38BDF8;
+  --info-bg:              rgba(56, 189, 248, 0.15);
+  --info-border:          rgba(56, 189, 248, 0.35);
 
-  /* ── Colour: station visualization ──────────────────────── */
-  --station-healthy:   var(--success);
-  --station-healthy-bg: var(--success-bg);
-  --station-warning:   var(--warning);
-  --station-warning-bg: var(--warning-bg);
-  --station-critical:  var(--danger);
-  --station-critical-bg: var(--danger-bg);
-  --station-isolated:  var(--info);
-  --station-isolated-bg: var(--info-bg);
-  --station-offline:   var(--text-faint);
-  --station-offline-bg: var(--surface-muted);
-  --station-empty:     var(--surface);
-  --station-empty-border: var(--border);
+  /* ── Spatial Station Visualization Tokens ─────────────────── */
+  --station-healthy:      var(--success);
+  --station-healthy-bg:   var(--success-bg);
+  --station-warning:      var(--warning);
+  --station-warning-bg:   var(--warning-bg);
+  --station-critical:     var(--danger);
+  --station-critical-bg:  var(--danger-bg);
+  --station-isolated:     var(--info);
+  --station-isolated-bg:  var(--info-bg);
+  --station-offline:      var(--text-faint);
+  --station-offline-bg:   rgba(255, 255, 255, 0.05);
+  --station-empty:        rgba(27, 50, 107, 0.6);
+  --station-empty-border: var(--navy-border);
 
-  /* ── Typography ─────────────────────────────────────────── */
-  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", "Fira Code",
-               Consolas, "Courier New", monospace;
+  /* ── Typography Scale ─────────────────────────────────────── */
+  --font-sans:            Inter, "Plus Jakarta Sans", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono:            "JetBrains Mono", ui-monospace, "Cascadia Code", "Fira Code", monospace;
 
-  --font-xs:   0.75rem;    /* 12px – timestamps, labels       */
-  --font-sm:   0.875rem;   /* 14px – body, table values, btns */
-  --font-base: 1rem;       /* 16px – long-form content        */
-  --font-md:   1rem;       /* 16px – compatibility alias      */
-  --font-lg:   1.125rem;   /* 18px – card titles, headings    */
-  --font-xl:   1.5rem;     /* 24px – page titles              */
-  --font-2xl:  2rem;       /* 32px – dashboard key metric     */
+  --font-xs:              0.75rem;   /* 12px – eyebrows, timestamps */
+  --font-sm:              0.875rem;  /* 14px – standard body, tables */
+  --font-base:            1rem;      /* 16px – comfortable reading */
+  --font-md:              1rem;
+  --font-lg:              1.125rem;  /* 18px – card titles */
+  --font-xl:              1.5rem;    /* 24px – section titles */
+  --font-2xl:             2rem;      /* 32px – dashboard key numbers */
+  --font-3xl:             2.25rem;   /* 36px – hero banners */
 
-  --lh-xs:   1rem;
-  --lh-sm:   1.25rem;
-  --lh-base: 1.5rem;
-  --lh-lg:   1.5rem;
-  --lh-xl:   2rem;
-  --lh-2xl:  2.5rem;
+  --lh-xs:                1rem;
+  --lh-sm:                1.35rem;
+  --lh-base:              1.6rem;
+  --lh-lg:                1.6rem;
+  --lh-xl:                2rem;
+  --lh-2xl:               2.4rem;
+  --lh-3xl:               2.8rem;
 
-  /* ── Spacing (4px base unit) ────────────────────────────── */
-  --space-1: 0.25rem;   /*  4px */
-  --space-2: 0.5rem;    /*  8px */
-  --space-3: 0.75rem;   /* 12px */
-  --space-4: 1rem;      /* 16px */
-  --space-5: 1.25rem;   /* 20px */
-  --space-6: 1.5rem;    /* 24px */
-  --space-8: 2rem;      /* 32px */
-  --space-10: 2.5rem;   /* 40px */
-  --space-12: 3rem;     /* 48px */
+  /* ── Spacing ──────────────────────────────────────────────── */
+  --space-1:              0.25rem;  /*  4px */
+  --space-2:              0.5rem;   /*  8px */
+  --space-3:              0.75rem;  /* 12px */
+  --space-4:              1rem;     /* 16px */
+  --space-5:              1.25rem;  /* 20px */
+  --space-6:              1.5rem;   /* 24px */
+  --space-8:              2rem;     /* 32px */
+  --space-10:             2.5rem;   /* 40px */
+  --space-12:             3rem;     /* 48px */
+  --space-16:             4rem;     /* 64px */
 
-  /* ── Radius ─────────────────────────────────────────────── */
-  --radius-sm: 4px;
-  --radius:    8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
+  /* ── Radius System ────────────────────────────────────────── */
+  --radius-sm:            6px;
+  --radius:               10px;
+  --radius-lg:            16px;
+  --radius-card:          22px;
+  --radius-pill:          9999px;
 
-  /* ── Shadows ────────────────────────────────────────────── */
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow:    0 1px 3px 0 rgb(0 0 0 / 0.08), 0 1px 2px -1px rgb(0 0 0 / 0.06);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+  /* ── Depth & Shadows ──────────────────────────────────────── */
+  --shadow-sm:            0 2px 4px rgba(0, 0, 0, 0.2);
+  --shadow:               0 4px 12px rgba(0, 0, 0, 0.25);
+  --shadow-md:            0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-card:          0 12px 36px rgba(0, 0, 0, 0.4);
+  --shadow-glow:          0 0 24px rgba(37, 99, 235, 0.3);
 
-  /* ── Layout ─────────────────────────────────────────────── */
-  --sidebar-w:       20%;
-  --header-h:        65px;
-  --content-max-w:   90rem;
-  --page-px:         1.5rem;   /* 24px desktop */
-  --page-py:         1.5rem;
+  /* ── Layout Dimensions ────────────────────────────────────── */
+  --header-h:             72px;
+  --content-max-w:        96rem;    /* 1536px wide screen optimization */
+  --page-px:              2rem;
+  --page-py:              2rem;
 
-  /* ── Transitions ────────────────────────────────────────── */
-  --transition-fast: 120ms ease;
-  --transition:      200ms ease;
+  /* ── Transitions ──────────────────────────────────────────── */
+  --transition-fast:      140ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition:           220ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-smooth:    320ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* ── Reduced motion overrides ───────────────────────────────── */
+/* Reduced motion preference */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

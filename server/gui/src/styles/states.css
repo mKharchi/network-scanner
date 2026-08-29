@@ -1,8 +1,9 @@
 /* ============================================================
-   State components: Loading skeletons, Empty, Error, Notice
+   State Components: Loading Skeletons, Empty, Error, Notice
+   Deep Navy Intelligence Platform
    ============================================================ */
 
-/* ── Skeleton loader ──────────────────────────────────────── */
+/* ── Skeleton Loader ──────────────────────────────────────── */
 @keyframes skeleton-shimmer {
   from { background-position: -200% 0; }
   to   { background-position:  200% 0; }
@@ -12,12 +13,12 @@
   border-radius: var(--radius-sm);
   background: linear-gradient(
     90deg,
-    var(--surface-muted) 25%,
-    #E8EDF3           50%,
-    var(--surface-muted) 75%
+    rgba(27, 50, 107, 0.6) 25%,
+    rgba(44, 65, 117, 0.9) 50%,
+    rgba(27, 50, 107, 0.6) 75%
   );
   background-size: 200% 100%;
-  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+  animation: skeleton-shimmer 1.8s ease-in-out infinite;
   display: block;
 }
 
@@ -31,18 +32,18 @@
 .skeleton--text     { height: 0.875rem; width: 100%; }
 .skeleton--text-sm  { height: 0.75rem;  width: 60%; }
 .skeleton--text-lg  { height: 1.125rem; width: 80%; }
-.skeleton--title    { height: 1.5rem;   width: 40%; }
-.skeleton--badge    { height: 1.25rem;  width: 4rem;  border-radius: 9999px; }
-.skeleton--icon     { height: 1rem;     width: 1rem;  border-radius: 50%; }
-.skeleton--row      { height: 44px;     width: 100%;  border-radius: 0; }
+.skeleton--title    { height: 1.75rem;  width: 45%; }
+.skeleton--badge    { height: 1.5rem;   width: 5rem;  border-radius: var(--radius-pill); }
+.skeleton--icon     { height: 1.25rem;  width: 1.25rem;  border-radius: 50%; }
+.skeleton--row      { height: 52px;     width: 100%;  border-radius: 0; }
 
 .skeleton-group {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-3);
 }
 
-/* ── Empty state ──────────────────────────────────────────── */
+/* ── Empty State ──────────────────────────────────────────── */
 .empty-state {
   display: flex;
   flex-direction: column;
@@ -50,29 +51,35 @@
   justify-content: center;
   padding: var(--space-12) var(--space-8);
   text-align: center;
-  gap: var(--space-3);
-  color: var(--text-muted);
+  gap: var(--space-4);
+  color: var(--muted-text);
+  background: rgba(27, 50, 107, 0.35);
+  border: 1px dashed var(--navy-border);
+  border-radius: var(--radius-card);
 }
 
 .empty-state__icon {
-  font-size: 2rem;
-  opacity: 0.4;
+  font-size: 2.5rem;
+  color: #60A5FA;
+  opacity: 0.8;
   margin-bottom: var(--space-2);
 }
 
 .empty-state__title {
-  font-size: var(--font-base);
-  font-weight: 600;
-  color: var(--text);
+  font-size: var(--font-lg);
+  font-weight: 700;
+  color: var(--white);
+  letter-spacing: -0.01em;
 }
 
 .empty-state__body {
   font-size: var(--font-sm);
-  color: var(--text-muted);
-  max-width: 28rem;
+  color: var(--muted-text);
+  max-width: 32rem;
+  line-height: var(--lh-base);
 }
 
-/* ── Error state ──────────────────────────────────────────── */
+/* ── Error State ──────────────────────────────────────────── */
 .error-state {
   display: flex;
   flex-direction: column;
@@ -80,42 +87,47 @@
   justify-content: center;
   padding: var(--space-12) var(--space-8);
   text-align: center;
-  gap: var(--space-3);
+  gap: var(--space-4);
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-card);
 }
 
 .error-state__icon {
-  font-size: 2rem;
-  color: var(--danger);
-  opacity: 0.7;
+  font-size: 2.5rem;
+  color: #F87171;
+  opacity: 0.9;
 }
 
 .error-state__title {
-  font-size: var(--font-base);
-  font-weight: 600;
-  color: var(--text);
+  font-size: var(--font-lg);
+  font-weight: 700;
+  color: var(--white);
 }
 
 .error-state__body {
   font-size: var(--font-sm);
-  color: var(--text-muted);
-  max-width: 28rem;
+  color: var(--muted-text);
+  max-width: 32rem;
+  line-height: var(--lh-base);
 }
 
-/* ── Inline notice ────────────────────────────────────────── */
+/* ── Inline Notice ────────────────────────────────────────── */
 .notice {
   display: flex;
   align-items: flex-start;
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-lg);
   border: 1px solid transparent;
   font-size: var(--font-sm);
+  color: var(--white);
 }
 
 .notice__icon {
   flex-shrink: 0;
-  margin-top: 1px;
-  font-size: var(--font-base);
+  margin-top: 2px;
+  font-size: var(--font-lg);
 }
 
 .notice__body {
@@ -124,34 +136,36 @@
 }
 
 .notice__title {
-  font-weight: 600;
+  font-weight: 700;
   margin-bottom: 2px;
+  color: var(--white);
 }
 
 .notice__text {
-  color: var(--text-muted);
+  color: var(--muted-text);
   margin-top: 2px;
+  line-height: var(--lh-sm);
 }
 
 .notice--info {
   background: var(--info-bg);
-  border-color: #BAE6FD;
-  color: var(--info);
+  border-color: var(--info-border);
+  color: #7DD3FC;
 }
 .notice--warning {
   background: var(--warning-bg);
-  border-color: #FDE68A;
-  color: var(--warning);
+  border-color: var(--warning-border);
+  color: #FDE68A;
 }
 .notice--danger {
   background: var(--danger-bg);
-  border-color: #FECACA;
-  color: var(--danger);
+  border-color: var(--danger-border);
+  color: #FCA5A5;
 }
 .notice--success {
   background: var(--success-bg);
-  border-color: #BBF7D0;
-  color: var(--success);
+  border-color: var(--success-border);
+  color: #6EE7B7;
 }
 
 .notice .notice__text {
@@ -159,7 +173,7 @@
   opacity: 0.85;
 }
 
-/* ── Global stale banner ──────────────────────────────────── */
+/* ── Global Stale Banner ──────────────────────────────────── */
 .stale-banner {
   display: flex;
   align-items: center;
@@ -167,8 +181,9 @@
   gap: var(--space-3);
   padding: var(--space-2) var(--space-4);
   background: var(--warning-bg);
-  border-bottom: 1px solid #FDE68A;
+  border-bottom: 1px solid var(--warning-border);
   font-size: var(--font-xs);
-  color: var(--warning);
-  font-weight: 500;
+  color: #FCD34D;
+  font-weight: 600;
+  letter-spacing: 0.03em;
 }

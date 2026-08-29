@@ -1,65 +1,85 @@
 /* ============================================================
-   Badge component
+   Badge & Pill Component — Deep Navy Intelligence Platform
    ============================================================ */
 
 .badge {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  padding: 2px var(--space-2);
+  padding: 3px var(--space-3);
   font-size: var(--font-xs);
-  font-weight: 500;
-  line-height: var(--lh-xs);
-  border-radius: 9999px;
+  font-weight: 600;
+  line-height: 1;
+  border-radius: var(--radius-pill);
   white-space: nowrap;
   user-select: none;
+  border: 1px solid transparent;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
-/* Variants */
-.badge--success {
-  color: var(--success);
-  background: var(--success-bg);
-}
-.badge--warning {
-  color: var(--warning);
-  background: var(--warning-bg);
-}
-.badge--danger {
-  color: var(--danger);
-  background: var(--danger-bg);
-}
-.badge--info {
-  color: var(--info);
-  background: var(--info-bg);
-}
+/* Neutral & Navy Pills */
 .badge--muted {
-  color: var(--text-muted);
-  background: var(--surface-muted);
+  color: var(--muted-text);
+  background: var(--badge-background);
+  border-color: var(--navy-border-subtle);
 }
+
+.badge--solid {
+  color: var(--white);
+  background: var(--badge-solid);
+  border-color: var(--navy-border);
+}
+
 .badge--primary {
-  color: var(--primary);
-  background: #EFF6FF;
+  color: #93C5FD;
+  background: rgba(37, 99, 235, 0.22);
+  border-color: rgba(37, 99, 235, 0.45);
 }
 
-/* Critical variant: stronger surface treatment */
-.badge--critical {
-  color: var(--danger);
+/* Semantic Status Variants */
+.badge--success {
+  color: #6EE7B7;
+  background: var(--success-bg);
+  border-color: var(--success-border);
+}
+
+.badge--warning {
+  color: #FCD34D;
+  background: var(--warning-bg);
+  border-color: var(--warning-border);
+}
+
+.badge--danger {
+  color: #FCA5A5;
   background: var(--danger-bg);
-  font-weight: 600;
-  box-shadow: 0 0 0 1px var(--danger);
+  border-color: var(--danger-border);
 }
 
-/* Status dot */
+.badge--critical {
+  color: #FDA4AF;
+  background: var(--critical-bg);
+  border-color: var(--critical-border);
+  font-weight: 700;
+}
+
+.badge--info {
+  color: #7DD3FC;
+  background: var(--info-bg);
+  border-color: var(--info-border);
+}
+
+/* Status Indicator Dot */
 .badge__dot {
   width: 6px;
   height: 6px;
   border-radius: 9999px;
   flex-shrink: 0;
 }
-.badge--success .badge__dot  { background: var(--success); }
-.badge--warning .badge__dot  { background: var(--warning); }
-.badge--danger .badge__dot   { background: var(--danger); }
-.badge--info .badge__dot     { background: var(--info); }
-.badge--muted .badge__dot    { background: var(--text-faint); }
-.badge--primary .badge__dot  { background: var(--primary); }
-.badge--critical .badge__dot { background: var(--danger); }
+.badge--success .badge__dot  { background: #10B981; box-shadow: 0 0 6px rgba(16, 185, 129, 0.8); }
+.badge--warning .badge__dot  { background: #F59E0B; box-shadow: 0 0 6px rgba(245, 158, 11, 0.8); }
+.badge--danger .badge__dot   { background: #EF4444; box-shadow: 0 0 6px rgba(239, 68, 68, 0.8); }
+.badge--critical .badge__dot { background: #F43F5E; box-shadow: 0 0 8px rgba(244, 63, 94, 0.9); }
+.badge--info .badge__dot     { background: #38BDF8; box-shadow: 0 0 6px rgba(56, 189, 248, 0.8); }
+.badge--muted .badge__dot    { background: var(--muted-text); }
+.badge--primary .badge__dot  { background: #60A5FA; }

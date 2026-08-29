@@ -1,8 +1,8 @@
 /* ============================================================
-   Global reset and base styles
+   Global Reset and Base Styles — Deep Navy Intelligence Platform
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import './tokens.css';
 
 *,
@@ -19,64 +19,118 @@ html {
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-color: var(--dark-background-navy);
+  color: var(--text-primary);
 }
 
 body {
   font-family: var(--font-sans);
   font-size: var(--font-sm);
   line-height: var(--lh-sm);
-  color: var(--text);
-  background-color: var(--canvas);
+  color: var(--text-primary);
+  background-color: var(--dark-background-navy);
   min-height: 100dvh;
+  overflow-x: hidden;
 }
 
-/* ── Typography utilities ──────────────────────────────────── */
-.font-xs   { font-size: var(--font-xs);   line-height: var(--lh-xs); }
-.font-sm   { font-size: var(--font-sm);   line-height: var(--lh-sm); }
-.font-base { font-size: var(--font-base); line-height: var(--lh-base); }
-.font-lg   { font-size: var(--font-lg);   line-height: var(--lh-lg); }
-.font-xl   { font-size: var(--font-xl);   line-height: var(--lh-xl); }
-.font-2xl  { font-size: var(--font-2xl);  line-height: var(--lh-2xl); }
+/* ── Typography & Eyebrow Helpers ──────────────────────────── */
+.eyebrow {
+  font-size: var(--font-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted-text);
+  line-height: var(--lh-xs);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
 
-.font-mono  { font-family: var(--font-mono); }
-.font-tabular { font-variant-numeric: tabular-nums; }
+.eyebrow--accent {
+  color: #60A5FA;
+}
 
-.text-muted { color: var(--text-muted); }
-.text-faint { color: var(--text-faint); }
+.heading-hero {
+  font-size: var(--font-3xl);
+  font-weight: 800;
+  line-height: var(--lh-3xl);
+  color: var(--white);
+  letter-spacing: -0.02em;
+}
 
-.font-medium { font-weight: 500; }
-.font-semibold { font-weight: 600; }
+.heading-section {
+  font-size: var(--font-xl);
+  font-weight: 700;
+  line-height: var(--lh-xl);
+  color: var(--white);
+  letter-spacing: -0.01em;
+}
 
-/* ── Link reset ────────────────────────────────────────────── */
+.heading-card {
+  font-size: var(--font-lg);
+  font-weight: 600;
+  line-height: var(--lh-lg);
+  color: var(--white);
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+.font-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.text-muted {
+  color: var(--muted-text);
+}
+
+.text-faint {
+  color: var(--text-faint);
+}
+
+.text-white {
+  color: var(--white);
+}
+
+.text-accent {
+  color: #60A5FA;
+}
+
+/* ── Link Reset ────────────────────────────────────────────── */
 a {
   color: inherit;
   text-decoration: none;
 }
 
-/* ── Focus ring ────────────────────────────────────────────── */
+/* ── Focus Ring ────────────────────────────────────────────── */
 :focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: var(--focus-ring);
   border-radius: var(--radius-sm);
 }
 
-/* ── Scrollbar styling ─────────────────────────────────────── */
+/* ── Custom Dark Navy Scrollbars ───────────────────────────── */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 99px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-faint);
+  width: 8px;
+  height: 8px;
 }
 
-/* ── Utility classes ───────────────────────────────────────── */
+::-webkit-scrollbar-track {
+  background: var(--dark-background-navy);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--badge-solid);
+  border-radius: 99px;
+  border: 2px solid var(--dark-background-navy);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3B5490;
+}
+
+/* ── Common Utility Classes ────────────────────────────────── */
 .sr-only {
   position: absolute;
   width: 1px;
@@ -93,4 +147,25 @@ a {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--success);
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.7);
+  display: inline-block;
+  animation: pulse-glow 2.5s infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(0.9);
+  }
 }

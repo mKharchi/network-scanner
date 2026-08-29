@@ -413,6 +413,27 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 self.send_data(device_data)
                 return
 
+            # 6c. Device Classification & Review Endpoints
+            if path in {"/api/v1/classification/stats", "/api/classification/stats"}:
+                self.send_data(api_service.get_classification_stats())
+                return
+
+            if path in {"/api/v1/classification/review", "/api/v1/devices/classification-review"}:
+                limit = get_int_param("limit", 50)
+                items = api_service.get_classification_review_queue(limit=limit)
+                self.send_data({"items": items, "total": len(items)})
+                return
+
+            m = re.match(r"^/api/v1/(?:network/)?devices/([^/]+)/classification$", path)
+            if m:
+                device_id = urllib.parse.unquote(m.group(1))
+                classification = api_service.get_device_classification_by_identifier(device_id)
+                if not classification:
+                    self.send_error_response(404, "NOT_FOUND", f"Device '{device_id}' classification not found.")
+                    return
+                self.send_data(classification)
+                return
+
             # 7. DHCP Activity
             if path == "/api/v1/network/dhcp":
                 date_param = get_param("date")
@@ -937,6 +958,47 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
             if path == "/api/v1/spatial/evaluate" or path == "/api/spatial/evaluate":
                 eval_res = api_service.trigger_spatial_scan_evaluation()
                 self.send_data({"status": "ok", "evaluated_devices": len(eval_res), "items": eval_res})
+                return
+
+            # Device Classification POST endpoints
+            if path in {"/api/v1/classification/retrain", "/api/classification/retrain"}:
+                res = api_service.retrain_classification_model()
+                self.send_data(res, status_code=200)
+                return
+
+            m = re.match(r"^/api/v1/(?:network/)?devices/([^/]+)/classify$", path)
+            if m:
+                device_id = urllib.parse.unquote(m.group(1))
+                res = api_service.classify_device_by_identifier(device_id, force=True)
+                if not res:
+                    self.send_error_response(404, "NOT_FOUND", f"Device '{device_id}' not found.")
+                    return
+                self.send_data(res, status_code=200)
+                return
+
+            m = re.match(r"^/api/v1/(?:network/)?devices/([^/]+)/label$", path)
+            if m:
+                device_id = urllib.parse.unquote(m.group(1))
+                payload = self._read_json_payload() or {}
+                label = payload.get("label")
+                if not label or not isinstance(label, str):
+                    self.send_error_response(400, "MISSING_LABEL", "Field 'label' is required.")
+                    return
+                confirmed_by = payload.get("confirmed_by") or self.headers.get("X-Operator-Id") or "admin"
+                notes = payload.get("notes")
+                try:
+                    res = api_service.record_device_human_label_by_identifier(
+                        device_identifier=device_id,
+                        label=label,
+                        confirmed_by=confirmed_by,
+                        notes=notes,
+                    )
+                    if not res:
+                        self.send_error_response(404, "NOT_FOUND", f"Device '{device_id}' not found.")
+                        return
+                    self.send_data(res, status_code=201)
+                except ValueError as err:
+                    self.send_error_response(400, "INVALID_LABEL", str(err))
                 return
 
             # Fallback 404
