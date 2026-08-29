@@ -13,6 +13,7 @@ import {
 import { useFetch } from "../hooks/useFetch";
 import { useToast } from "../hooks/useToast";
 import { Button } from "../components/Button";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { SectionCard } from "../components/Card";
 import { EmptyState, ErrorState, Skeleton } from "../components/States";
 import {
@@ -117,6 +118,10 @@ export function LocationsPage() {
   );
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
   const [actionLoading, setActionLoading] = useState(false);
+  const [pendingBulkAction, setPendingBulkAction] = useState<{
+    actionType: string;
+    parameters: Record<string, unknown>;
+  } | null>(null);
   const [assignLoading, setAssignLoading] = useState(false);
   const [autoLocatingClientId, setAutoLocatingClientId] = useState<string | null>(null);
   const assigningClientId = searchParams.get("assign");
@@ -208,12 +213,18 @@ export function LocationsPage() {
   ) => {
     if (!selectedClientIds.length) return;
     if (actionType === "RESTART" || actionType === "SHUTDOWN") {
-      const verb = actionType === "SHUTDOWN" ? "shut down" : "restart";
-      const confirmed = window.confirm(
-        `This will ${verb} ${selectedClientIds.length} selected client${selectedClientIds.length === 1 ? "" : "s"}. Continue?`,
-      );
-      if (!confirmed) return;
+      setPendingBulkAction({ actionType, parameters });
+      return;
     }
+    await executeBulkAction(actionType, parameters);
+  };
+
+  const executeBulkAction = async (
+    actionType: string,
+    parameters: Record<string, unknown> = {},
+  ) => {
+    if (!selectedClientIds.length) return;
+    setPendingBulkAction(null);
     setActionLoading(true);
     try {
       const action = await api.createAction({
@@ -520,9 +531,23 @@ export function LocationsPage() {
   const selectedConfidence = formatAssignmentConfidence(
     selectedAssignment?.confidence ?? null,
   );
+  const pendingActionLabel = pendingBulkAction?.actionType === "SHUTDOWN" ? "shut down" : "restart";
 
   return (
     <div>
+      <ConfirmDialog
+        open={pendingBulkAction !== null}
+        title={`${pendingActionLabel} selected clients?`}
+        description={`This will ${pendingActionLabel} ${selectedClientIds.length} selected client${selectedClientIds.length === 1 ? "" : "s"}. This action affects the selected machines remotely.`}
+        confirmLabel={pendingActionLabel === "shut down" ? "Shut down" : "Restart"}
+        danger={pendingActionLabel === "shut down"}
+        onCancel={() => setPendingBulkAction(null)}
+        onConfirm={() => {
+          if (pendingBulkAction) {
+            void executeBulkAction(pendingBulkAction.actionType, pendingBulkAction.parameters);
+          }
+        }}
+      />
       <div
         style={{
           display: "flex",

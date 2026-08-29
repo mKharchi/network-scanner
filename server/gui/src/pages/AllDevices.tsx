@@ -359,7 +359,9 @@ export function AllDevicesPage() {
           data={sortedDevices}
           rowKey={(d) => d.mac_address}
           onRowClick={(d) =>
-            navigate(`/network/devices/${encodeURIComponent(d.mac_address)}`)
+            navigate(`/network/devices/${encodeURIComponent(d.mac_address)}`, {
+              state: { from: "/network/devices", label: "All Devices" },
+            })
           }
           aria-label="All network devices"
           sortKey={sortKey}

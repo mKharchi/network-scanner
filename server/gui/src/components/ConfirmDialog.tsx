@@ -9,6 +9,10 @@ interface ConfirmDialogProps {
   confirmLabel: string;
   cancelLabel?: string;
   danger?: boolean;
+  inputLabel?: string;
+  inputValue?: string;
+  inputPlaceholder?: string;
+  onInputChange?: (value: string) => void;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -20,6 +24,10 @@ export function ConfirmDialog({
   confirmLabel,
   cancelLabel = "Cancel",
   danger = false,
+  inputLabel,
+  inputValue,
+  inputPlaceholder,
+  onInputChange,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -55,6 +63,27 @@ export function ConfirmDialog({
       >
         <h2 id={titleId} className="confirm-dialog__title">{title}</h2>
         <p id={descriptionId} className="confirm-dialog__description">{description}</p>
+        {inputLabel && onInputChange && (
+          <label style={{ display: "grid", gap: "var(--space-1)", marginTop: "var(--space-3)" }}>
+            <span style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>{inputLabel}</span>
+            <input
+              type="text"
+              value={inputValue ?? ""}
+              placeholder={inputPlaceholder}
+              onChange={(event) => onInputChange(event.target.value)}
+              autoFocus
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                background: "var(--surface)",
+                color: "var(--text)",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius-sm)",
+                padding: "var(--space-2)",
+              }}
+            />
+          </label>
+        )}
         <div className="confirm-dialog__actions">
           <Button variant="secondary" onClick={onCancel}>{cancelLabel}</Button>
           <button

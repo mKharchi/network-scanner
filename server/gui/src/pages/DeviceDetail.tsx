@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from 'react-router-dom';
+import { useLocation, useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { useFetch } from '../hooks/useFetch';
 import { ClassificationBadge } from '../components/Badge';
@@ -96,6 +96,9 @@ const obsColumns: Column<ObservationItem>[] = [
 export function DeviceDetailPage() {
   const { mac } = useParams<{ mac: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const returnTo = typeof location.state?.from === "string" ? location.state.from : "/network/latest";
+  const returnLabel = typeof location.state?.label === "string" ? location.state.label : "Latest Scan";
 
   const { state, refetch } = useFetch(mac ? () => api.getNetworkDevice(mac) : null, [mac]);
 
@@ -127,8 +130,8 @@ export function DeviceDetailPage() {
           marginBottom: 'var(--space-5)',
         }}
       >
-        <Button variant="quiet" size="sm" onClick={() => navigate('/network/latest')}>
-          ← Latest Scan
+        <Button variant="quiet" size="sm" onClick={() => navigate(returnTo)}>
+          ← {returnLabel}
         </Button>
         <Button variant="quiet" size="sm" onClick={refetch}>
           Refresh
