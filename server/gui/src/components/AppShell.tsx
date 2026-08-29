@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import "../styles/shell.css";
 import { useApiState } from "../hooks/useApiState";
 import { TbActivity, TbCloudNetwork, TbDevices, TbMapPin, TbRadar, TbShieldHeart, TbAdjustmentsHorizontal } from "react-icons/tb";
-import { FiCpu, FiGlobe, FiMenu, FiX } from "react-icons/fi";
+import { FiCpu, FiMenu, FiX } from "react-icons/fi";
 import { HiOutlineSquare3Stack3D } from "react-icons/hi2";
 
 // ── Connection State Indicator ───────────────────────────────────

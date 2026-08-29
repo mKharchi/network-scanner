@@ -41,6 +41,92 @@ type ViewMode = 'physical' | 'topology' | 'threat' | 'traffic' | 'ar';
 type ZoneFilter = 'all' | 'threats' | 'datacenter' | 'workstations' | 'perimeter' | 'sensors';
 type CameraPreset = 'iso' | 'top' | 'front' | 'threats';
 
+function normaliseIdentity(value: unknown): string {
+  return String(value ?? '').trim().replace(/[-_]/g, ':').toLowerCase();
+}
+
+function identityVariants(value: unknown): string[] {
+  const normalized = normaliseIdentity(value);
+  if (!normalized) return [];
+  const withoutSensorPrefix = normalized.replace(/^(sensor|probe)(?::|\\s)+/, '');
+  return Array.from(new Set([normalized, withoutSensorPrefix].filter(Boolean)));
+}
+
+function nodeIdentityKeys(node: SpatialSceneNode): Set<string> {
+  const metadata = node.metadata ?? {};
+  const values = [
+    node.mac,
+    node.ip,
+    node.name,
+    node.label,
+    metadata.sensor_id,
+    metadata.client_id,
+    metadata.client_hostname,
+  ];
+  return new Set(values.flatMap(identityVariants));
+}
+
+function nodeSpatialKey(node: SpatialSceneNode): string | null {
+  const { x, y, z } = node.position;
+  if (![x, y, z].every((value) => Number.isFinite(value))) return null;
+  return `${x.toFixed(2)}:${y.toFixed(2)}:${z.toFixed(2)}:${normaliseIdentity(node.location_label)}`;
+}
+
+function isThreatLikeNode(node: SpatialSceneNode): boolean {
+  return node.is_rogue || node.status === 'rogue' || node.status === 'suspicious' ||
+    node.risk === 'high' || node.risk === 'critical';
+}
+
+function isNearSensorNode(candidate: SpatialSceneNode, sensor: SpatialSceneNode): boolean {
+  if (normaliseIdentity(candidate.location_label) !== normaliseIdentity(sensor.location_label)) return false;
+  const dx = candidate.position.x - sensor.position.x;
+  const dy = candidate.position.y - sensor.position.y;
+  const dz = candidate.position.z - sensor.position.z;
+  return Math.sqrt(dx * dx + dy * dy + dz * dz) <= 1.25;
+}
+
+/**
+ * The API can briefly return one endpoint in both the sensor and network-device
+ * collections while sensor synchronization is catching up. Keep the sensor
+ * representation (it has the authoritative spatial role) and remove only the
+ * matching non-sensor node and its threat marker/edges.
+ */
+function dedupeSensorNodes(scene: SpatialSceneResponse): SpatialSceneResponse {
+  const sensorNodes = scene.nodes.filter((node) => node.is_sensor || node.type === 'sensor');
+  if (sensorNodes.length === 0) return scene;
+
+  const sensorKeys = new Set(sensorNodes.flatMap((node) => Array.from(nodeIdentityKeys(node))));
+  const sensorSpatialKeys = new Set(sensorNodes.map(nodeSpatialKey).filter(Boolean));
+  const duplicateIds = new Set<string>();
+
+  scene.nodes.forEach((node) => {
+    if (node.is_sensor || node.type === 'sensor') return;
+    const sharesIdentity = Array.from(nodeIdentityKeys(node)).some((key) => sensorKeys.has(key));
+    const sharesPosition = nodeSpatialKey(node) !== null && sensorSpatialKeys.has(nodeSpatialKey(node));
+    const isNearbySensorDuplicate = isThreatLikeNode(node) && sensorNodes.some((sensor) => isNearSensorNode(node, sensor));
+    if (sharesIdentity || sharesPosition || isNearbySensorDuplicate) duplicateIds.add(node.id);
+  });
+
+  if (duplicateIds.size === 0) return scene;
+
+  const nodes = scene.nodes.filter((node) => !duplicateIds.has(node.id));
+  const threats = scene.threats.filter((threat) => !duplicateIds.has(threat.node_id));
+  const edges = scene.edges.filter((edge) => !duplicateIds.has(edge.source) && !duplicateIds.has(edge.target));
+
+  return {
+    ...scene,
+    nodes,
+    threats,
+    edges,
+    meta: {
+      ...scene.meta,
+      total_nodes: nodes.length,
+      total_edges: edges.length,
+      total_threats: threats.length,
+    },
+  };
+}
+
 export function DigitalTwinPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -149,9 +235,10 @@ export function DigitalTwinPage() {
       // Prefer the backend's real scene. The previous implementation fetched it
       // but discarded it, making the fallback scene (floor 1 only) the only view.
       if (spatialData && spatialData.locations?.length > 0) {
-        setScene(spatialData);
+        const normalizedScene = dedupeSensorNodes(spatialData);
+        setScene(normalizedScene);
         setSelectedNodeId((current) =>
-          current && spatialData.nodes.some((node) => node.id === current) ? current : null,
+          current && normalizedScene.nodes.some((node) => node.id === current) ? current : null,
         );
         return;
       }
