@@ -7,7 +7,7 @@ import {
 } from "../api/client";
 import { useFetch } from "../hooks/useFetch";
 import { useToast } from "../hooks/useToast";
-import { ClassificationBadge } from "../components/Badge";
+import { ClassificationBadge, Badge } from "../components/Badge";
 import { Button } from "../components/Button";
 import { DataTable, type Column } from "../components/DataTable";
 import {
@@ -53,6 +53,16 @@ export function AllDevicesPage() {
       : state.status === "error" && state.staleData
         ? state.staleData.total
         : rawDevices.length;
+
+  const activeWindowMinutes = Math.round(
+    ((state.status === "success"
+      ? state.data.active_window_seconds
+      : state.status === "error" && state.staleData
+        ? state.staleData.active_window_seconds
+        : 1800) ?? 1800) / 60,
+  );
+
+  const activeCount = rawDevices.filter((d) => d.is_active).length;
 
   const filteredDevices = rawDevices.filter((d) => {
     if (filter === "MANAGED" && !d.is_managed) return false;
@@ -137,6 +147,15 @@ export function AllDevicesPage() {
       render: (d) => <ClassificationBadge managed={d.is_managed} />,
     },
     {
+      key: "is_active",
+      label: "Status",
+      render: (d) => (
+        <Badge variant={d.is_active ? "success" : "muted"}>
+          {d.is_active ? "ACTIVE" : "STALE"}
+        </Badge>
+      ),
+    },
+    {
       key: "first_seen",
       label: "First Seen",
       sortable: true,
@@ -172,8 +191,37 @@ export function AllDevicesPage() {
 
   const { addToast } = useToast();
   const [isCollectingNeighbourhoods, setIsCollectingNeighbourhoods] = useState(false);
+  const [isFlushingNeighbourhoods, setIsFlushingNeighbourhoods] = useState(false);
   const [neighbourhoodCollection, setNeighbourhoodCollection] =
     useState<GlobalNeighbourhoodCollection | null>(null);
+
+  const handleFlushNeighbourhoodCaches = async () => {
+    if (
+      !window.confirm(
+        "Delete stored neighbourhood files on all online clients and clear server scan snapshots? This is intended for testing clean starts.",
+      )
+    ) {
+      return;
+    }
+    setIsFlushingNeighbourhoods(true);
+    try {
+      const result = await api.flushNeighbourhoodStorage();
+      addToast({
+        title: "Neighbourhood caches flushed",
+        message: `${result.clients_succeeded}/${result.clients_requested} client(s) cleared; ${result.server_scan_files_deleted} server scan file(s) deleted.`,
+        severity: result.clients_failed > 0 ? "INFO" : "SUCCESS",
+      });
+      refetch();
+    } catch (err: any) {
+      addToast({
+        title: "Flush failed",
+        message: err?.message || "Could not flush neighbourhood caches.",
+        severity: "CRITICAL",
+      });
+    } finally {
+      setIsFlushingNeighbourhoods(false);
+    }
+  };
 
   const handleCollectAllNeighbourhoods = async () => {
     setIsCollectingNeighbourhoods(true);
@@ -218,19 +266,27 @@ export function AllDevicesPage() {
         <div>
           <h1 className="page-title">All Known Devices</h1>
           <p className="page-description">
-            Comprehensive registry of all devices discovered across all client neighbourhood scans ({totalCount} total).
+            Comprehensive registry of all devices discovered across scans ({totalCount} total). {activeCount} active in the last {activeWindowMinutes} minutes.
           </p>
         </div>
         <div style={{ display: "flex", gap: "var(--space-2)", alignItems: "center" }}>
           <Button
             variant="primary"
             size="md"
-            disabled={isCollectingNeighbourhoods}
+            disabled={isCollectingNeighbourhoods || isFlushingNeighbourhoods}
             onClick={handleCollectAllNeighbourhoods}
           >
             {isCollectingNeighbourhoods
               ? "Collecting Client Neighbourhoods…"
               : "Collect All Client Neighbourhoods"}
+          </Button>
+          <Button
+            variant="danger"
+            size="md"
+            disabled={isCollectingNeighbourhoods || isFlushingNeighbourhoods}
+            onClick={handleFlushNeighbourhoodCaches}
+          >
+            {isFlushingNeighbourhoods ? "Flushing Caches…" : "Flush Neighbourhood Caches"}
           </Button>
           <Button variant="quiet" size="sm" onClick={refetch}>
             Refresh

@@ -179,6 +179,20 @@ def _save_neighbour_snapshot_state(snapshot_date, client_mac):
         print(f"Could not save neighbour snapshot state: {error}")
 
 
+def reset_neighbour_snapshot_state():
+    """Clear the local deduplication marker used by daily passive collection."""
+    from neighbourhood import NEIGHBOUR_SNAPSHOT_STATE_FILE
+
+    try:
+        NEIGHBOUR_SNAPSHOT_STATE_FILE.unlink()
+        return True
+    except FileNotFoundError:
+        return True
+    except OSError as error:
+        print(f"Could not reset neighbour snapshot state: {error}")
+        return False
+
+
 def collect_daily_network_neighbours():
     """Collect one passive snapshot and save it to today's local file.
 
