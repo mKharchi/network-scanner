@@ -106,6 +106,19 @@ def validate_neighbour_report(payload):
     return validated
 
 
+def _resolve_neighbour_observed_at(neighbour, batch_observed_at):
+    """Prefer a neighbour's own timestamp; fall back to the batch receipt time."""
+    from server_components.device_recency import coerce_datetime
+
+    batch = batch_observed_at or datetime.now(timezone.utc).replace(tzinfo=None)
+    if not isinstance(neighbour, dict):
+        return batch
+    parsed = coerce_datetime(neighbour.get("observed_at"))
+    if parsed is None:
+        return batch
+    return parsed.astimezone(timezone.utc).replace(tzinfo=None)
+
+
 def _upsert_device(cursor, neighbour, observed_at):
     cursor.execute(
         """
@@ -116,7 +129,7 @@ def _upsert_device(cursor, neighbour, observed_at):
             ip_address = VALUES(ip_address),
             hostname = COALESCE(VALUES(hostname), hostname),
             vendor = COALESCE(VALUES(vendor), vendor),
-            last_seen = VALUES(last_seen),
+            last_seen = GREATEST(last_seen, VALUES(last_seen)),
             updated_at = CURRENT_TIMESTAMP
         """,
         (
@@ -140,7 +153,7 @@ def _upsert_device(cursor, neighbour, observed_at):
 
 def _store_observations(reporter_mac, neighbours, source_type, *, observed_at=None):
     """Store normalized device records from one trusted discovery source."""
-    observed_at = observed_at or datetime.now(timezone.utc).replace(tzinfo=None)
+    batch_observed_at = observed_at or datetime.now(timezone.utc).replace(tzinfo=None)
 
     connection = None
     cursor = None
@@ -174,7 +187,8 @@ def _store_observations(reporter_mac, neighbours, source_type, *, observed_at=No
 
         updated_device_ids = set()
         for neighbour in neighbours:
-            device_id = _upsert_device(cursor, neighbour, observed_at)
+            item_observed_at = _resolve_neighbour_observed_at(neighbour, batch_observed_at)
+            device_id = _upsert_device(cursor, neighbour, item_observed_at)
             updated_device_ids.add(device_id)
             rssi = neighbour.get("rssi")
             switch_port = neighbour.get("switch_port")
@@ -193,7 +207,7 @@ def _store_observations(reporter_mac, neighbours, source_type, *, observed_at=No
                     neighbour["ip_address"],
                     neighbour.get("interface"),
                     neighbour["entry_type"],
-                    observed_at,
+                    item_observed_at,
                     rssi,
                     switch_port,
                 ),

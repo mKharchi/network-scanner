@@ -17,6 +17,7 @@ VALID_SOURCES = {"arp", "dhcp"}
 DEFAULT_NEIGHBOURHOOD_STORAGE_DIR = (
     Path(__file__).resolve().parent / "storage" / "network_neighbourhood"
 )
+NEIGHBOUR_SNAPSHOT_STATE_FILE = Path(__file__).resolve().parent / "neighbour_snapshot_state.json"
 _DAILY_STORAGE_LOCK = threading.RLock()
 
 
@@ -257,3 +258,32 @@ def update_daily_neighbourhood(observations, *, date=None, storage_dir=None):
         )
         _write_daily_neighbourhood(file_path, payload)
     return file_path, payload
+
+
+def flush_neighbourhood_storage(*, storage_dir=None, reset_snapshot_state=True):
+    """Delete all local daily neighbourhood JSON files."""
+    directory = Path(storage_dir) if storage_dir is not None else DEFAULT_NEIGHBOURHOOD_STORAGE_DIR
+    deleted_files = []
+    if directory.is_dir():
+        for file_path in sorted(directory.glob("*.json")):
+            try:
+                file_path.unlink()
+                deleted_files.append(file_path.name)
+            except OSError:
+                continue
+    snapshot_state_reset = False
+    if reset_snapshot_state:
+        try:
+            NEIGHBOUR_SNAPSHOT_STATE_FILE.unlink()
+            snapshot_state_reset = True
+        except FileNotFoundError:
+            snapshot_state_reset = True
+        except OSError:
+            snapshot_state_reset = False
+    return {
+        "status": "ok",
+        "deleted_files": deleted_files,
+        "deleted_count": len(deleted_files),
+        "storage_dir": str(directory),
+        "snapshot_state_reset": snapshot_state_reset,
+    }

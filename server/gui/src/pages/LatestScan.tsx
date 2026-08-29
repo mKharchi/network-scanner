@@ -147,8 +147,37 @@ export function LatestScanPage() {
 
   const { addToast } = useToast();
   const [isCollectingNeighbourhoods, setIsCollectingNeighbourhoods] = useState(false);
+  const [isFlushingNeighbourhoods, setIsFlushingNeighbourhoods] = useState(false);
   const [neighbourhoodCollection, setNeighbourhoodCollection] =
     useState<GlobalNeighbourhoodCollection | null>(null);
+
+  const handleFlushNeighbourhoodCaches = async () => {
+    if (
+      !window.confirm(
+        "Delete stored neighbourhood files on all online clients and clear server scan snapshots? This is intended for testing clean starts.",
+      )
+    ) {
+      return;
+    }
+    setIsFlushingNeighbourhoods(true);
+    try {
+      const result = await api.flushNeighbourhoodStorage();
+      addToast({
+        title: "Neighbourhood caches flushed",
+        message: `${result.clients_succeeded}/${result.clients_requested} client(s) cleared; ${result.server_scan_files_deleted} server scan file(s) deleted.`,
+        severity: result.clients_failed > 0 ? "INFO" : "SUCCESS",
+      });
+      refetch();
+    } catch (err: any) {
+      addToast({
+        title: "Flush failed",
+        message: err?.message || "Could not flush neighbourhood caches.",
+        severity: "CRITICAL",
+      });
+    } finally {
+      setIsFlushingNeighbourhoods(false);
+    }
+  };
 
   const handleCollectAllNeighbourhoods = async () => {
     setIsCollectingNeighbourhoods(true);
@@ -191,20 +220,28 @@ export function LatestScanPage() {
           <h1 className="page-title">Latest Network Scan</h1>
           <p className="page-description">
             {scan
-              ? `Completed ${formatDateTime(scan.completed_at)} · Found ${scan.devices_found} device(s)`
-              : "Devices observed in the most recent network scan snapshot."}
+              ? `Completed ${formatDateTime(scan.completed_at)} · Showing ${scan.devices_found} active device(s) seen in the last ${Math.round(((scan as { active_window_seconds?: number }).active_window_seconds ?? 1800) / 60)} minutes`
+              : "Devices observed recently in the active network window."}
           </p>
         </div>
         <div style={{ display: "flex", gap: "var(--space-2)", alignItems: "center" }}>
           <Button
             variant="primary"
             size="md"
-            disabled={isCollectingNeighbourhoods}
+            disabled={isCollectingNeighbourhoods || isFlushingNeighbourhoods}
             onClick={handleCollectAllNeighbourhoods}
           >
             {isCollectingNeighbourhoods
               ? "Collecting Client Neighbourhoods…"
               : "Collect All Client Neighbourhoods"}
+          </Button>
+          <Button
+            variant="danger"
+            size="md"
+            disabled={isCollectingNeighbourhoods || isFlushingNeighbourhoods}
+            onClick={handleFlushNeighbourhoodCaches}
+          >
+            {isFlushingNeighbourhoods ? "Flushing Caches…" : "Flush Neighbourhood Caches"}
           </Button>
           <Button variant="quiet" size="sm" onClick={refetch}>
             Refresh

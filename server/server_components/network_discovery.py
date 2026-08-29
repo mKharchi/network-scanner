@@ -866,3 +866,46 @@ def run_global_neighbourhood_collection():
     with server_lib.clients_lock:
         online_clients = list(server_lib.clients.values())
     return global_neighbourhood_collection_manager.start(online_clients)
+
+
+def run_global_neighbourhood_storage_flush():
+    """Ask every online client to delete local neighbourhood files and clear server scan JSON."""
+    from server_components import server_lib
+    from server_components.network_scan_storage import flush_network_scan_storage
+
+    with server_lib.clients_lock:
+        online_clients = list(server_lib.clients.values())
+
+    client_results = []
+    for client in online_clients:
+        client_id = client.get("client_id")
+        if not client_id:
+            continue
+        response = server_lib.execute_client_command(
+            client_id,
+            "FLUSH_NEIGHBOURHOOD_STORAGE",
+            timeout=12.0,
+            process_network_scan=False,
+        )
+        data = response.get("data") if isinstance(response.get("data"), dict) else {}
+        status = "ok" if response.get("status") == "ok" and data.get("status") == "ok" else "error"
+        client_results.append({
+            "client_id": client_id,
+            "hostname": client.get("hostname"),
+            "mac": client.get("mac"),
+            "status": status,
+            "deleted_count": data.get("deleted_count"),
+            "message": response.get("message"),
+        })
+
+    server_flush = flush_network_scan_storage()
+    succeeded = sum(1 for item in client_results if item.get("status") == "ok")
+    return {
+        "status": "completed",
+        "clients_requested": len(client_results),
+        "clients_succeeded": succeeded,
+        "clients_failed": len(client_results) - succeeded,
+        "client_results": client_results,
+        "server_scan_files_deleted": server_flush.get("deleted_count", 0),
+        "server_scan_files": server_flush.get("deleted_files", []),
+    }

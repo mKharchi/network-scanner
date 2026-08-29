@@ -1016,6 +1016,12 @@ def _handle_disconnect(_message, **_context):
     return {"status": "OK"}
 
 
+def _handle_flush_neighbourhood_storage(_message, **_context):
+    from neighbourhood import flush_neighbourhood_storage
+
+    return flush_neighbourhood_storage()
+
+
 ACTION_MANAGER = ActionManager()
 ACTION_MANAGER.register(ActionType.GET_SYSTEM_INFO.value, _handle_get_system_info)
 ACTION_MANAGER.register(ActionType.GET_NETWORK_INFO.value, _handle_get_network_info)
@@ -1045,6 +1051,10 @@ ACTION_MANAGER.register(
 ACTION_MANAGER.register(ActionType.PING.value, _handle_ping)
 ACTION_MANAGER.register(ActionType.DISCONNECT.value, _handle_disconnect)
 ACTION_MANAGER.register(ActionType.UPDATE_LOCATION.value, _handle_update_location)
+ACTION_MANAGER.register(
+    ActionType.FLUSH_NEIGHBOURHOOD_STORAGE.value,
+    _handle_flush_neighbourhood_storage,
+)
 
 
 def handle_command(

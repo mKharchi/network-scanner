@@ -11,6 +11,7 @@ sys.path.insert(0, str(CLIENT_DIRECTORY))
 
 from neighbourhood import (  # noqa: E402
     ensure_daily_neighbourhood,
+    flush_neighbourhood_storage,
     merge_neighbourhood_observations,
     load_daily_neighbourhood,
     normalise_dhcp_observation,
@@ -167,6 +168,16 @@ class NeighbourhoodTests(unittest.TestCase):
         self.assertEqual(len(merged), 1)
         self.assertEqual(merged[0]["rssi"], -58)
         self.assertEqual(merged[0]["switch_port"], "Gi0/1")
+
+    def test_flush_neighbourhood_storage_deletes_daily_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            storage_dir = Path(directory)
+            sample_file = storage_dir / "2026-08-29.json"
+            sample_file.write_text('{"date":"2026-08-29","observations":[]}', encoding="utf-8")
+
+            result = flush_neighbourhood_storage(storage_dir=storage_dir, reset_snapshot_state=False)
+            self.assertEqual(result["deleted_count"], 1)
+            self.assertFalse(sample_file.exists())
 
 
 if __name__ == "__main__":

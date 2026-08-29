@@ -129,9 +129,9 @@ export function DigitalTwinPage() {
       setLoading(true);
       setSceneLoadError(null);
       const [spatialData, replayData, rogueData, sensorData, eventData] = await Promise.all([
-        api.getSpatialScene(selectedFloor !== 'all' ? { floor: selectedFloor } : undefined).catch(() => null),
+        api.getSpatialScene(selectedFloor !== 'all' ? { floor: selectedFloor, active_only: true } : { active_only: true }).catch(() => null),
         api.getSpatialReplay().catch(() => null),
-        api.listRogueDevices({ min_score: 20 }).catch(() => ({ items: [], total: 0 })),
+        api.listRogueDevices({ min_score: 20, active_only: true }).catch(() => ({ items: [], total: 0 })),
         api.listSensors().catch(() => ({ items: [] })),
         api.listSpatialEvents(50).catch(() => ({ items: [] })),
       ]);
@@ -1121,7 +1121,7 @@ export function DigitalTwinPage() {
           <h1 className="page-title">3D Digital Twin</h1>
           <p
             style={{ color: "var(--text-muted)", marginTop: "var(--space-1)" }}
-          >    Drag to rotate · Shift-drag or right-drag to pan · Scroll to zoom · Click any device to select and focus it.
+          >    Drag to rotate · Shift-drag or right-drag to pan · Scroll to zoom · Click any device to select and focus it. Only endpoints seen in the last {Math.round((scene?.meta.active_filter?.max_age_seconds ?? 1800) / 60)} minutes are shown.
           </p>
         </div>
 

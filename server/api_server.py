@@ -507,7 +507,14 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
 
             if path == "/api/v1/rogue-devices" or path == "/api/rogue-devices":
                 min_score = get_int_param("min_score", 35)
-                items = api_service.list_rogue_devices(min_score=min_score)
+                active_only = query_params.get("active_only", ["false"])[0].lower() in {"1", "true", "yes"}
+                max_age_raw = query_params.get("max_age_seconds", [None])[0]
+                max_age_val = int(max_age_raw) if max_age_raw and str(max_age_raw).isdigit() else None
+                items = api_service.list_rogue_devices(
+                    min_score=min_score,
+                    active_only=active_only,
+                    max_age_seconds=max_age_val,
+                )
                 self.send_data({"items": items, "total": len(items)})
                 return
 
@@ -547,7 +554,14 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
             if path == "/api/v1/spatial/scene" or path == "/api/spatial/scene":
                 floor_str = query_params.get("floor", [None])[0]
                 floor_val = int(floor_str) if floor_str and floor_str.isdigit() else None
-                scene = api_service.get_spatial_scene(floor=floor_val)
+                active_only = query_params.get("active_only", ["true"])[0].lower() not in {"0", "false", "no"}
+                max_age_raw = query_params.get("max_age_seconds", [None])[0]
+                max_age_val = int(max_age_raw) if max_age_raw and str(max_age_raw).isdigit() else None
+                scene = api_service.get_spatial_scene(
+                    floor=floor_val,
+                    active_only=active_only,
+                    max_age_seconds=max_age_val,
+                )
                 self.send_data(scene)
                 return
 
@@ -887,6 +901,15 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 )
                 return
 
+            if path == "/api/v1/network/neighbourhood/flush":
+                from server_components.network_discovery import (
+                    run_global_neighbourhood_storage_flush,
+                )
+
+                result = run_global_neighbourhood_storage_flush()
+                self.send_data(result, status_code=200)
+                return
+
             if path == "/api/v1/network/neighbourhood/collections":
                 from server_components.network_discovery import (
                     run_global_neighbourhood_collection,
@@ -898,6 +921,7 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     "status": "started" if created else "already_running",
                 }
                 self.send_data(response, status_code=202 if created else 200)
+                return
             if path == "/api/v1/sensors" or path == "/api/sensors":
                 payload = self._read_json_payload()
                 if payload is None:

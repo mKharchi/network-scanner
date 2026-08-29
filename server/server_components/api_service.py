@@ -1498,6 +1498,13 @@ def get_latest_scan() -> Optional[Dict[str, Any]]:
     return None
 
 
+def flush_neighbourhood_storage() -> Dict[str, Any]:
+    """Delete client neighbourhood caches and server scan JSON snapshots."""
+    from server_components.network_discovery import run_global_neighbourhood_storage_flush
+
+    return run_global_neighbourhood_storage_flush()
+
+
 def list_scans(from_date: Optional[str] = None, to_date: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
     """List historical completed scans, with at most one new file per day."""
     scan_dir = NETWORK_SCAN_STORAGE_DIR
@@ -1625,6 +1632,10 @@ def _parse_scan_file(file_path: Path) -> Optional[Dict[str, Any]]:
                 "sources": d.get("sources", ["SERVER_SCAN"]),
             })
 
+        from server_components.device_recency import filter_active_devices
+        total_in_snapshot = len(formatted_devices)
+        active_devices, active_cutoff_at, active_window = filter_active_devices(formatted_devices)
+
         net_ctx = data.get("network")
         if isinstance(net_ctx, str):
             net_obj = {"interface": "default", "local_ip": None, "network": net_ctx, "gateway": None}
@@ -1638,8 +1649,11 @@ def _parse_scan_file(file_path: Path) -> Optional[Dict[str, Any]]:
                 "id": file_path.stem,
                 "completed_at": data.get("completed_at", ""),
                 "network": net_obj,
-                "devices_found": data.get("devices_found", len(formatted_devices)),
-                "devices": formatted_devices,
+                "devices_found": len(active_devices),
+                "devices_total_in_snapshot": total_in_snapshot,
+                "active_window_seconds": active_window,
+                "active_cutoff": active_cutoff_at.isoformat(),
+                "devices": active_devices,
             }
         }
     except Exception:
@@ -1652,9 +1666,14 @@ def list_network_devices(
     offset: int = 0,
 ) -> Dict[str, Any]:
     """Return a paginated list of all known network devices from the database."""
+    from server_components.device_recency import active_cutoff, get_device_active_max_age_seconds, is_timestamp_active
+
     conn = get_connection()
     if not conn:
-        return {"devices": [], "total": 0}
+        return {"devices": [], "total": 0, "active_window_seconds": get_device_active_max_age_seconds()}
+
+    active_window = get_device_active_max_age_seconds()
+    cutoff = active_cutoff(max_age_seconds=active_window)
 
     try:
         cursor = conn.cursor(dictionary=True)
@@ -1703,9 +1722,16 @@ def list_network_devices(
                 "managed_client_id": row["managed_client_id"],
                 "first_seen": _iso_utc(row["first_seen"]),
                 "last_seen": _iso_utc(row["last_seen"]),
+                "is_active": is_timestamp_active(row["last_seen"], cutoff=cutoff),
             })
 
-        return {"devices": devices, "total": total, "limit": limit, "offset": offset}
+        return {
+            "devices": devices,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "active_window_seconds": active_window,
+        }
     finally:
         conn.close()
 
@@ -2308,10 +2334,19 @@ def get_device_spatial_history(device_identifier: Any, limit: int = 50) -> List[
     return spatial_engine.get_device_location_history(device_identifier, limit=limit)
 
 
-def list_rogue_devices(min_score: int = 35) -> List[Dict[str, Any]]:
+def list_rogue_devices(
+    min_score: int = 35,
+    *,
+    active_only: bool = False,
+    max_age_seconds: Optional[int] = None,
+) -> List[Dict[str, Any]]:
     """List rogue device candidates and unmanaged endpoints sorted by threat score."""
     from server_components import spatial_engine
-    return spatial_engine.list_rogue_devices(min_score=min_score)
+    return spatial_engine.list_rogue_devices(
+        min_score=min_score,
+        active_only=active_only,
+        max_age_seconds=max_age_seconds,
+    )
 
 
 def get_rogue_device_detail(device_identifier: Any) -> Optional[Dict[str, Any]]:
@@ -2339,10 +2374,19 @@ def trigger_spatial_scan_evaluation() -> List[Dict[str, Any]]:
     return spatial_engine.evaluate_all_devices()
 
 
-def get_spatial_scene(floor: Optional[int] = None) -> Dict[str, Any]:
+def get_spatial_scene(
+    floor: Optional[int] = None,
+    *,
+    active_only: bool = True,
+    max_age_seconds: Optional[int] = None,
+) -> Dict[str, Any]:
     """Retrieve full 3D digital twin scene graph for physical/AR rendering."""
     from server_components import spatial_engine
-    return spatial_engine.get_spatial_scene(floor=floor)
+    return spatial_engine.get_spatial_scene(
+        floor=floor,
+        active_only=active_only,
+        max_age_seconds=max_age_seconds,
+    )
 
 
 def get_spatial_topology() -> Dict[str, Any]:
