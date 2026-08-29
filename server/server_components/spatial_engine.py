@@ -1501,9 +1501,13 @@ def get_spatial_scene(
 
         # 2. Fetch sensors
         sensor_query = """
-            SELECT s.*, l.label AS loc_label, l.floor AS loc_floor, l.z AS loc_z
+            SELECT s.*, l.label AS loc_label, l.floor AS loc_floor, l.z AS loc_z,
+                   c.mac AS sensor_client_mac, c.ip AS sensor_client_ip,
+                   c.client_id AS sensor_client_code,
+                   c.hostname AS sensor_client_hostname
             FROM sensors s
             LEFT JOIN locations l ON l.id = s.location_id
+            LEFT JOIN clients c ON c.id = s.client_id
             WHERE UPPER(COALESCE(s.status, 'ONLINE')) = 'ONLINE'
         """
         cursor.execute(sensor_query)
@@ -1511,6 +1515,12 @@ def get_spatial_scene(
 
         nodes = []
         node_ids = set()
+        sensor_macs = set()
+        sensor_client_codes = set()
+        sensor_hostnames = set()
+
+        def _normalise_identity(value: Any) -> str:
+            return str(value or "").strip().replace("-", ":").casefold()
 
         # Add Gateway & Core Switch Infrastructure nodes
         gateway_node = {
@@ -1609,6 +1619,9 @@ def get_spatial_scene(
                 "status": "online" if str(s.get("status") or "ONLINE").upper() == "ONLINE" else "offline",
                 "risk": "low",
                 "confidence": 1.0,
+                "ip": s.get("sensor_client_ip"),
+                "mac": s.get("sensor_client_mac"),
+                "vendor": "Monitoring Sensor",
                 "location_label": s.get("loc_label") or "Zone Sensor",
                 "is_sensor": True,
                 "is_rogue": False,
@@ -1617,10 +1630,19 @@ def get_spatial_scene(
                     "sensor_type": s.get("sensor_type"),
                     "floor": sensor_floor,
                     "capabilities": caps or ["arp", "dhcp", "rssi"],
+                    "sensor_id": s.get("sensor_id"),
+                    "client_id": s.get("sensor_client_code"),
+                    "client_hostname": s.get("sensor_client_hostname"),
                 },
             }
             nodes.append(sensor_node)
             node_ids.add(s_id)
+            if s.get("sensor_client_mac"):
+                sensor_macs.add(_normalise_identity(s.get("sensor_client_mac")))
+            if s.get("sensor_client_code"):
+                sensor_client_codes.add(_normalise_identity(s.get("sensor_client_code")))
+            if s.get("sensor_client_hostname"):
+                sensor_hostnames.add(_normalise_identity(s.get("sensor_client_hostname")))
 
         # 4. Add active registered clients (workstations / managed endpoints)
         for c in active_clients:
@@ -1705,9 +1727,19 @@ def get_spatial_scene(
             if not dev_id:
                 continue
 
-            # Skip if this network device is already represented by a registered client with same MAC
+            # Skip if this network device is already represented by a registered
+            # client or endpoint sensor. A sensor-backed client must remain one
+            # spatial node, not a sensor plus a duplicate threat endpoint.
             mac = d.get("mac_address")
-            if any(n.get("mac") == mac for n in nodes if n.get("mac")):
+            normalized_mac = _normalise_identity(mac)
+            normalized_hostname = _normalise_identity(d.get("hostname"))
+            managed_client_code = _normalise_identity(d.get("managed_client_id"))
+            if (
+                any(_normalise_identity(n.get("mac")) == normalized_mac for n in nodes if n.get("mac"))
+                or (normalized_mac and normalized_mac in sensor_macs)
+                or (managed_client_code and managed_client_code in sensor_client_codes)
+                or (normalized_hostname and normalized_hostname in sensor_hostnames)
+            ):
                 continue
 
             d_node_id = f"dev-{dev_id}"
