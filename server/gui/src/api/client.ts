@@ -1334,7 +1334,58 @@ export const api = {
       ...(params?.to ? { to: params.to } : {}),
       ...(params?.interval ? { interval: String(params.interval) } : {}),
     }),
+
+  // ── Device Intelligence & Classification ────────────────────────
+  getDeviceClassification: (deviceId: string | number) =>
+    get<DeviceClassification>(`/devices/${encodeURIComponent(String(deviceId))}/classification`),
+
+  classifyDevice: (deviceId: string | number) =>
+    post<DeviceClassification>(`/devices/${encodeURIComponent(String(deviceId))}/classify`),
+
+  setDeviceHumanLabel: (deviceId: string | number, label: string, notes?: string, confirmedBy?: string) =>
+    post<DeviceClassification>(`/devices/${encodeURIComponent(String(deviceId))}/label`, {
+      label,
+      notes,
+      confirmed_by: confirmedBy,
+    }),
+
+  getClassificationReviewQueue: (limit?: number) =>
+    get<{ items: any[]; total: number }>("/classification/review", limit ? { limit: String(limit) } : undefined),
+
+  getClassificationStats: () =>
+    get<ClassificationStats>("/classification/stats"),
+
+  retrainClassificationModel: () =>
+    post<any>("/classification/retrain"),
 };
+
+export interface DeviceClassification {
+  device_id: number;
+  predicted_class: string;
+  confidence: number;
+  source: 'ML' | 'RULE' | 'HUMAN' | 'HYBRID';
+  model_version: string;
+  status: 'ACTIVE' | 'NEEDS_REVIEW';
+  probabilities?: Record<string, number>;
+  evidence?: string[];
+  rule_prediction?: string;
+  ml_prediction?: string;
+  classified_at?: string;
+  updated_at?: string;
+}
+
+export interface ClassificationStats {
+  total_devices: number;
+  total_classified: number;
+  class_distribution: Record<string, number>;
+  high_confidence_count: number;
+  medium_confidence_count: number;
+  low_confidence_count: number;
+  needs_review_count: number;
+  average_confidence: number;
+  human_labels_count: number;
+  model_version: string;
+}
 
 export const apiClient = api;
 

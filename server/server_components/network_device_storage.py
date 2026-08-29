@@ -222,6 +222,15 @@ def _store_observations(reporter_mac, neighbours, source_type, *, observed_at=No
         except Exception as spatial_err:
             LOGGER.warning("Spatial triangulation evaluation skipped: %s", spatial_err)
 
+        # Trigger automatic ML device classification for newly observed devices
+        try:
+            from server_components.device_intelligence import get_device_intelligence_service
+            dev_intel = get_device_intelligence_service()
+            for dev_id in updated_device_ids:
+                dev_intel.classify_device(dev_id)
+        except Exception as intel_err:
+            LOGGER.debug("Automatic device classification skipped: %s", intel_err)
+
         return len(neighbours)
     except Exception:
         if connection:
