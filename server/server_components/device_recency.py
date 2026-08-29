@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable, List, Optional, Sequence, Tuple
 
 # Default live window for twin, latest-scan, and rogue overlays.
-DEFAULT_DEVICE_ACTIVE_MAX_AGE_SECONDS = 1800  # 30 minutes
+DEFAULT_DEVICE_ACTIVE_MAX_AGE_SECONDS = 300  # 10 minutes
 
 
 def get_device_active_max_age_seconds() -> int:
