@@ -14,6 +14,7 @@ import { Card, MetricCard } from '../components/Card';
 import { Badge } from '../components/Badge';
 import { Notice } from '../components/States';
 import { Button } from '../components/Button';
+import '../styles/operations.css';
 import {
   TbEye,
   TbRadar,
@@ -1115,18 +1116,16 @@ export function DigitalTwinPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', height: '100%' }}>
-      {/* Top Header & Mode Switcher */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--space-4)' }}>
-        <div >
-          <h1 className="page-title">3D Digital Twin</h1>
-          <p
-            style={{ color: "var(--text-muted)", marginTop: "var(--space-1)" }}
-          >    Drag to rotate · Shift-drag or right-drag to pan · Scroll to zoom · Click any device to select and focus it. Only endpoints seen in the last {Math.round((scene?.meta.active_filter?.max_age_seconds ?? 1800) / 60)} minutes are shown.
-          </p>
+      {/* Spatial command header */}
+      <div className="page-header spatial-page-header">
+        <div className="spatial-page-header__copy">
+          <span className="eyebrow eyebrow--accent">SPATIAL INTELLIGENCE / NETWORK TWIN</span>
+          <h1 className="page-title">Your infrastructure, mapped in space</h1>
+          <p style={{ color: "var(--text-muted)", marginTop: "var(--space-1)" }}>Inspect devices, sensors, threats, and connectivity in the live spatial scene. Endpoints seen within the last {Math.round((scene?.meta.active_filter?.max_age_seconds ?? 1800) / 60)} minutes are shown.</p>
         </div>
 
         {/* View Mode Switcher */}
-        <div style={{ display: 'flex', background: 'var(--color-bg-secondary)', padding: '3px', borderRadius: '8px', gap: '2px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', background: 'var(--color-bg-secondary)', padding: '3px', borderRadius: '8px', gap: '5px' }}>
           <Button
             variant={viewMode === 'physical' ? 'primary' : 'quiet'}
             size="sm"
@@ -1151,6 +1150,7 @@ export function DigitalTwinPage() {
             <TbRadar size={14} style={{ marginRight: '4px' }} />
             Threat Radar
           </Button>
+          <div style={{gridColumn: 'span 3' , width: '100%' ,   justifyContent: "center", display: 'flex', gap: '2px'}}>
           <Button
             variant={viewMode === 'traffic' ? 'primary' : 'quiet'}
             size="sm"
@@ -1166,7 +1166,7 @@ export function DigitalTwinPage() {
           >
             <TbCamera size={14} style={{ marginRight: '4px' }} />
             AR Mode
-          </Button>
+          </Button></div>
         </div>
       </div>
 

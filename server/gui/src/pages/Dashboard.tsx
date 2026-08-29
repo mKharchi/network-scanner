@@ -7,9 +7,7 @@ import { Badge, SeverityBadge, StatusBadge, ClientStatusBadge } from "../compone
 import { Button } from "../components/Button";
 import { Skeleton, ErrorState, EmptyState, Notice } from "../components/States";
 import { formatDateTime, formatRelative } from "../utils/format";
-import { TbCloudNetwork, TbDevices, TbMapPin, TbRadar, TbShieldAlert, TbCpu, TbFlame, TbTerminal2, TbCheck } from "react-icons/tb";
 import { HiOutlineSquare3Stack3D } from "react-icons/hi2";
-import { FiArrowRight, FiActivity, FiSearch, FiLayers } from "react-icons/fi";
 import "../styles/shell.css";
 import "../styles/card.css";
 
@@ -50,7 +48,7 @@ function AlertRow({ alert }: { alert: AlertModel }) {
           {alert.title}
         </div>
         <div style={{ fontSize: "var(--font-xs)", color: "var(--muted-text)", marginTop: "2px" }}>
-          Target: <span style={{ color: "#93C5FD", fontFamily: "var(--font-mono)" }}>{alert.client?.hostname ?? alert.device_id ?? "Infrastructure"}</span>
+          Target: <span style={{ color: "#93C5FD", fontFamily: "var(--font-mono)" }}>{alert.client?.hostname ?? "Infrastructure"}</span>
         </div>
       </div>
 
@@ -71,8 +69,8 @@ function ClientRow({
   client,
 }: {
   client: {
-    id: number;
-    client_id: string;
+    id: string | number;
+    database_id?: number;
     hostname: string;
     ip_address: string | null;
     mac_address: string;
@@ -120,7 +118,7 @@ function ClientRow({
       <Button
         variant="quiet"
         size="sm"
-        onClick={() => navigate(`/clients/${client.client_id}`)}
+        onClick={() => navigate(`/clients/${client.id}`)}
       >
         <span>Inspect →</span>
       </Button>
@@ -336,9 +334,9 @@ export function DashboardPage() {
           </p>
 
           <div style={{ display: "flex", gap: "var(--space-3)", flexWrap: "wrap" }}>
-            <Badge variant="solid">● {spatialScene?.nodes.length ?? "127"} NODES POSITIONED</Badge>
-            <Badge variant="solid">⌖ {spatialScene?.meta.floors.length ?? "3"} FLOORS ACTIVE</Badge>
-            <Badge variant="primary">SUB-METER ACCURACY</Badge>
+            <Badge variant="info">● {spatialScene?.nodes.length ?? 0} NODES POSITIONED</Badge>
+            <Badge variant="info">⌖ {spatialScene?.meta.floors.length ?? 0} FLOORS ACTIVE</Badge>
+            <Badge variant="primary">SPATIAL VIEW</Badge>
           </div>
         </div>
 
@@ -375,7 +373,7 @@ export function DashboardPage() {
         >
           {data.recent_alerts.length === 0 ? (
             <EmptyState
-              icon={<TbCheck size={36} style={{ color: "#34D399" }} />}
+              icon="✓"
               title="Infrastructure Secure"
               body="No critical anomalies, rogue intrusions, or degraded clients requiring immediate operator review."
             />
@@ -399,7 +397,7 @@ export function DashboardPage() {
         >
           {data.online_clients.length === 0 ? (
             <EmptyState
-              icon={<TbCpu size={36} />}
+              icon="◈"
               title="No Client Agents Reporting"
               body="Ensure agent processes are running on your managed Linux, macOS, or Windows hosts."
             />
@@ -436,12 +434,12 @@ export function DashboardPage() {
             }}
           >
             {[
-              { label: "Windows Workstation", count: classificationStats?.class_distribution?.["WINDOWS_WORKSTATION"] ?? 48, icon: "💻" },
-              { label: "Android Mobile", count: classificationStats?.class_distribution?.["ANDROID_MOBILE"] ?? 34, icon: "📱" },
-              { label: "Apple Devices", count: (classificationStats?.class_distribution?.["APPLE_MOBILE"] ?? 18) + (classificationStats?.class_distribution?.["APPLE_WORKSTATION"] ?? 12), icon: "🍏" },
-              { label: "Network Hardware", count: classificationStats?.class_distribution?.["NETWORK_DEVICE"] ?? 8, icon: "🌐" },
-              { label: "Printers", count: classificationStats?.class_distribution?.["PRINTER"] ?? 6, icon: "🖨️" },
-              { label: "Smart TV / IoT", count: (classificationStats?.class_distribution?.["SMART_TV_MEDIA"] ?? 5) + (classificationStats?.class_distribution?.["IOT_DEVICE"] ?? 4), icon: "📺" },
+              { label: "Windows Workstation", count: classificationStats?.class_distribution?.["WINDOWS_WORKSTATION"] ?? 48, icon: "" },
+              { label: "Android Mobile", count: classificationStats?.class_distribution?.["ANDROID_MOBILE"] ?? 34, icon: "" },
+              { label: "Apple Devices", count: (classificationStats?.class_distribution?.["APPLE_MOBILE"] ?? 18) + (classificationStats?.class_distribution?.["APPLE_WORKSTATION"] ?? 12), icon: "" },
+              { label: "Network Hardware", count: classificationStats?.class_distribution?.["NETWORK_DEVICE"] ?? 8, icon: "" },
+              { label: "Printers", count: classificationStats?.class_distribution?.["PRINTER"] ?? 6, icon: "" },
+              { label: "Smart TV / IoT", count: (classificationStats?.class_distribution?.["SMART_TV_MEDIA"] ?? 5) + (classificationStats?.class_distribution?.["IOT_DEVICE"] ?? 4), icon: "" },
             ].map((cat) => (
               <div
                 key={cat.label}

@@ -7,7 +7,7 @@
   overflow-x: auto;
   border-radius: var(--radius-card);
   border: 1px solid var(--navy-border);
-  background: var(--deep-card-navy);
+    background: rgba(8, 19, 41, 0.6);
   box-shadow: var(--shadow-card);
 }
 
@@ -20,7 +20,7 @@
 
 /* Header */
 .data-table thead {
-  background: rgba(8, 19, 41, 0.6);
+  background: var(--deep-card-navy);
   border-bottom: 1px solid var(--navy-border);
   position: sticky;
   top: 0;

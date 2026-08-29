@@ -17,6 +17,8 @@ import {
   Notice,
 } from "../components/States";
 import { formatDateTime, formatRelative, normalizeMac } from "../utils/format";
+import { MetricCard } from "../components/Card";
+import "../styles/operations.css";
 
 export function LatestScanPage() {
   const navigate = useNavigate();
@@ -215,9 +217,10 @@ export function LatestScanPage() {
 
   return (
     <div>
-      <div className="page-header">
+      <div className="page-header operations-page-header">
         <div>
-          <h1 className="page-title">Latest Network Scan</h1>
+          <span className="eyebrow eyebrow--accent">NETWORK / LIVE DISCOVERY</span>
+          <h1 className="page-title">Latest network scan</h1>
           <p className="page-description">
             {scan
               ? `Completed ${formatDateTime(scan.completed_at)} · Showing ${scan.devices_found} active device(s) seen in the last ${Math.round(((scan as { active_window_seconds?: number }).active_window_seconds ?? 1800) / 60)} minutes`
@@ -247,6 +250,13 @@ export function LatestScanPage() {
             Refresh
           </Button>
         </div>
+      </div>
+
+      <div className="operations-metric-grid">
+        <MetricCard label="Devices found" value={scan?.devices_found ?? 0} context="In the latest completed scan" />
+        <MetricCard label="Managed" value={rawDevices.filter((device) => device.is_managed).length} valueVariant="info" context="Linked to monitoring clients" />
+        <MetricCard label="Unmanaged" value={rawDevices.filter((device) => !device.is_managed).length} valueVariant="warning" context="Needs investigation" />
+        <MetricCard label="Showing" value={filteredDevices.length} context="Matching current filters" />
       </div>
 
       {neighbourhoodCollection && (

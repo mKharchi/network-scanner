@@ -5,6 +5,8 @@ import { Badge, BadgeVariant } from "../components/Badge";
 import { Button } from "../components/Button";
 import { useToast } from "../hooks/useToast";
 import { formatDateTime } from "../utils/format";
+import { MetricCard } from "../components/Card";
+import "../styles/operations.css";
 
 export function RogueDevicesPage() {
   const { addToast } = useToast();
@@ -81,17 +83,12 @@ export function RogueDevicesPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
-      {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "var(--space-4)" }}>
+      {/* Security intelligence header */}
+      <div className="page-header operations-page-header">
         <div>
-          <h1 className="page-title">
-             Spatial-Temporal Rogue Device Triangulation
-          </h1>
-           <p
-            style={{ color: "var(--text-muted)", marginTop: "var(--space-1)" }}
-          > 
-            Real-time multilateration, physical location estimation, and explainable threat scoring.
-          </p>
+          <span className="eyebrow eyebrow--accent">SECURITY / SPATIAL INTELLIGENCE</span>
+          <h1 className="page-title">Rogue device investigation</h1>
+          <p className="page-description">Explainable threat scoring, physical location estimation, and sensor evidence for suspicious endpoints.</p>
         </div>
         <div style={{ display: "flex", gap: "var(--space-2)" }}>
           <Button size="sm" variant="secondary" onClick={fetchData} disabled={loading}>
@@ -104,56 +101,12 @@ export function RogueDevicesPage() {
       </div>
 
       {/* Summary Cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "var(--space-4)" }}>
-        <Card>
-          <div style={{ color: "var(--text-muted)", fontSize: "var(--font-sm)", fontWeight: 600 }}>
-            ROGUE CANDIDATES
-          </div>
-          <div style={{ fontSize: "var(--font-3xl)", fontWeight: 700, color: rogueDevices.length > 0 ? "var(--color-warning-500, #f59e0b)" : "var(--text-primary)" }}>
-            {rogueDevices.length}
-          </div>
-          <div style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>
-            Unmanaged / suspicious endpoints
-          </div>
-        </Card>
-
-        <Card>
-          <div style={{ color: "var(--text-muted)", fontSize: "var(--font-sm)", fontWeight: 600 }}>
-            HIGH / CRITICAL THREATS
-          </div>
-          <div style={{ fontSize: "var(--font-3xl)", fontWeight: 700, color: criticalCount > 0 ? "var(--color-danger-500, #ef4444)" : "var(--color-success-500, #10b981)" }}>
-            {criticalCount}
-          </div>
-          <div style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>
-            Restricted zone or randomized MAC
-          </div>
-        </Card>
-
-        <Card>
-          <div style={{ color: "var(--text-muted)", fontSize: "var(--font-sm)", fontWeight: 600 }}>
-            GRID SENSORS
-          </div>
-          <div style={{ fontSize: "var(--font-3xl)", fontWeight: 700, color: "var(--color-primary-500, #3b82f6)" }}>
-            {activeSensorsCount} / {sensors.length}
-          </div>
-          <div style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>
-            Endpoint & infrastructure probes
-          </div>
-        </Card>
-
-        <Card>
-          <div style={{ color: "var(--text-muted)", fontSize: "var(--font-sm)", fontWeight: 600 }}>
-            LOCATION TRANSITIONS
-          </div>
-          <div style={{ fontSize: "var(--font-3xl)", fontWeight: 700, color: "var(--text-primary)" }}>
-            {events.length}
-          </div>
-          <div style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>
-            Recorded spatial movement events
-          </div>
-        </Card>
+      <div className="operations-metric-grid">
+        <MetricCard label="Rogue candidates" value={rogueDevices.length} valueVariant={rogueDevices.length > 0 ? "warning" : "success"} context="Unmanaged or suspicious endpoints" />
+        <MetricCard label="High / critical" value={criticalCount} valueVariant={criticalCount > 0 ? "danger" : "success"} context="Requires operator investigation" />
+        <MetricCard label="Active sensors" value={`${activeSensorsCount} / ${sensors.length}`} valueVariant="info" context="Endpoint and infrastructure probes" />
+        <MetricCard label="Location transitions" value={events.length} context="Recorded spatial movement events" />
       </div>
-
       {/* Tabs */}
       <div style={{ display: "flex", gap: "var(--space-2)", borderBottom: "1px solid var(--border)" }}>
         <button
