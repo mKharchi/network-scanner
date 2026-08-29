@@ -160,6 +160,34 @@ class NetworkDeviceStorageTests(unittest.TestCase):
         self.assertEqual(observation[:5], (13, "CLIENT_ARP", 7, 21, "172.16.0.102"))
         self.assertEqual(observation[6:8], ("dynamic", datetime(2026, 8, 17, 10, 0, 0)))
 
+    def test_store_prefers_neighbour_observed_at_over_batch_timestamp(self):
+        connection = FakeConnection()
+        original_get_connection = network_device_storage.get_connection
+        network_device_storage.get_connection = lambda: connection
+        try:
+            stored = network_device_storage.store_client_neighbour_observations(
+                "AA:BB:CC:DD:EE:FF",
+                [
+                    {
+                        "ip_address": "172.16.0.102",
+                        "mac_address": "11:22:33:44:55:66",
+                        "entry_type": "dynamic",
+                        "observed_at": "2026-08-17T08:30:00+00:00",
+                    }
+                ],
+                observed_at=datetime(2026, 8, 17, 10, 0, 0),
+            )
+        finally:
+            network_device_storage.get_connection = original_get_connection
+
+        self.assertEqual(stored, 1)
+        observation = next(
+            params
+            for query, params in connection.cursor_instance.executed
+            if "INSERT INTO network_device_observations" in query
+        )
+        self.assertEqual(observation[7], datetime(2026, 8, 17, 8, 30, 0))
+
     def test_handler_uses_registered_connection_mac_not_payload_identity(self):
         received = {}
 

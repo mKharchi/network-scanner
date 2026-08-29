@@ -443,6 +443,13 @@ export interface SpatialSceneMeta {
   total_nodes: number;
   total_edges: number;
   total_threats: number;
+  active_filter?: {
+    enabled: boolean;
+    max_age_seconds: number;
+    cutoff: string | null;
+    total_before_filter: number;
+    total_after_filter: number;
+  };
   bounds: {
     min_x: number;
     max_x: number;
@@ -628,6 +635,7 @@ export interface NetworkDeviceSummary {
   managed_client_id: string | null;
   first_seen: string | null;
   last_seen: string | null;
+  is_active?: boolean;
 }
 
 export interface NetworkDeviceListResponse {
@@ -635,6 +643,7 @@ export interface NetworkDeviceListResponse {
   total: number;
   limit: number;
   offset: number;
+  active_window_seconds?: number;
 }
 
 export interface GlobalNetworkScan {
@@ -1163,6 +1172,37 @@ export const api = {
       return (await resp.json()).data as GlobalNeighbourhoodCollection;
     })(),
 
+  flushNeighbourhoodStorage: () =>
+    (async () => {
+      const baseWithApi = API_ORIGIN.replace(/\/+$/, "") + BASE;
+      const resp = await fetch(baseWithApi + "/network/neighbourhood/flush", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+      });
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => null);
+        throw new ApiError(
+          body?.error?.code ?? "UNKNOWN_ERROR",
+          body?.error?.message ?? `HTTP ${resp.status}`,
+          resp.status,
+        );
+      }
+      return (await resp.json()).data as {
+        status: string;
+        clients_requested: number;
+        clients_succeeded: number;
+        clients_failed: number;
+        server_scan_files_deleted: number;
+        client_results: Array<{
+          client_id: string;
+          hostname?: string;
+          status: string;
+          deleted_count?: number;
+          message?: string;
+        }>;
+      };
+    })(),
+
   getGlobalNeighbourhoodCollection: (collectionId: string) =>
     get<GlobalNeighbourhoodCollection>(
       `/network/neighbourhood/collections/${encodeURIComponent(collectionId)}`,
@@ -1244,9 +1284,11 @@ export const api = {
   createSensor: (payload: Partial<SpatialSensor>) =>
     post<SpatialSensor>("/sensors", payload),
 
-  listRogueDevices: (params?: { min_score?: number }) =>
+  listRogueDevices: (params?: { min_score?: number; active_only?: boolean; max_age_seconds?: number }) =>
     get<{ items: RogueDeviceSummary[]; total: number }>("/rogue-devices", {
       ...(params?.min_score != null ? { min_score: String(params.min_score) } : {}),
+      ...(params?.active_only ? { active_only: "true" } : {}),
+      ...(params?.max_age_seconds != null ? { max_age_seconds: String(params.max_age_seconds) } : {}),
     }),
 
   getRogueDeviceDetail: (deviceId: string | number) =>
@@ -1273,9 +1315,11 @@ export const api = {
     post<{ status: string; evaluated_devices: number; items: any[] }>("/spatial/evaluate"),
 
   // ── 3D Digital Twin & AR Scene Visualization ────────────────────
-  getSpatialScene: (params?: { floor?: number }) =>
+  getSpatialScene: (params?: { floor?: number; active_only?: boolean; max_age_seconds?: number }) =>
     get<SpatialSceneResponse>("/spatial/scene", {
       ...(params?.floor != null ? { floor: String(params.floor) } : {}),
+      ...(params?.active_only === false ? { active_only: "false" } : {}),
+      ...(params?.max_age_seconds != null ? { max_age_seconds: String(params.max_age_seconds) } : {}),
     }),
 
   getSpatialTopology: () =>

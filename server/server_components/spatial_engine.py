@@ -1234,8 +1234,16 @@ def get_device_location_history(device_identifier: Any, limit: int = 50, conn=No
             conn.close()
 
 
-def list_rogue_devices(min_score: int = 35, conn=None) -> List[Dict[str, Any]]:
+def list_rogue_devices(
+    min_score: int = 35,
+    *,
+    active_only: bool = False,
+    max_age_seconds: Optional[int] = None,
+    conn=None,
+) -> List[Dict[str, Any]]:
     """List all detected rogue candidates or unmanaged devices with elevated risk."""
+    from server_components.device_recency import active_cutoff, get_device_active_max_age_seconds
+
     try:
         from database import get_connection
     except ImportError:
@@ -1249,8 +1257,19 @@ def list_rogue_devices(min_score: int = 35, conn=None) -> List[Dict[str, Any]]:
 
     cursor = _get_cursor(conn)
     try:
+        params: List[Any] = [min_score]
+        active_clause = ""
+        if active_only:
+            window = (
+                get_device_active_max_age_seconds()
+                if max_age_seconds is None
+                else max(1, int(max_age_seconds))
+            )
+            active_clause = " AND d.last_seen >= %s"
+            params.append(active_cutoff(max_age_seconds=window).replace(tzinfo=None))
+
         cursor.execute(
-            """
+            f"""
             SELECT d.id AS device_id, d.mac_address, d.ip_address, d.hostname, d.vendor,
                    d.first_seen, d.last_seen,
                    r.rogue_score, r.is_rogue, r.classification, r.risk_level, r.reasons,
@@ -1260,10 +1279,10 @@ def list_rogue_devices(min_score: int = 35, conn=None) -> List[Dict[str, Any]]:
             JOIN network_devices d ON d.id = r.device_id
             LEFT JOIN device_location_estimates e ON e.device_id = d.id
             LEFT JOIN locations l ON l.id = e.location_id
-            WHERE r.rogue_score >= %s
+            WHERE r.rogue_score >= %s{active_clause}
             ORDER BY r.rogue_score DESC, d.last_seen DESC
             """,
-            (min_score,),
+            tuple(params),
         )
         devices = []
         for r in _to_dict_rows(cursor.fetchall(), cursor):
@@ -1391,13 +1410,29 @@ def list_spatial_events(limit: int = 50, conn=None) -> List[Dict[str, Any]]:
 # ============================================================
 
 
-def get_spatial_scene(floor: Optional[int] = None, conn=None) -> Dict[str, Any]:
+def get_spatial_scene(
+    floor: Optional[int] = None,
+    *,
+    active_only: bool = True,
+    max_age_seconds: Optional[int] = None,
+    conn=None,
+) -> Dict[str, Any]:
     """Generate the complete 3D digital twin scene graph for WebGL and AR rendering.
 
     Combines the physical environment hierarchy (rooms, zones, seats), spatial nodes
     (workstations, servers, switches, sensors, rogue devices), network topology links,
     and active threat radar markers into a unified normalized JSON schema.
+
+    When ``active_only`` is true, only endpoints observed inside the configured
+    recency window are included as live nodes.
     """
+    from server_components.device_recency import (
+        active_cutoff,
+        active_filter_metadata,
+        get_device_active_max_age_seconds,
+        is_client_record_active,
+        is_timestamp_active,
+    )
     try:
         from database import get_connection
     except ImportError:
@@ -1411,6 +1446,15 @@ def get_spatial_scene(floor: Optional[int] = None, conn=None) -> Dict[str, Any]:
 
     cursor = _get_cursor(conn)
     try:
+        active_window = (
+            get_device_active_max_age_seconds()
+            if max_age_seconds is None
+            else max(1, int(max_age_seconds))
+        )
+        active_cutoff_at = (
+            active_cutoff(max_age_seconds=active_window) if active_only else None
+        )
+
         # 1. Fetch physical locations
         loc_query = "SELECT * FROM locations"
         loc_params = []
@@ -1511,8 +1555,37 @@ def get_spatial_scene(floor: Optional[int] = None, conn=None) -> Dict[str, Any]:
         nodes.append(switch_node)
         node_ids.add("node-switch-core")
 
+        active_client_db_ids: set = set()
+
+        # 3. Fetch registered clients first so sensor filtering can use active IDs.
+        client_query = """
+            SELECT c.*, l.label AS loc_label, l.x AS loc_x, l.y AS loc_y, l.z AS loc_z,
+                   l.floor AS loc_floor, l.is_restricted AS loc_restricted,
+                   nd.last_seen AS device_last_seen
+            FROM clients c
+            LEFT JOIN locations l ON l.id = c.location_id
+            LEFT JOIN network_devices nd ON nd.mac_address = c.mac
+        """
+        cursor.execute(client_query)
+        raw_clients = _to_dict_rows(cursor.fetchall(), cursor)
+        total_clients_before_filter = len(raw_clients)
+        active_clients = []
+        for c in raw_clients:
+            if active_only and active_cutoff_at is not None:
+                if not is_client_record_active(c, cutoff=active_cutoff_at):
+                    continue
+            active_client_db_ids.add(c["id"])
+            active_clients.append(c)
+
         # Add Sensors
         for s in raw_sensors:
+            if active_only and active_cutoff_at is not None:
+                client_db_id = s.get("client_id")
+                sensor_recent = is_timestamp_active(s.get("last_seen"), cutoff=active_cutoff_at)
+                if client_db_id and client_db_id not in active_client_db_ids and not sensor_recent:
+                    continue
+                if not client_db_id and not sensor_recent:
+                    continue
             s_id = f"sensor-{s['id']}"
             caps = s.get("capabilities")
             if isinstance(caps, str):
@@ -1549,16 +1622,8 @@ def get_spatial_scene(floor: Optional[int] = None, conn=None) -> Dict[str, Any]:
             nodes.append(sensor_node)
             node_ids.add(s_id)
 
-        # 3. Fetch Registered Clients (Workstations / Managed Endpoints)
-        client_query = """
-            SELECT c.*, l.label AS loc_label, l.x AS loc_x, l.y AS loc_y, l.z AS loc_z,
-                   l.floor AS loc_floor, l.is_restricted AS loc_restricted
-            FROM clients c
-            LEFT JOIN locations l ON l.id = c.location_id
-        """
-        cursor.execute(client_query)
-        raw_clients = _to_dict_rows(cursor.fetchall(), cursor)
-        for c in raw_clients:
+        # 4. Add active registered clients (workstations / managed endpoints)
+        for c in active_clients:
             c_node_id = f"client-{c['id']}"
             c_status = (c.get("status") or "online").lower()
             if c_status not in {"online", "offline", "quarantined"}:
@@ -1600,7 +1665,13 @@ def get_spatial_scene(floor: Optional[int] = None, conn=None) -> Dict[str, Any]:
             nodes.append(client_node)
             node_ids.add(c_node_id)
 
-        # 4. Fetch Network Devices, Spatial Estimates & Rogue Assessments
+        total_network_devices_before_filter = 0
+        if active_only:
+            cursor.execute("SELECT COUNT(*) AS total FROM network_devices")
+            count_row = _to_dict_row(cursor.fetchone(), cursor) or {}
+            total_network_devices_before_filter = int(count_row.get("total") or 0)
+
+        # 5. Fetch network devices, spatial estimates & rogue assessments
         dev_query = """
             SELECT d.id AS device_id, d.id AS id, d.mac_address, d.ip_address, d.hostname, d.vendor,
                    d.first_seen, d.last_seen,
@@ -1614,10 +1685,19 @@ def get_spatial_scene(floor: Optional[int] = None, conn=None) -> Dict[str, Any]:
             LEFT JOIN device_location_estimates e ON e.device_id = d.id
             LEFT JOIN locations l ON l.id = e.location_id
             LEFT JOIN rogue_device_assessments r ON r.device_id = d.id
-            ORDER BY COALESCE(r.rogue_score, 0) DESC, d.last_seen DESC
         """
-        cursor.execute(dev_query)
+        dev_params: List[Any] = []
+        if active_only and active_cutoff_at is not None:
+            dev_query += " WHERE d.last_seen >= %s"
+            dev_params.append(active_cutoff_at.replace(tzinfo=None))
+        dev_query += " ORDER BY COALESCE(r.rogue_score, 0) DESC, d.last_seen DESC"
+        cursor.execute(dev_query, tuple(dev_params))
         raw_devices = _to_dict_rows(cursor.fetchall(), cursor)
+        total_devices_before_filter = (
+            total_clients_before_filter + total_network_devices_before_filter
+            if active_only
+            else total_clients_before_filter + len(raw_devices)
+        )
 
         threats = []
         for d in raw_devices:
@@ -1730,7 +1810,7 @@ def get_spatial_scene(floor: Optional[int] = None, conn=None) -> Dict[str, Any]:
             edge_id += 1
 
         # Connect Clients to Switch
-        for c in raw_clients:
+        for c in active_clients:
             c_node_id = f"client-{c['id']}"
             if c_node_id in node_ids:
                 edges.append({
@@ -1788,6 +1868,13 @@ def get_spatial_scene(floor: Optional[int] = None, conn=None) -> Dict[str, Any]:
             "total_nodes": len(nodes),
             "total_edges": len(edges),
             "total_threats": len(threats),
+            "active_filter": active_filter_metadata(
+                enabled=active_only,
+                cutoff=active_cutoff_at,
+                max_age_seconds=active_window,
+                total_before=total_devices_before_filter,
+                total_after=len(nodes),
+            ),
             "bounds": {
                 "min_x": min(all_x) if all_x else 0.0,
                 "max_x": max(all_x) if all_x else 50.0,
