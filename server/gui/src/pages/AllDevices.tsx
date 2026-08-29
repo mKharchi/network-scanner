@@ -9,7 +9,9 @@ import { useFetch } from "../hooks/useFetch";
 import { useToast } from "../hooks/useToast";
 import { ClassificationBadge, Badge } from "../components/Badge";
 import { Button } from "../components/Button";
+import { MetricCard } from "../components/Card";
 import { DataTable, type Column } from "../components/DataTable";
+import "../styles/devices.css";
 import {
   SkeletonTable,
   ErrorState,
@@ -262,36 +264,41 @@ export function AllDevicesPage() {
 
   return (
     <div>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">All Known Devices</h1>
+      <div className="page-header device-page-header">
+        <div className="device-page-header__heading">
+          <span className="eyebrow eyebrow--accent">NETWORK INTELLIGENCE / DEVICES</span>
+          <h1 className="page-title">Device intelligence</h1>
           <p className="page-description">
-            Comprehensive registry of all devices discovered across scans ({totalCount} total). {activeCount} active in the last {activeWindowMinutes} minutes.
+            Explore every observed device, its ownership, activity window, and discovery evidence.
           </p>
         </div>
-        <div style={{ display: "flex", gap: "var(--space-2)", alignItems: "center" }}>
+        <div className="device-page-actions">
           <Button
             variant="primary"
-            size="md"
+            size="sm"
             disabled={isCollectingNeighbourhoods || isFlushingNeighbourhoods}
             onClick={handleCollectAllNeighbourhoods}
           >
             {isCollectingNeighbourhoods
               ? "Collecting Client Neighbourhoods…"
-              : "Collect All Client Neighbourhoods"}
+              : "Collect Neighbourhoods →"}
           </Button>
-          <Button
+             <Button
             variant="danger"
-            size="md"
+            size="sm"
             disabled={isCollectingNeighbourhoods || isFlushingNeighbourhoods}
             onClick={handleFlushNeighbourhoodCaches}
           >
-            {isFlushingNeighbourhoods ? "Flushing Caches…" : "Flush Neighbourhood Caches"}
-          </Button>
-          <Button variant="quiet" size="sm" onClick={refetch}>
-            Refresh
+            {isFlushingNeighbourhoods ? "Flushing…" : "Flush caches"}
           </Button>
         </div>
+      </div>
+
+      <div className="device-metric-grid" aria-label="Device overview">
+        <MetricCard label="Observed devices" value={totalCount} context="Across the current registry" />
+        <MetricCard label="Active now" value={activeCount} valueVariant="success" context={`Seen within ${activeWindowMinutes} minutes`} />
+        <MetricCard label="Managed" value={rawDevices.filter((d) => d.is_managed).length} valueVariant="info" context="Linked to a client agent" />
+        <MetricCard label="Unmanaged" value={rawDevices.filter((d) => !d.is_managed).length} valueVariant="warning" context="Needs investigation or context" />
       </div>
 
       {neighbourhoodCollection && (
@@ -324,24 +331,14 @@ export function AllDevicesPage() {
         </Notice>
       )}
 
-      {/* Filter and Search Bar */}
-      <div
-        style={{
-          display: "flex",
-          gap: "var(--space-3)",
-          marginBottom: "var(--space-5)",
-          flexWrap: "wrap",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            borderRadius: "var(--radius)",
-            border: "1px solid var(--border)",
-            overflow: "hidden",
-            background: "var(--surface)",
-          }}
-        >
+      <div className="device-toolbar">
+        <div className="device-toolbar__heading">
+          <span className="eyebrow">DEVICE REGISTRY</span>
+          <strong>{filteredDevices.length} matching devices</strong>
+        </div>
+        <div className="device-filter-group" role="group" aria-label="Device classification">
+          <span className="sr-only">Classification</span>
+          <div className="device-filter-pills">
           {(["ALL", "MANAGED", "UNMANAGED"] as const).map((opt) => (
             <button
               key={opt}
@@ -368,26 +365,16 @@ export function AllDevicesPage() {
                   : "Unmanaged"}
             </button>
           ))}
+          </div>
         </div>
 
         <input
+          className="device-search"
           type="search"
-          placeholder="Filter by IP, MAC, hostname, or vendor…"
+          placeholder="Search IP, MAC, hostname, or vendor…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          aria-label="Filter devices"
-          style={{
-            flex: "1 1 240px",
-            padding: "0 var(--space-3)",
-            height: 36,
-            border: "1px solid var(--border)",
-            borderRadius: "var(--radius)",
-            fontFamily: "var(--font-sans)",
-            fontSize: "var(--font-sm)",
-            background: "var(--surface)",
-            color: "var(--text)",
-            outline: "none",
-          }}
+          aria-label="Search devices"
         />
       </div>
 

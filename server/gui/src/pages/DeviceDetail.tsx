@@ -6,7 +6,10 @@ import { Button } from '../components/Button';
 import { SectionCard } from '../components/Card';
 import { Skeleton, SkeletonTable, ErrorState, EmptyState, Notice } from '../components/States';
 import { DataTable, type Column } from '../components/DataTable';
+import { Badge } from '../components/Badge';
 import { formatDateTime, formatRelative, normalizeMac } from '../utils/format';
+import '../styles/devices.css';
+import '../styles/device-detail.css';
 
 interface ObservationItem {
   source_type: string;
@@ -144,72 +147,32 @@ export function DeviceDetailPage() {
         </Notice>
       )}
 
-      {/* Header */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--space-4)',
-          marginBottom: 'var(--space-6)',
-          paddingBottom: 'var(--space-4)',
-          borderBottom: '1px solid var(--border)',
-        }}
-      >
-        <div
-          style={{
-            width: 48,
-            height: 48,
-            borderRadius: 'var(--radius)',
-            background: dev.is_managed ? 'var(--primary)' : 'var(--surface-muted)',
-            color: dev.is_managed ? '#fff' : 'var(--text-muted)',
-            border: '1px solid var(--border)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 20,
-            flexShrink: 0,
-          }}
-          aria-hidden="true"
-        >
-          {dev.is_managed ? '🛡️' : '🌐'}
-        </div>
-        <div>
-          <h1
-            style={{
-              fontSize: 'var(--font-xl)',
-              fontWeight: 600,
-              fontFamily: dev.hostname ? 'var(--font-sans)' : 'var(--font-mono)',
-              marginBottom: 'var(--space-1)',
-            }}
-          >
-            {dev.hostname || normalizeMac(dev.mac_address)}
-          </h1>
-          <div
-            style={{
-              fontSize: 'var(--font-sm)',
-              color: 'var(--text-muted)',
-              marginBottom: 'var(--space-2)',
-              fontWeight: 500,
-            }}
-          >
-            Last seen: {formatDateTime(dev.last_observed_at)} ({formatRelative(dev.last_observed_at)})
-          </div>
-          <div
-            style={{
-              display: 'flex',
-              gap: 'var(--space-2)',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-            }}
-          >
-            <ClassificationBadge managed={dev.is_managed} />
-            {dev.vendor && (
-              <span style={{ fontSize: 'var(--font-xs)', color: 'var(--text-muted)' }}>
-                {dev.vendor}
-              </span>
-            )}
+      <div className="device-detail-hero">
+        <div className="device-detail-hero__identity">
+          <div className="device-detail-icon" aria-hidden="true">{dev.is_managed ? '◈' : '◌'}</div>
+          <div>
+            <span className="eyebrow eyebrow--accent">DEVICE INTELLIGENCE</span>
+            <h1 className="device-detail-title">{dev.hostname || normalizeMac(dev.mac_address)}</h1>
+            <p className="device-detail-subtitle">{dev.vendor || 'Unknown vendor'} · {dev.ip_address || 'No IP address recorded'}</p>
+            <div className="device-detail-badges">
+              <ClassificationBadge managed={dev.is_managed} />
+              <Badge variant={dev.last_observed_at ? 'success' : 'muted'} dot>{dev.last_observed_at ? 'Observed' : 'No recent observation'}</Badge>
+              {dev.os.name && <Badge variant="info">{dev.os.name}</Badge>}
+            </div>
           </div>
         </div>
+        <div className="device-detail-hero__meta">
+          <span className="eyebrow">LAST SEEN</span>
+          <strong>{formatRelative(dev.last_observed_at)}</strong>
+          <span>{formatDateTime(dev.last_observed_at)}</span>
+        </div>
+      </div>
+
+      <div className="device-detail-stat-grid">
+        <div className="device-detail-stat"><span className="eyebrow">DISCOVERY SOURCES</span><strong>{dev.sources.length}</strong><span>{dev.sources.length ? dev.sources.join(' · ') : 'None recorded'}</span></div>
+        <div className="device-detail-stat"><span className="eyebrow">OBSERVATIONS</span><strong>{d.observations.length}</strong><span>Recorded evidence events</span></div>
+        <div className="device-detail-stat"><span className="eyebrow">OS CONFIDENCE</span><strong>{dev.os.confidence !== null ? `${Math.round(dev.os.confidence * 100)}%` : '—'}</strong><span>{dev.os.family || 'Classification unavailable'}</span></div>
+        <div className="device-detail-stat"><span className="eyebrow">MANAGED LINK</span><strong>{dev.is_managed ? 'YES' : 'NO'}</strong><span>{dev.managed_client_id || 'No client linked'}</span></div>
       </div>
 
       {/* Two columns: Identity & OS */}

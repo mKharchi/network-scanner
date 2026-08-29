@@ -16,6 +16,7 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import { SectionCard, MetricCard } from "../components/Card";
 import { Skeleton, ErrorState, Notice, EmptyState } from "../components/States";
 import { formatDateTime, formatRelative } from "../utils/format";
+import "../styles/operations.css";
 
 const NEIGHBOR_RELATIONSHIP_LABELS: Record<
   PhysicalNeighbor["relationship"],
@@ -1007,87 +1008,28 @@ export function ClientDetailPage() {
       )}
       </section>
 
-      {/* Header Banner */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "var(--space-4)",
-          marginBottom: "var(--space-6)",
-          paddingBottom: "var(--space-4)",
-          borderBottom: "1px solid var(--border)",
-        }}
-      >
-        <div
-          style={{
-            width: 48,
-            height: 48,
-            borderRadius: "var(--radius)",
-            background: isIsolated
-              ? "var(--danger-bg, #fee2e2)"
-              : isOnline
-                ? "var(--success-bg)"
-                : "var(--surface-muted)",
-            border: "1px solid var(--border)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 22,
-            flexShrink: 0,
-          }}
-          aria-hidden="true"
-        >
-          {isIsolated ? "🔒" : "💻"}
-        </div>
-        <div>
-          <h1
-            style={{
-              fontSize: "var(--font-xl)",
-              fontWeight: 600,
-              marginBottom: "var(--space-1)",
-            }}
-          >
-            {c.hostname}
-          </h1>
-          <div
-            style={{
-              display: "flex",
-              gap: "var(--space-2)",
-              alignItems: "center",
-              flexWrap: "wrap",
-            }}
-          >
-            <ClientStatusBadge state={c.connection.state} />
-
-            <Button
-              variant="danger"
-              size="md"
-              disabled={!isOnline || commandLoading}
-              onClick={() => setPendingConfirmation({ kind: "disconnect" })}
-            >
-              Disconnect
-            </Button>
-            <span
-              style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}
-            >
-              {isIsolated
-                ? `Isolated (last contact ${formatRelative(c.connection.last_connected_at)})`
-                : isOnline
-                  ? `Connected ${formatRelative(c.connection.last_connected_at)}`
-                  : `Last seen ${formatRelative(c.connection.last_connected_at)}`}
-            </span>
+      <div className="client-detail-hero">
+        <div className="client-detail-identity">
+          <div className="client-detail-icon" aria-hidden="true">{isIsolated ? "⛨" : "◈"}</div>
+          <div>
+            <span className="eyebrow eyebrow--accent">CLIENT AGENT / OPERATIONS</span>
+            <h1 className="client-detail-title">{c.hostname}</h1>
+            <p className="client-detail-subtitle">{c.ip_address || c.mac_address} · {c.os.system || "Operating system unavailable"}</p>
+            <div className="client-detail-badges">
+              <ClientStatusBadge state={c.connection.state} />
+              {c.location && <Badge variant="info">{c.location.label}</Badge>}
+              {c.health?.status && <Badge variant={c.health.status === "healthy" ? "success" : c.health.status === "critical" ? "danger" : "warning"}>{c.health.status.toUpperCase()}</Badge>}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", flexWrap: "wrap", marginTop: "var(--space-4)" }}>
+              <Button variant="danger" size="sm" disabled={!isOnline || commandLoading} onClick={() => setPendingConfirmation({ kind: "disconnect" })}>Disconnect agent</Button>
+              <span style={{ fontSize: "var(--font-xs)", color: "var(--muted-text)" }}>
+                {isIsolated ? `Isolated · last contact ${formatRelative(c.connection.last_connected_at)}` : isOnline ? `Connected ${formatRelative(c.connection.last_connected_at)}` : `Last seen ${formatRelative(c.connection.last_connected_at)}`}
+              </span>
+            </div>
           </div>
         </div>
-
-        {/* Alert Metrics */}
-        <div
-          style={{ marginLeft: "auto", display: "flex", gap: "var(--space-3)" }}
-        >
-          <MetricCard
-            label="New alerts"
-            value={d.alert_counts.new}
-            valueVariant={d.alert_counts.new > 0 ? "danger" : "default"}
-          />
+        <div className="client-detail-alerts">
+          <MetricCard label="New alerts" value={d.alert_counts.new} valueVariant={d.alert_counts.new > 0 ? "danger" : "default"} />
           <MetricCard label="Total alerts" value={d.alert_counts.total} />
         </div>
       </div>

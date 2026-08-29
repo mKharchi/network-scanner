@@ -7,6 +7,8 @@ import { DataTable, type Column } from '../components/DataTable';
 import { SectionCard } from '../components/Card';
 import { SkeletonTable, ErrorState, EmptyState, Notice } from '../components/States';
 import { formatDateTime, normalizeMac } from '../utils/format';
+import { MetricCard } from '../components/Card';
+import '../styles/operations.css';
 
 interface ScanSummaryItem {
   id: string;
@@ -93,14 +95,19 @@ export function ScanHistoryPage() {
 
   return (
     <div>
-      <div className="page-header">
+      <div className="page-header operations-page-header">
         <div>
-          <h1 className="page-title">Scan History</h1>
-          <p className="page-description">Historical network discovery scans and snapshots.</p>
+          <span className="eyebrow eyebrow--accent">NETWORK / SCAN HISTORY</span>
+          <h1 className="page-title">Discovery history</h1>
+          <p className="page-description">Historical network discovery scans and snapshots for change analysis.</p>
         </div>
-        <Button variant="quiet" size="sm" onClick={refetchHistory}>
-          Refresh
-        </Button>
+        <div className="operations-page-header__actions"><Button variant="quiet" size="sm" onClick={refetchHistory}>Refresh</Button></div>
+      </div>
+      <div className="operations-metric-grid">
+        <MetricCard label="Recorded scans" value={historyItems.length} context="Matching the selected date range" />
+        <MetricCard label="Devices in latest" value={historyItems[0]?.devices_found ?? '—'} valueVariant="info" context="Most recent completed scan" />
+        <MetricCard label="From" value={fromDate || 'Any'} context="Start of date range" />
+        <MetricCard label="To" value={toDate || 'Any'} context="End of date range" />
       </div>
 
       {historyState.status === 'error' && (

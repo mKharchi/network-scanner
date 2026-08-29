@@ -2,8 +2,8 @@ import { useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import "../styles/shell.css";
 import { useApiState } from "../hooks/useApiState";
-import { TbActivity, TbCloudNetwork, TbDevices, TbMapPin, TbRadar, TbShieldAlert, TbAdjustmentsHorizontal } from "react-icons/tb";
-import { FiCpu, FiExternalLink, FiGlobe, FiMenu, FiX } from "react-icons/fi";
+import { TbActivity, TbCloudNetwork, TbDevices, TbMapPin, TbRadar, TbShieldHeart, TbAdjustmentsHorizontal } from "react-icons/tb";
+import { FiCpu, FiGlobe, FiMenu, FiX } from "react-icons/fi";
 import { HiOutlineSquare3Stack3D } from "react-icons/hi2";
 
 // ── Connection State Indicator ───────────────────────────────────
@@ -76,7 +76,7 @@ export function AppShell({
         {
           label: "Security Alerts",
           to: "/alerts",
-          icon: <TbShieldAlert size={18} />,
+          icon: <TbShieldHeart size={18} />,
           badge: newAlertCount,
         },
         { label: "Rogue Hunter", to: "/rogue-devices", icon: <TbRadar size={18} /> },
@@ -102,6 +102,7 @@ export function AppShell({
           </button>
 
           {/* Product Brand Identity */}
+
           <NavLink to="/" className="brand-logo">
             <div className="brand-icon">
               <TbCloudNetwork size={22} />
@@ -111,10 +112,14 @@ export function AppShell({
               <span className="brand-sub">INTELLIGENCE</span>
             </div>
           </NavLink>
-
+          {/* Live system state */}
+          <LiveStatusPill />
+        </div>
+        <div className="header-right">
           {/* Primary Top Nav Links (Desktop) */}
           <nav className="desktop-nav" aria-label="Main Navigation">
             <NavLink
+
               to="/"
               end
               className={({ isActive }) =>
@@ -143,7 +148,6 @@ export function AppShell({
             >
               <HiOutlineSquare3Stack3D size={16} />
               <span>3D Twin</span>
-              <span className="spatial-badge">SPATIAL</span>
             </NavLink>
 
             <NavLink
@@ -172,7 +176,7 @@ export function AppShell({
                 `top-nav-link ${isActive ? "top-nav-link--active" : ""}`
               }
             >
-              <TbShieldAlert size={16} />
+              <TbShieldHeart size={16} />
               <span>Alerts</span>
               {newAlertCount > 0 && (
                 <span className="alert-count-pill">{newAlertCount}</span>
@@ -191,33 +195,7 @@ export function AppShell({
           </nav>
         </div>
 
-        {/* Header Right Controls */}
-        <div className="header-right">
-          {/* Live system state */}
-          <LiveStatusPill />
 
-          {/* Language selector pill */}
-          <div className="lang-pill" title="System Locale">
-            <FiGlobe size={13} />
-            <span>EN</span>
-          </div>
-
-          {/* Operator / User badge */}
-          <div className="operator-badge" title="Operator: SEC-OPS ADMIN">
-            <span className="operator-avatar">OP</span>
-            <span className="operator-name">SEC-OPS</span>
-          </div>
-
-          {/* Primary Action Button */}
-          <button
-            type="button"
-            className="header-cta-btn"
-            onClick={() => navigate("/digital-twin")}
-          >
-            <span>Explore Twin</span>
-            <span className="btn-arrow">→</span>
-          </button>
-        </div>
       </header>
 
       {/* ── Mobile & Drawer Navigation Overlay ─────────────────────── */}
