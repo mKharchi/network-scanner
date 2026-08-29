@@ -333,7 +333,9 @@ export function LatestScanPage() {
           data={sortedDevices}
           rowKey={(d) => d.mac_address}
           onRowClick={(d) =>
-            navigate(`/network/devices/${encodeURIComponent(d.mac_address)}`)
+            navigate(`/network/devices/${encodeURIComponent(d.mac_address)}`, {
+              state: { from: "/network/latest", label: "Latest Scan" },
+            })
           }
           aria-label="Latest scan devices"
           sortKey={sortKey}

@@ -3,6 +3,7 @@ import { useToast } from "../hooks/useToast";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, type ManagedClientSummary } from "../api/client";
 import { useFetch } from "../hooks/useFetch";
+import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { ClientStatusBadge } from "../components/Badge";
 import { Button } from "../components/Button";
 import { DataTable, type Column } from "../components/DataTable";
@@ -243,6 +244,7 @@ export function ClientsPage() {
   const [stateFilter, setStateFilter] = useState("");
   const [locationFilter, setLocationFilter] = useState(searchParams.get("location") || "");
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search);
   const [sortKey, setSortKey] = useState("hostname");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [autoLocatingClientId, setAutoLocatingClientId] = useState<string | null>(null);
@@ -251,10 +253,10 @@ export function ClientsPage() {
     () =>
       api.getClients({
         state: stateFilter || undefined,
-        search: search || undefined,
+        search: debouncedSearch || undefined,
         location: locationFilter || undefined,
       }),
-    [stateFilter, search, locationFilter],
+    [stateFilter, debouncedSearch, locationFilter],
     ['app:client_status'],
   );
 
