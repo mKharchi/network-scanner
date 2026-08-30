@@ -60,13 +60,16 @@ export function AppShell({
       items: [
         { label: "Overview", to: "/", icon: <TbRadar size={18} />, exact: true },
         { label: "Devices", to: "/network/devices", icon: <TbDevices size={18} /> },
+        { label: "Latest Scan", to: "/network/latest", icon: <TbActivity size={18} /> },
+        { label: "Scan History", to: "/network/history", icon: <HiOutlineSquare3Stack3D size={18} /> },
         { label: "Clients", to: "/clients", icon: <FiCpu size={18} /> },
+        { label: "Client Localization", to: "/client-localization", icon: <TbMapPin size={18} /> },
       ],
     },
     {
       name: "SPATIAL",
       items: [
-        { label: "3D Network Twin", to: "/digital-twin", icon: <HiOutlineSquare3Stack3D size={18} /> },
+        { label: "Spatial Map", to: "/digital-twin", icon: <TbMapPin size={18} /> },
         { label: "Locations", to: "/locations", icon: <TbMapPin size={18} /> },
       ],
     },
@@ -85,6 +88,7 @@ export function AppShell({
       ],
     },
   ];
+
 
   return (
     <div className="netwatch-shell">
@@ -147,7 +151,7 @@ export function AppShell({
               }
             >
               <HiOutlineSquare3Stack3D size={16} />
-              <span>3D Twin</span>
+              <span>Spatial Map</span>
             </NavLink>
 
             <NavLink
@@ -263,7 +267,7 @@ export function AppShell({
               navigate("/digital-twin");
             }}
           >
-            <span>Explore 3D Network</span>
+            <span>Explore Spatial Map</span>
             <span className="btn-arrow">→</span>
           </button>
         </div>

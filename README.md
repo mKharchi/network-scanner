@@ -26,7 +26,7 @@ graph TB
 
     subgraph OperatorUI["Operator Management Interfaces"]
         CLI["Interactive Server CLI"]
-        GUI["React / Vite / Tauri Desktop GUI<br/>• Real-Time Dashboard<br/>• Digital Twin Map<br/>• Device & Client Detail<br/>• Rogue Analyzer<br/>• Action Console"]
+        GUI["React / Vite / Tauri Desktop GUI<br/>• Real-Time Dashboard<br/>• Multi-Floor Spatial Map (Three.js)<br/>• Device & Client Detail<br/>• Rogue Analyzer<br/>• Action Console"]
     end
 
     CA1 -->|TCP Registration & Telemetry| TCP
@@ -74,6 +74,7 @@ network-scanner/
 │   │   ├── client_localization.py    # Client spatial coordinate resolution and history
 │   │   ├── device_recency.py         # Active/stale device categorization and timestamps
 │   │   ├── event_broadcaster.py      # Real-time Server-Sent Events (SSE) pub/sub broker
+│   │   ├── floor1_spatial.py         # Authoritative multi-floor 2D world geometry & elevation gates
 │   │   ├── global_network_scan.py    # Cross-client observation merger and daily scan builder
 │   │   ├── location_assignment.py    # Sensor-to-location mapping and assignment logic
 │   │   ├── log_storage.py            # Structured JSON filesystem activity log storage
@@ -87,9 +88,10 @@ network-scanner/
 │   │   ├── screenshot_storage.py     # Screenshot image storage and metadata indexing
 │   │   └── spatial_engine.py         # 2D/3D indoor trilateration and positioning calculations
 │   ├── gui/                          # Modern React / TypeScript desktop console
-│   │   ├── src/pages/                # Dashboard, Clients, AllDevices, RogueDevices, DigitalTwin, etc.
+│   │   ├── src/pages/                # Dashboard, Clients, AllDevices, RogueDevices, SpatialPage, etc.
+│   │   ├── src/components/spatial/   # ThreeSpatialScene, FloorSelector, floorConfig
 │   │   ├── src/components/           # Reusable UI components (AppShell, DataTable, Cards, Modals)
-│   │   └── package.json              # Frontend dependencies (React, Vite, Tailwind CSS, Lucide icons)
+│   │   └── package.json              # Frontend dependencies (React, Three.js, React Three Fiber, Vite)
 │   └── storage/                      # Persistent filesystem data directories
 │       ├── activity_logs/            # Downloaded client activity logs
 │       ├── network_scans/            # Timestamped daily aggregated network scan files
@@ -143,17 +145,103 @@ The server acts as the centralized coordinator, database repository, spatial com
   - `GET /api/v1/clients` & `/api/v1/clients/{id}`: Detailed client agent inventory, connection logs, and hardware stats.
   - `GET /api/v1/devices` & `/api/v1/devices/{id}`: Comprehensive network device registry with observation history.
   - `GET /api/v1/rogue-devices`: Real-time rogue device detection feeds with risk scores and classification details.
-  - `GET /api/v1/locations` & `/api/v1/digital-twin`: Complete spatial layouts, floor hierarchy, and 2D/3D device coordinates.
+  - `GET /api/v1/spatial/floor/{floor_id}`: Authoritative 2D/3D spatial map for Floor 0, Floor 1, or Floor 2 with active devices, reference PCs, and room geometry.
+  - `GET /api/v1/locations`: Complete spatial layouts and physical location hierarchy.
   - `GET /api/v1/alerts` & `PATCH /api/v1/alerts/{id}`: Security alert triage, acknowledgment, and resolution workflows.
   - `GET /api/v1/policies/*` & `POST /api/v1/policies/*`: Security policies (forbidden process lists, working hour schedules).
   - `POST /api/v1/actions` & `GET /api/v1/actions/{id}`: Remote command dispatching with target tracking.
   - `GET /api/v1/screenshots`: Screenshot gallery and download endpoints.
   - `GET /api/v1/network-scans`: Daily discovery report retrieval and historic scan downloads.
 
-### 3. Spatial Localization & Digital Twin Engine (`spatial_engine.py`, `client_localization.py`, `center_layout.py`)
-- **Physical Hierarchy**: Models indoor physical environments across Floors, Zones (Work areas, Server rooms, Restricted zones), Aisles, Tables, Rows, and individual PC Positions.
-- **Indoor Positioning**: Calculates exact $(X, Y, Z)$ physical coordinates for connected clients and observed network devices using sensor proximities and layout constraints.
-- **Location History & Verification**: Tracks location migrations, assignment methods (`MANUAL`, `AUTOMATIC`, `SENSOR`), confidence scores, and verification status.
+### 3. Spatial Localization & Multi-Floor Visualization Engine (`floor1_spatial.py`, `spatial_engine.py`, `client_localization.py`, `ThreeSpatialScene.tsx`)
+- **Multi-Floor Three.js Architecture**:
+  - **Floor 0 (Ground Floor)**: Minimal open level with boundary grid for ground-level devices ($Z=0$).
+  - **Floor 1 (Training Floor 1 / Reference Frame)**: Reference scene with Formation Rooms 1 & 2, stairs, table clusters, and fixed Reference PCs ($Z=1$).
+  - **Floor 2 (Training Floor 2)**: Upper level with Formation Rooms 1 & 2 positioned at identical relative coordinates and stairs ($Z=2$).
+  - **Single Shared WebGL Lifecycle**: Reusable Three.js Canvas and WebGL renderer that dynamically switches floor scenes without page reloads or memory leaks.
+  - **Selective Label Focusing**: When a device is selected, its 3D marker is highlighted with an emissive glow and white ring, while non-selected device labels are hidden to maintain visual clarity.
+  - **External UI Floor Selector**: Segmented control `[ Floor 0 ] [ Floor 1 ] [ Floor 2 ]` outside the 3D canvas with floor-scoped device filtering.
+
+---
+
+### How Device Location is Gathered & Positioned
+
+The system uses a **multi-stage, zero-intrusion spatial pipeline** that combines passive network telemetry from distributed client sensors with a known physical layout and multilateration algorithms:
+
+```mermaid
+flowchart TD
+    subgraph DataCollection["1. Data Collection & Passive Telemetry"]
+        D1["Target Device<br/>(Phone, Laptop, Rogue Host)"]
+        C1["Client Sensor A<br/>(Floor 1 PC 1)"]
+        C2["Client Sensor B<br/>(Floor 1 PC 8)"]
+        C3["Client Sensor C<br/>(Floor 1 PC 14)"]
+        
+        D1 -.->|Passive DHCP Broadcasts| C1
+        D1 -.->|ARP / Kernel Neigh Table| C2
+        D1 -.->|mDNS / LLMNR / SSDP| C3
+    end
+
+    subgraph ServerIngestion["2. Ingestion & Observation Merging"]
+        SRV["Server Ingestion Engine<br/>(api_service.py / network_device_storage.py)"]
+        C1 -->|Observation Payload| SRV
+        C2 -->|Observation Payload| SRV
+        C3 -->|Observation Payload| SRV
+        
+        DB[(network_devices &<br/>network_device_observations)]
+        SRV <--> DB
+    end
+
+    subgraph LocalizationEngine["3. Positioning & Elevation Gating"]
+        ANCHOR["Known Anchor Grid<br/>(Floor 1 Fixed Reference PCs)"]
+        GATE["Elevation Gating (Z-Gate)<br/>• Floor 0: ~0.0m (±0.75m)<br/>• Floor 1: ~3.0m (±0.75m)<br/>• Floor 2: ~6.0m (±0.75m)"]
+        EST["Multilateration / Weighted Centroid &<br/>Slot Geometry Resolver"]
+        
+        SRV --> GATE
+        ANCHOR --> EST
+        GATE --> EST
+        EST --> EST_OUT["Position Estimate<br/>(X, Y in meters, Z = Floor ID,<br/>Confidence Score, Delta)"]
+    end
+
+    subgraph LifecycleAndDisplay["4. Lifecycle & Three.js Rendering"]
+        DHCP_RET["DHCP Retention Window<br/>(Keeps existing position active<br/>during DHCP lease)"]
+        VIS["Multi-Floor Three.js Scene<br/>• Floor Selector (0 / 1 / 2)<br/>• Focused Device Highlight & Labels"]
+        
+        EST_OUT --> DHCP_RET
+        DHCP_RET --> VIS
+    end
+```
+
+#### Step-by-Step Location Pipeline:
+
+1. **Distributed Passive Telemetry Collection**:
+   - **Client Sensors as Probes**: Managed client PCs running `client.py` act as passive listening stations across the building.
+   - **Zero-Intrusion ARP Snooping**: Clients periodically read the OS kernel neighbour table (`/proc/net/arp`, `ip neigh`, `arp -a`) to discover active IP/MAC entries without generating active network traffic.
+   - **Passive DHCP Packet Sniffing**: Using Scapy, clients capture broadcast `DHCPDISCOVER`, `DHCPREQUEST`, `DHCPINFORM`, and `DHCPACK` packets, identifying devices the moment they connect or renew their leases.
+   - **Multicast & Name Resolution Listener**: Clients sniff mDNS, LLMNR, NetBIOS, and SSDP broadcasts to collect hostnames, vendors, and service advertisements.
+
+2. **Fixed Reference Anchors (`reference_client`)**:
+   - On Floor 1, managed workstations are assigned to specific physical coordinates $(X, Y)$ based on aisle, table number, column, and seat position (e.g., Table 1 at $X=10.0\text{m}, Y=9.0\text{m}$).
+   - These workstations form an authoritative physical reference grid against which surrounding devices are measured.
+
+3. **Floor Assignment & Elevation Gating ($Z$)**:
+   - Each floor has a target physical elevation ($0.0\text{m}$ for Floor 0, $3.0\text{m}$ for Floor 1, $6.0\text{m}$ for Floor 2) with a strict tolerance gate ($\pm 0.75\text{m}$).
+   - The $Z$ coordinate is preserved strictly as the floor identifier ($0, 1, 2$), preventing cross-floor bleeding.
+
+4. **2D Coordinate Estimation $(X, Y)$**:
+   - When multiple reference stations report seeing a target device, the spatial engine calculates the device's coordinates $(X, Y)$ using multilateration and distance estimation.
+   - For slot-assigned or near-anchor devices, the physical slot geometry converts table and row indices into exact world coordinates in meters (e.g. within the $12\text{m} \times 27\text{m}$ physical boundary with a $5\text{m}$ center aisle).
+   - Computes a confidence metric ($0.0 - 1.0$) and elevation delta ($\Delta Z$).
+
+5. **DHCP Retention & Stale Device Filtering**:
+   - An active window filter (default 5–30 minutes) ensures disconnected devices are gracefully removed.
+   - Recent DHCP observations allow an existing valid position estimate to be retained throughout the lease grace window without fabricating new coordinates.
+
+6. **Three.js Multi-Floor Rendering**:
+   - The frontend queries `GET /api/v1/spatial/floor/{floor_id}`.
+   - Translates metric $(X, Y)$ coordinates into the Three.js horizontal ground plane `[x - width/2, 0, height/2 - y]`.
+   - Renders interactive markers (normal/DHCP/rogue), allowing operators to click any device to focus its label and inspect details in real time.
+
+---
 
 ### 4. Security, Policy & Rogue Device Detection (`network_device_classification.py`, `action_service.py`)
 - **Rogue Device Analyzer**: Continuously assesses unmanaged network entities discovered by clients. Evaluates risk scores based on vendor verification, unauthorized IP ranges, activity during off-hours, and unknown MAC addresses.
@@ -178,7 +266,7 @@ The server acts as the centralized coordinator, database repository, spatial com
   - **Clients**: Client fleet management with live status badges, IP/MAC search, and action modals.
   - **All Devices**: Global network inventory with vendor filtering and observation history.
   - **Rogue Devices**: Security console highlighting high-risk unmanaged devices with one-click quarantine.
-  - **Digital Twin**: 2D/3D spatial floor map visualizing physical device locations, aisles, and zones.
+  - **Spatial Map**: Multi-floor Three.js spatial view with Floor 0, Floor 1, Floor 2 scenes, floor switcher, and label focus.
   - **Activity Logs**: Searchable audit log viewer for browser history, shell commands, and file accesses.
   - **Alerts**: Centralized security notification console with acknowledgment and resolution filters.
   - **Settings & Policies**: Interactive editors for forbidden processes and working hour schedules.

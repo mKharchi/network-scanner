@@ -7,7 +7,10 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable, List, Optional, Sequence, Tuple
 
 # Default live window for twin, latest-scan, and rogue overlays.
-DEFAULT_DEVICE_ACTIVE_MAX_AGE_SECONDS = 300  # 10 minutes
+DEFAULT_DEVICE_ACTIVE_MAX_AGE_SECONDS = 300  # 5 minutes
+# Allows scheduled DHCP collection to arrive just after the active-window edge.
+# This only retains an already-qualified spatial estimate; it never creates one.
+DEFAULT_DHCP_POSITION_RETENTION_GRACE_SECONDS = 60
 
 
 def get_device_active_max_age_seconds() -> int:
@@ -19,6 +22,17 @@ def get_device_active_max_age_seconds() -> int:
         return max(1, int(raw))
     except (TypeError, ValueError):
         return DEFAULT_DEVICE_ACTIVE_MAX_AGE_SECONDS
+
+
+def get_dhcp_position_retention_grace_seconds() -> int:
+    raw = os.getenv(
+        "NETWORK_DHCP_POSITION_RETENTION_GRACE_SECONDS",
+        str(DEFAULT_DHCP_POSITION_RETENTION_GRACE_SECONDS),
+    )
+    try:
+        return max(0, int(raw))
+    except (TypeError, ValueError):
+        return DEFAULT_DHCP_POSITION_RETENTION_GRACE_SECONDS
 
 
 def coerce_datetime(value: Any) -> Optional[datetime]:

@@ -187,10 +187,92 @@ class DeviceRecord:
         # Protocol-specific / raw extracted fields
         self.raw_fields: dict[str, Any] = {}
 
+        # Advanced passive inspection intelligence
+        self.sni_domains: list[str] = []
+        self.dns_queries: list[str] = []
+        self.ja3_fingerprints: list[str] = []
+        self.ja3_hashes: list[str] = []
+        self.certificates: list[dict[str, Any]] = []
+        self.traffic_profile: dict[str, Any] = {}
+        self.destination_asns: list[dict[str, Any]] = []
+
+    def add_sni_domain(self, domain: str | None) -> bool:
+        """Record an observed TLS SNI hostname."""
+        if not domain:
+            return False
+        clean = domain.strip().lower()
+        if clean and clean not in self.sni_domains:
+            if len(self.sni_domains) >= 32:
+                self.sni_domains.pop(0)
+            self.sni_domains.append(clean)
+            self.add_evidence("sni", f"sni:{clean}")
+            return True
+        return False
+
+    def add_dns_query(self, domain: str | None) -> bool:
+        """Record an observed passive DNS query domain."""
+        if not domain:
+            return False
+        clean = domain.strip().lower()
+        if clean and clean not in self.dns_queries:
+            if len(self.dns_queries) >= 32:
+                self.dns_queries.pop(0)
+            self.dns_queries.append(clean)
+            self.add_evidence("dns", f"dns:{clean}")
+            return True
+        return False
+
+    def add_ja3_fingerprint(self, ja3_hash: str | None, ja3_string: str | None = None) -> bool:
+        """Record a TLS JA3 fingerprint hash."""
+        if not ja3_hash:
+            return False
+        clean = ja3_hash.strip().lower()
+        if clean and clean not in self.ja3_hashes:
+            if len(self.ja3_hashes) >= 16:
+                self.ja3_hashes.pop(0)
+            self.ja3_hashes.append(clean)
+            if ja3_string and ja3_string not in self.ja3_fingerprints:
+                if len(self.ja3_fingerprints) >= 16:
+                    self.ja3_fingerprints.pop(0)
+                self.ja3_fingerprints.append(ja3_string)
+            self.add_evidence("ja3", f"ja3:{clean}")
+            return True
+        return False
+
+    def set_traffic_profile(self, profile: Mapping[str, Any] | None) -> None:
+        """Update traffic shaping telemetry profile."""
+        if profile and isinstance(profile, Mapping):
+            self.traffic_profile = copy.deepcopy(dict(profile))
+            if profile.get("behavioral_pattern"):
+                self.add_evidence("traffic", f"pattern:{profile['behavioral_pattern']}")
+
+    def add_destination_asn(self, vendor_info: Mapping[str, Any] | None) -> bool:
+        """Record an observed destination cloud provider / ASN."""
+        if not vendor_info or not isinstance(vendor_info, Mapping):
+            return False
+        provider = vendor_info.get("provider")
+        if not provider:
+            return False
+        for item in self.destination_asns:
+            if item.get("provider") == provider:
+                item["count"] = item.get("count", 1) + 1
+                return False
+        if len(self.destination_asns) >= 16:
+            self.destination_asns.pop(0)
+        self.destination_asns.append({
+            "provider": provider,
+            "description": vendor_info.get("description", provider),
+            "destination_ip": vendor_info.get("destination_ip"),
+            "count": 1,
+        })
+        self.add_evidence("asn", f"cloud:{provider}")
+        return True
+
     def add_ip_address(self, ip_str: str | None, source: str | None = None) -> bool:
         """Add an IPv4 or IPv6 address."""
         if not ip_str:
             return False
+
         clean_ip = normalise_ip_address(ip_str)
         if not clean_ip:
             return False
@@ -313,6 +395,12 @@ class DeviceRecord:
             "observation_count": self.observation_count,
             "presence_state": self.presence_state,
             "evidence": {k: list(v) for k, v in self.evidence.items() if v},
+            "sni_domains": list(self.sni_domains),
+            "dns_queries": list(self.dns_queries),
+            "ja3_hashes": list(self.ja3_hashes),
+            "ja3_fingerprints": list(self.ja3_fingerprints),
+            "traffic_profile": copy.deepcopy(self.traffic_profile) if self.traffic_profile else {},
+            "destination_asns": copy.deepcopy(self.destination_asns) if self.destination_asns else [],
         }
         if self.os_classification.value:
             result["os_classification"] = self.os_classification.to_dict()

@@ -319,6 +319,183 @@ def classify_ssdp_evidence(
     return result
 
 
+# Known SNI Domain Classification Rules
+SNI_DOMAIN_RULES: list[dict[str, Any]] = [
+    {
+        "pattern": re.compile(r"(apple\.com|icloud\.com|aaplimg\.com|apple-cloudkit\.com|push\.apple\.com|itunes\.apple\.com|me\.com)$", re.IGNORECASE),
+        "os_hint": "Apple OS",
+        "device_type": "Apple Device",
+        "confidence": 0.92,
+        "evidence": "sni.apple_services",
+    },
+    {
+        "pattern": re.compile(r"(windowsupdate\.com|update\.microsoft\.com|msftncsi\.com|telemetry\.microsoft\.com|live\.com|office\.com|office365\.com|azure\.com|microsoft\.com|xboxlive\.com)$", re.IGNORECASE),
+        "os_hint": "Windows",
+        "device_type": "Workstation",
+        "confidence": 0.90,
+        "evidence": "sni.microsoft_services",
+    },
+    {
+        "pattern": re.compile(r"(android\.com|googleapis\.com|googleplay\.com|gvt1\.com|ggpht\.com|gstatic\.com|googleusercontent\.com)$", re.IGNORECASE),
+        "os_hint": "Android",
+        "device_type": "Mobile Device",
+        "confidence": 0.88,
+        "evidence": "sni.google_android_services",
+    },
+    {
+        "pattern": re.compile(r"(samsungcloud\.com|samsungqbe\.com|samsungosp\.com|samsung\.com)$", re.IGNORECASE),
+        "os_hint": "Android",
+        "device_type": "Samsung Device",
+        "confidence": 0.90,
+        "evidence": "sni.samsung_services",
+    },
+    {
+        "pattern": re.compile(r"(netflix\.com|nflxvideo\.net|nflxext\.com|roku\.com|hulu\.com|disneyplus\.com|spotify\.com|lgtvcommon\.com|bravia\.sony|tivo\.com|smarttv)$", re.IGNORECASE),
+        "device_type": "Smart TV / Media",
+        "confidence": 0.92,
+        "evidence": "sni.streaming_media",
+    },
+    {
+        "pattern": re.compile(r"(tuya\.com|tuyaeu\.com|smartthings\.com|tplinkcloud\.com|ring\.com|nest\.com|philips-hue\.com|espressif\.com|wyze\.com|arlo\.com|blink\.com|mi-cloud\.com|yeelight\.com)$", re.IGNORECASE),
+        "os_hint": "Embedded",
+        "device_type": "IoT Device",
+        "confidence": 0.95,
+        "evidence": "sni.iot_cloud",
+    },
+    {
+        "pattern": re.compile(r"(playstation\.net|playstation\.com|nintendo\.net|nintendo\.com|steamcommunity\.com|steampowered\.com)$", re.IGNORECASE),
+        "device_type": "Gaming Console",
+        "confidence": 0.92,
+        "evidence": "sni.gaming_services",
+    },
+    {
+        "pattern": re.compile(r"(hpconnected\.com|hpsmart\.com|epsonconnect\.com|canon-c-asdp\.com|brother\.com)$", re.IGNORECASE),
+        "os_hint": "Embedded",
+        "device_type": "Printer",
+        "confidence": 0.95,
+        "evidence": "sni.printer_cloud",
+    },
+]
+
+# Known JA3 Hashes Fingerprint Map
+JA3_FINGERPRINT_MAP: dict[str, dict[str, Any]] = {
+    # Windows Chrome / Edge
+    "b32309a26951912be7dba376398abc3b": {"os_hint": "Windows", "device_type": "Workstation", "client_stack": "Chrome/Edge on Windows", "confidence": 0.90},
+    "66918128f1b9b03303d77c6f2eefd128": {"os_hint": "Windows", "device_type": "Workstation", "client_stack": "Chrome on Windows", "confidence": 0.90},
+    "cd08e31494f9531f560d64c695473da9": {"os_hint": "Windows", "device_type": "Workstation", "client_stack": "Edge on Windows", "confidence": 0.90},
+    # iOS Safari
+    "51c64c77e60f39ac303c1b303e0e54b8": {"os_hint": "iOS", "device_type": "Mobile Device", "client_stack": "Safari on iOS", "confidence": 0.92},
+    "b845089720b0339b3346ff1755a90714": {"os_hint": "iOS", "device_type": "iPhone", "client_stack": "iOS MobileSafari", "confidence": 0.92},
+    "161b45ecdd3a32f6a7ae8991206cc4c6": {"os_hint": "iOS", "device_type": "Apple Device", "client_stack": "iOS Background TLS", "confidence": 0.90},
+    # macOS Safari
+    "773906b0efdefa24a7f2b8eb69858561": {"os_hint": "macOS", "device_type": "Mac Desktop/Laptop", "client_stack": "Safari on macOS", "confidence": 0.92},
+    "21c5798da20c0f997dbba7cb0f19ae39": {"os_hint": "macOS", "device_type": "Apple Device", "client_stack": "macOS System TLS", "confidence": 0.90},
+    # Android Chrome / OkHttp
+    "15af977ce251252b42433092782e407e": {"os_hint": "Android", "device_type": "Mobile Device", "client_stack": "OkHttp / Android App", "confidence": 0.92},
+    "8d70923055490717277e9caad8097b69": {"os_hint": "Android", "device_type": "Mobile Device", "client_stack": "Chrome on Android", "confidence": 0.90},
+    "a0e9f5d64349fb13191bc781f81f42e1": {"os_hint": "Android", "device_type": "Mobile Device", "client_stack": "Android System Webview", "confidence": 0.88},
+    # Linux / Python / Tools
+    "0cce74b019b7d90e0c8ff0f81d11ff31": {"os_hint": "Linux", "device_type": "Workstation/Server", "client_stack": "Python requests / urllib", "confidence": 0.85},
+    "71b78292c730823296dd5f311c107127": {"os_hint": "Linux", "device_type": "Workstation", "client_stack": "curl / libcurl", "confidence": 0.85},
+    # IoT / Embedded
+    "714e8679d67bf3c0beff3253b26639fc": {"os_hint": "Embedded", "device_type": "IoT Device", "client_stack": "ESP32 / mbedTLS", "confidence": 0.94},
+    "ade138fba3302132b2fa141fad3a94f3": {"os_hint": "Embedded", "device_type": "IoT Device", "client_stack": "wolfSSL Embedded", "confidence": 0.94},
+}
+
+
+def classify_sni_evidence(sni_host: str | None) -> dict[str, Any]:
+    """Extract OS, device type, and application hints from observed TLS SNI hostname."""
+    result: dict[str, Any] = {
+        "os_hint": None,
+        "device_type": None,
+        "model_hint": None,
+        "confidence": 0.0,
+        "evidence": [],
+    }
+    if not sni_host:
+        return result
+
+    clean_sni = sni_host.strip().lower()
+    for rule in SNI_DOMAIN_RULES:
+        if rule["pattern"].search(clean_sni):
+            result["os_hint"] = rule.get("os_hint")
+            result["device_type"] = rule.get("device_type")
+            result["confidence"] = rule.get("confidence", 0.85)
+            result["evidence"].append(f"{rule['evidence']}:{clean_sni}")
+            break
+
+    return result
+
+
+def classify_ja3_evidence(ja3_hash: str | None, ja3_string: str | None = None) -> dict[str, Any]:
+    """Extract OS and device hints from TLS JA3 fingerprint hash and parameter structure."""
+    result: dict[str, Any] = {
+        "os_hint": None,
+        "device_type": None,
+        "client_stack": None,
+        "confidence": 0.0,
+        "evidence": [],
+    }
+    if not ja3_hash:
+        return result
+
+    clean_hash = ja3_hash.strip().lower()
+    match = JA3_FINGERPRINT_MAP.get(clean_hash)
+    if match:
+        result["os_hint"] = match.get("os_hint")
+        result["device_type"] = match.get("device_type")
+        result["client_stack"] = match.get("client_stack")
+        result["confidence"] = match.get("confidence", 0.85)
+        result["evidence"].append(f"ja3.matched:{clean_hash}")
+    elif ja3_string:
+        # Heuristic inspection of JA3 parameter string
+        # e.g., TLS 1.3 only with minimal extensions -> embedded/IoT
+        parts = ja3_string.split(",")
+        if len(parts) >= 3:
+            ciphers = parts[1].split("-") if parts[1] else []
+            extensions = parts[2].split("-") if parts[2] else []
+            if len(ciphers) <= 4 and len(extensions) <= 5:
+                result["os_hint"] = "Embedded"
+                result["device_type"] = "IoT Device"
+                result["confidence"] = 0.75
+                result["evidence"].append(f"ja3.heuristic.minimal_tls:{clean_hash}")
+
+    return result
+
+
+def classify_dns_evidence(domain: str | None) -> dict[str, Any]:
+    """Extract OS and device hints from passive DNS queries."""
+    if not domain:
+        return {"os_hint": None, "device_type": None, "confidence": 0.0, "evidence": []}
+    return classify_sni_evidence(domain)
+
+
+def classify_traffic_evidence(traffic_profile: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Infer device behavioral characteristics from traffic profile metrics."""
+    result: dict[str, Any] = {
+        "behavioral_pattern": None,
+        "device_type_hint": None,
+        "confidence": 0.0,
+        "evidence": [],
+    }
+    if not traffic_profile or not isinstance(traffic_profile, Mapping):
+        return result
+
+    pattern = traffic_profile.get("behavioral_pattern")
+    if pattern:
+        result["behavioral_pattern"] = pattern
+        result["evidence"].append(f"traffic.pattern:{pattern}")
+
+        if pattern == "HEAVY_STREAMING_TRANSFER":
+            result["device_type_hint"] = "Smart TV / Workstation"
+            result["confidence"] = 0.70
+        elif pattern == "BURST_TELEMETRY":
+            result["device_type_hint"] = "IoT Device / Mobile"
+            result["confidence"] = 0.75
+
+    return result
+
+
 def apply_classification_to_device(device: Any, vendors_db: Any = None) -> None:
     """Evaluate multi-layer evidence and populate device classification fields."""
     # Check OUI vendor
@@ -351,6 +528,48 @@ def apply_classification_to_device(device: Any, vendors_db: Any = None) -> None:
         device.os_hint = device.os_classification.value
         if not device.device_type:
             device.device_type_classification.update_if_better("Windows Workstation", conf, "synergy.windows_workstation")
+            device.device_type = device.device_type_classification.value
+
+    # SNI domain classification
+    if hasattr(device, "sni_domains") and device.sni_domains:
+        for sni in device.sni_domains:
+            sni_eval = classify_sni_evidence(sni)
+            if sni_eval.get("os_hint"):
+                device.os_classification.update_if_better(sni_eval["os_hint"], sni_eval["confidence"], f"sni.{sni}")
+                device.os_hint = device.os_classification.value
+            if sni_eval.get("device_type"):
+                device.device_type_classification.update_if_better(sni_eval["device_type"], sni_eval["confidence"], f"sni.{sni}")
+                device.device_type = device.device_type_classification.value
+
+    # JA3 fingerprint classification
+    if hasattr(device, "ja3_hashes") and device.ja3_hashes:
+        for ja3 in device.ja3_hashes:
+            ja3_eval = classify_ja3_evidence(ja3)
+            if ja3_eval.get("os_hint"):
+                device.os_classification.update_if_better(ja3_eval["os_hint"], ja3_eval["confidence"], f"ja3.{ja3[:8]}")
+                device.os_hint = device.os_classification.value
+            if ja3_eval.get("device_type"):
+                device.device_type_classification.update_if_better(ja3_eval["device_type"], ja3_eval["confidence"], f"ja3.{ja3[:8]}")
+                device.device_type = device.device_type_classification.value
+            if ja3_eval.get("client_stack"):
+                device.add_software_hint(ja3_eval["client_stack"])
+
+    # Passive DNS queries classification
+    if hasattr(device, "dns_queries") and device.dns_queries and not device.os_hint:
+        for domain in device.dns_queries:
+            dns_eval = classify_dns_evidence(domain)
+            if dns_eval.get("os_hint"):
+                device.os_classification.update_if_better(dns_eval["os_hint"], dns_eval["confidence"], f"dns.{domain}")
+                device.os_hint = device.os_classification.value
+            if dns_eval.get("device_type") and not device.device_type:
+                device.device_type_classification.update_if_better(dns_eval["device_type"], dns_eval["confidence"], f"dns.{domain}")
+                device.device_type = device.device_type_classification.value
+
+    # Traffic profile heuristic
+    if hasattr(device, "traffic_profile") and device.traffic_profile and not device.device_type:
+        tf_eval = classify_traffic_evidence(device.traffic_profile)
+        if tf_eval.get("device_type_hint"):
+            device.device_type_classification.update_if_better(tf_eval["device_type_hint"], tf_eval["confidence"], "traffic.behavior")
             device.device_type = device.device_type_classification.value
 
     # Hostname heuristics fallback if still unclassified

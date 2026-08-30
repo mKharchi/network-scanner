@@ -588,6 +588,12 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 self.send_data({"items": api_service.list_spatial_events(limit=limit)})
                 return
 
+            if path.startswith("/api/v1/spatial/floor/") or path.startswith("/api/spatial/floor/"):
+                floor_str = path.rstrip("/").rsplit("/", 1)[-1]
+                floor_num = int(floor_str) if floor_str.isdigit() else 1
+                self.send_data(api_service.get_floor_spatial_map(floor_num))
+                return
+
             if path == "/api/v1/spatial/scene" or path == "/api/spatial/scene":
                 floor_str = query_params.get("floor", [None])[0]
                 floor_val = int(floor_str) if floor_str and floor_str.isdigit() else None

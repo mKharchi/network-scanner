@@ -100,3 +100,7 @@
 .section-card__body--flush {
   padding: 0;
 }
+
+.section-card__body--floor {
+  padding: var(--space-2) ;
+}
