@@ -355,7 +355,7 @@ def try_automatic_client_location_assignment(
     threshold: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Calculate location and auto-assign when confidence is sufficient."""
-    from server_components import api_service
+    from server_components.location_repository import submit_client_location_assignment
 
     guard = _client_assignment_guard(client_id)
     if guard is not None:
@@ -407,7 +407,7 @@ def try_automatic_client_location_assignment(
         }
 
     try:
-        location = api_service.assign_client_location(
+        location = submit_client_location_assignment(
             client_id,
             int(result["location_id"]),
             assigned_by="localization_engine",
