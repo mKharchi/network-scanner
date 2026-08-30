@@ -31,11 +31,13 @@ def save_device_classification(
         model_version = str(classification_data.get("model_version", "device-classifier-v1"))
         source = str(classification_data.get("source", "ML"))
         features_version = str(classification_data.get("features_version", "v1"))
-        evidence = json.dumps(classification_data.get("evidence", []))
+        from api_server import DecimalJSONEncoder
+
+        evidence = json.dumps(classification_data.get("evidence", []), cls=DecimalJSONEncoder)
         rule_pred = classification_data.get("rule_prediction")
         ml_pred = classification_data.get("ml_prediction")
         status = str(classification_data.get("status", "ACTIVE"))
-        probs = json.dumps(classification_data.get("probabilities", {}))
+        probs = json.dumps(classification_data.get("probabilities", {}), cls=DecimalJSONEncoder)
 
         cursor.execute(
             """

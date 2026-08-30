@@ -392,10 +392,12 @@ def sync_client_sensors(conn=None) -> int:
             """
         )
         rows = cursor.fetchall()
+        from api_server import DecimalJSONEncoder
+
         for r in rows:
-            sensor_id = f"sensor-{r['client_code']}"
             name = f"Sensor: {r['hostname'] or r['client_code']}"
-            capabilities = json.dumps(["arp", "dhcp", "rssi"])
+            capabilities = json.dumps(["arp", "dhcp", "rssi"], cls=DecimalJSONEncoder)
+
             cursor.execute(
                 """
                 INSERT INTO sensors (
@@ -520,7 +522,9 @@ def register_sensor(
 
     cursor = conn.cursor(dictionary=True)
     try:
-        caps_json = json.dumps(capabilities or ["arp", "dhcp"])
+        from api_server import DecimalJSONEncoder
+
+        caps_json = json.dumps(capabilities or ["arp", "dhcp"], cls=DecimalJSONEncoder)
         cursor.execute(
             """
             INSERT INTO sensors (
@@ -738,6 +742,8 @@ def evaluate_device_spatial_and_rogue_status(
             )
 
         # 9. Upsert device location estimate
+        from api_server import DecimalJSONEncoder
+
         cursor.execute(
             """
             INSERT INTO device_location_estimates (
@@ -761,7 +767,7 @@ def evaluate_device_spatial_and_rogue_status(
                 est_z,
                 confidence,
                 method,
-                json.dumps(supporting_sensors),
+                json.dumps(supporting_sensors, cls=DecimalJSONEncoder),
             ),
         )
 
@@ -794,7 +800,7 @@ def evaluate_device_spatial_and_rogue_status(
                 1 if rogue_res["is_rogue"] else 0,
                 rogue_res["classification"],
                 rogue_res["risk_level"],
-                json.dumps(rogue_res["reasons"]),
+                json.dumps(rogue_res["reasons"], cls=DecimalJSONEncoder),
             ),
         )
 
@@ -864,10 +870,12 @@ def sync_client_sensors(conn=None) -> int:
             """
         )
         rows = _to_dict_rows(cursor.fetchall(), cursor)
+        from api_server import DecimalJSONEncoder
+
         for r in rows:
             sensor_id = f"sensor-{r['client_code']}"
             name = f"Sensor: {r['hostname'] or r['client_code']}"
-            capabilities = json.dumps(["arp", "dhcp", "rssi"])
+            capabilities = json.dumps(["arp", "dhcp", "rssi"], cls=DecimalJSONEncoder)
             cursor.execute(
                 """
                 INSERT INTO sensors (
@@ -992,7 +1000,9 @@ def register_sensor(
 
     cursor = _get_cursor(conn)
     try:
-        caps_json = json.dumps(capabilities or ["arp", "dhcp"])
+        from api_server import DecimalJSONEncoder
+
+        caps_json = json.dumps(capabilities or ["arp", "dhcp"], cls=DecimalJSONEncoder)
         cursor.execute(
             """
             INSERT INTO sensors (

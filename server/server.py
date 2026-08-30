@@ -44,7 +44,9 @@ def accept_clients(server):
                     continue
 
                 print("\nRegistration received:")
-                print(json.dumps(registration, indent=4))
+                from api_server import DecimalJSONEncoder
+
+                print(json.dumps(registration, indent=4, cls=DecimalJSONEncoder))
 
                 if registration.get("type") != "REGISTER":
                     print("Invalid registration.")

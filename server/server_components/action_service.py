@@ -28,7 +28,9 @@ def _action_id(payload: Dict[str, Any]) -> str:
 
 
 def _json(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, default=str)
+    from api_server import DecimalJSONEncoder
+
+    return json.dumps(value, ensure_ascii=False, cls=DecimalJSONEncoder)
 
 
 def _row_to_action(row: Dict[str, Any]) -> Dict[str, Any]:

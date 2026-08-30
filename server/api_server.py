@@ -13,6 +13,8 @@ import queue
 import re
 import threading
 import urllib.parse
+from datetime import date, datetime
+from decimal import Decimal
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -31,6 +33,20 @@ from server_components.action_framework import ActionState, ActionType, get_supp
 
 API_HOST = os.getenv("API_HOST", "0.0.0.0")
 API_PORT = int(os.getenv("API_PORT", "8080"))
+
+
+class DecimalJSONEncoder(json.JSONEncoder):
+    """Serialize Decimal and date-like values for REST/SSE JSON payloads."""
+
+    def default(self, obj: Any) -> Any:
+        if isinstance(obj, Decimal):
+            try:
+                return int(obj) if obj == obj.to_integral_value() else float(obj)
+            except (ValueError, OverflowError, ArithmeticError):
+                return float(obj)
+        if isinstance(obj, (datetime, date)):
+            return obj.isoformat()
+        return super().default(obj)
 
 
 class ApiRequestHandler(BaseHTTPRequestHandler):
@@ -52,7 +68,7 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def _send_json(self, status_code: int, payload: Dict[str, Any]) -> None:
-        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        body = json.dumps(payload, ensure_ascii=False, cls=DecimalJSONEncoder).encode("utf-8")
         self.send_response(status_code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
@@ -126,7 +142,7 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     while True:
                         try:
                             event_type, data = q.get(timeout=15.0)
-                            payload = json.dumps(data, ensure_ascii=False)
+                            payload = json.dumps(data, ensure_ascii=False, cls=DecimalJSONEncoder)
                             msg = f"event: {event_type}\ndata: {payload}\n\n"
                             self.wfile.write(msg.encode("utf-8"))
                             self.wfile.flush()
