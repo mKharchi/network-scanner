@@ -47,7 +47,9 @@ def serialize_evidence(evidence: Any) -> Optional[str]:
         return None
     if isinstance(evidence, str):
         return evidence
-    return json.dumps(evidence)
+    from api_server import DecimalJSONEncoder
+
+    return json.dumps(evidence, cls=DecimalJSONEncoder)
 
 
 def parse_evidence(evidence: Any) -> Any:
