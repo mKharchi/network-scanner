@@ -231,6 +231,111 @@ export function DeviceDetailPage() {
         </SectionCard>
       </div>
 
+      {/* Network Intelligence — passive inspection telemetry */}
+      {(() => {
+        const sni: string[] = dev.sni_domains ?? [];
+        const dns: string[] = dev.dns_queries ?? [];
+        const ja3: string[] = dev.ja3_hashes ?? [];
+        const asns: Array<{ provider: string; description: string; destination_ip?: string; count: number }> =
+          dev.destination_asns ?? [];
+        const traffic = dev.traffic_profile ?? {};
+        const hasIntel = sni.length > 0 || dns.length > 0 || ja3.length > 0 || asns.length > 0 || traffic.behavioral_pattern;
+        if (!hasIntel) return null;
+        return (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
+              gap: "var(--space-6)",
+              marginBottom: "var(--space-6)",
+            }}
+          >
+            {sni.length > 0 && (
+              <SectionCard title="TLS / SNI Hostnames">
+                <ul style={{ margin: 0, padding: "0 0 0 var(--space-4)", listStyle: "disc" }}>
+                  {sni.map((d) => (
+                    <li key={d} style={{ fontSize: "var(--font-sm)", fontFamily: "var(--font-mono)", padding: "2px 0" }}>
+                      {d}
+                    </li>
+                  ))}
+                </ul>
+              </SectionCard>
+            )}
+
+            {dns.length > 0 && (
+              <SectionCard title="Passive DNS Queries">
+                <ul style={{ margin: 0, padding: "0 0 0 var(--space-4)", listStyle: "disc" }}>
+                  {dns.map((d) => (
+                    <li key={d} style={{ fontSize: "var(--font-sm)", fontFamily: "var(--font-mono)", padding: "2px 0" }}>
+                      {d}
+                    </li>
+                  ))}
+                </ul>
+              </SectionCard>
+            )}
+
+            {ja3.length > 0 && (
+              <SectionCard title="JA3 TLS Fingerprints">
+                {ja3.map((h) => (
+                  <div
+                    key={h}
+                    style={{
+                      fontFamily: "var(--font-mono)",
+                      fontSize: "var(--font-xs)",
+                      padding: "var(--space-1) 0",
+                      borderBottom: "1px solid var(--border-subtle)",
+                      wordBreak: "break-all",
+                    }}
+                  >
+                    {h}
+                  </div>
+                ))}
+              </SectionCard>
+            )}
+
+            {asns.length > 0 && (
+              <SectionCard title="Cloud / ASN Destinations">
+                {asns.map((a) => (
+                  <div
+                    key={a.provider}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "baseline",
+                      padding: "var(--space-1) 0",
+                      borderBottom: "1px solid var(--border-subtle)",
+                      fontSize: "var(--font-sm)",
+                    }}
+                  >
+                    <span style={{ fontWeight: 600 }}>{a.provider}</span>
+                    <span style={{ color: "var(--text-muted)", fontSize: "var(--font-xs)" }}>
+                      {a.description} · {a.count}×
+                    </span>
+                  </div>
+                ))}
+              </SectionCard>
+            )}
+
+            {traffic.behavioral_pattern && (
+              <SectionCard title="Traffic Profile">
+                <div>
+                  <DetailRow label="Pattern" value={traffic.behavioral_pattern} />
+                  {traffic.bytes_per_window != null && (
+                    <DetailRow label="Bytes / min" value={traffic.bytes_per_window.toLocaleString()} />
+                  )}
+                  {traffic.packets_per_window != null && (
+                    <DetailRow label="Packets / min" value={traffic.packets_per_window} />
+                  )}
+                  {traffic.avg_interval_sec != null && (
+                    <DetailRow label="Avg interval" value={`${traffic.avg_interval_sec}s`} />
+                  )}
+                </div>
+              </SectionCard>
+            )}
+          </div>
+        );
+      })()}
+
       {/* Observation History */}
       <SectionCard title="Observation History">
         {d.observations.length === 0 ? (

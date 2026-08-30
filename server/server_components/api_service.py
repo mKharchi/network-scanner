@@ -2217,13 +2217,148 @@ def get_spatial_scene(
     active_only: bool = True,
     max_age_seconds: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """Retrieve full 3D digital twin scene graph for physical/AR rendering."""
+    """Retrieve the legacy 3D-compatible scene graph."""
     from server_components import spatial_engine
     return spatial_engine.get_spatial_scene(
         floor=floor,
         active_only=active_only,
         max_age_seconds=max_age_seconds,
     )
+
+
+def get_floor1_spatial_map() -> Dict[str, Any]:
+    """Return active, elevation-qualified Floor 1 positions in 2D world coordinates."""
+    return get_floor_spatial_map(1)
+
+
+def get_floor_spatial_map(floor_id: int = 1) -> Dict[str, Any]:
+    """Return active, elevation-qualified floor positions in 2D world coordinates.
+
+    A recent DHCP observation can extend the visibility of an existing qualified
+    estimate; it never creates a location estimate on its own.
+    """
+    from datetime import timedelta
+    from server_components.device_recency import (
+        active_cutoff,
+        get_device_active_max_age_seconds,
+        get_dhcp_position_retention_grace_seconds,
+    )
+    from server_components.floor1_spatial import (
+        FLOOR_0,
+        FLOOR_1,
+        FLOOR_2,
+        FLOOR1_ELEVATION_METERS,
+        FLOOR1_ELEVATION_TOLERANCE_METERS,
+        FLOOR_ELEVATIONS,
+        FLOOR_ELEVATION_TOLERANCES,
+        FLOOR_GEOMETRIES,
+        FLOOR1_GEOMETRY,
+        device_position_payload,
+        reference_payload,
+    )
+
+    floor = int(floor_id) if floor_id in (FLOOR_0, FLOOR_1, FLOOR_2) else FLOOR_1
+    floor_elevation = FLOOR_ELEVATIONS.get(floor, FLOOR1_ELEVATION_METERS)
+    elevation_tolerance = FLOOR_ELEVATION_TOLERANCES.get(floor, FLOOR1_ELEVATION_TOLERANCE_METERS)
+    geometry = FLOOR_GEOMETRIES.get(floor, FLOOR1_GEOMETRY)
+
+    active_window = get_device_active_max_age_seconds()
+    dhcp_grace_seconds = get_dhcp_position_retention_grace_seconds()
+    active_cutoff_at = active_cutoff(max_age_seconds=active_window)
+    db_cutoff = active_cutoff_at.replace(tzinfo=None)
+    dhcp_cutoff = (active_cutoff_at - timedelta(seconds=dhcp_grace_seconds)).replace(tzinfo=None)
+
+    references: List[Dict[str, Any]] = []
+    if floor == FLOOR_1:
+        locations = [location for location in list_locations() if location and location.get("floor") == FLOOR_1]
+        references = [payload for location in locations if (payload := reference_payload(location)) is not None]
+
+    devices: List[Dict[str, Any]] = []
+    conn = get_connection()
+    if conn:
+        try:
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute(
+                """
+                SELECT d.id AS device_id, d.mac_address, d.ip_address, d.hostname, d.vendor,
+                       d.last_seen, e.location_id, e.confidence, e.method, e.z AS estimate_z,
+                       e.x AS estimate_x, e.y AS estimate_y,
+                       ABS(e.z - %s) AS elevation_delta_meters,
+                       l.floor, l.aisle, l.table_no AS table_no, l.row_no AS row_no,
+                       l.position, r.rogue_score, r.is_rogue, r.risk_level,
+                       (
+                           SELECT MAX(GREATEST(o.observed_at, o.received_at))
+                           FROM network_device_observations o
+                           WHERE o.device_id = d.id
+                             AND o.source_type = 'CLIENT_DHCP'
+                       ) AS last_dhcp_observed_at,
+                       CASE
+                           WHEN d.last_seen >= %s THEN 'network_scan'
+                           ELSE 'dhcp'
+                       END AS activity_source
+                FROM network_devices d
+                INNER JOIN device_location_estimates e ON e.device_id = d.id
+                LEFT JOIN locations l ON l.id = e.location_id
+                LEFT JOIN rogue_device_assessments r ON r.device_id = d.id
+                WHERE (l.floor = %s OR (l.floor IS NULL AND e.z IS NOT NULL AND ABS(e.z - %s) <= %s))
+                  AND e.z IS NOT NULL
+                  AND ABS(e.z - %s) <= %s
+                  AND (
+                      d.last_seen >= %s
+                      OR EXISTS (
+                          SELECT 1
+                          FROM network_device_observations o
+                          WHERE o.device_id = d.id
+                            AND o.source_type = 'CLIENT_DHCP'
+                            AND GREATEST(o.observed_at, o.received_at) >= %s
+                      )
+                  )
+                ORDER BY GREATEST(
+                    d.last_seen,
+                    COALESCE((
+                        SELECT MAX(GREATEST(o.observed_at, o.received_at))
+                        FROM network_device_observations o
+                        WHERE o.device_id = d.id
+                          AND o.source_type = 'CLIENT_DHCP'
+                    ), d.last_seen)
+                ) DESC
+                """,
+                (
+                    floor_elevation,
+                    db_cutoff,
+                    floor,
+                    floor_elevation,
+                    elevation_tolerance,
+                    floor_elevation,
+                    elevation_tolerance,
+                    db_cutoff,
+                    dhcp_cutoff,
+                ),
+            )
+            devices = [payload for row in cursor.fetchall() if (payload := device_position_payload(row, floor=floor)) is not None]
+        finally:
+            conn.close()
+
+    return {
+        "floor": floor,
+        "geometry": geometry,
+        "references": references,
+        "devices": devices,
+        "meta": {
+            "reference_count": len(references),
+            "device_count": len(devices),
+            "positioning": "assigned-floor1-slot" if floor == FLOOR_1 else f"floor{floor}-spatial",
+            "active_filter": True,
+            "active_window_seconds": active_window,
+            "active_cutoff": active_cutoff_at.isoformat(),
+            "dhcp_activity_retains_existing_position": True,
+            "dhcp_retention_grace_seconds": dhcp_grace_seconds,
+            "elevation_gate": {
+                "floor_elevation_meters": floor_elevation,
+                "tolerance_meters": elevation_tolerance,
+            },
+        },
+    }
 
 
 def get_spatial_topology() -> Dict[str, Any]:

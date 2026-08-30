@@ -319,6 +319,85 @@ export interface SpatialLocationEstimate {
   calculated_at?: string | null;
 }
 
+export interface FloorMapGeometry {
+  floor: number;
+  units: "meters";
+  width: number;
+  height: number;
+  separation_meters: number;
+  rooms: Array<{ id: string; x: number; y: number; width: number; height: number; label?: string }>;
+  stairs: { id: string; x: number; y: number; width: number; height: number; label?: string } | null;
+  tables: Array<{
+    id: string;
+    aisle: number;
+    table: number;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    orientation: string;
+  }>;
+}
+
+export interface FloorReference {
+  floor: number;
+  client_id: string;
+  hostname?: string | null;
+  location_id?: number | null;
+  label?: string | null;
+  x: number;
+  y: number;
+  confidence: number | null;
+  verified: boolean;
+}
+
+export interface FloorDevice {
+  floor: number;
+  device_id: number;
+  mac_address?: string | null;
+  ip_address?: string | null;
+  hostname?: string | null;
+  vendor?: string | null;
+  x: number;
+  y: number;
+  confidence: number;
+  method: string;
+  rogue_score: number;
+  is_rogue: boolean;
+  risk_level: string;
+  last_seen?: string | null;
+  last_dhcp_observed_at?: string | null;
+  activity_source?: "network_scan" | "dhcp";
+  estimate_z?: number | null;
+  elevation_delta_meters?: number | null;
+}
+
+export interface FloorSpatialMapResponse {
+  floor: number;
+  geometry: FloorMapGeometry;
+  references: FloorReference[];
+  devices: FloorDevice[];
+  meta: {
+    reference_count: number;
+    device_count: number;
+    positioning: string;
+    active_filter: boolean;
+    active_window_seconds: number;
+    active_cutoff: string;
+    dhcp_activity_retains_existing_position: boolean;
+    dhcp_retention_grace_seconds: number;
+    elevation_gate: {
+      floor_elevation_meters: number;
+      tolerance_meters: number;
+    };
+  };
+}
+
+export type Floor1MapGeometry = FloorMapGeometry;
+export type Floor1Reference = FloorReference;
+export type Floor1Device = FloorDevice;
+export type Floor1SpatialMapResponse = FloorSpatialMapResponse;
+
 export interface RogueDeviceSummary {
   device_id: number;
   mac_address: string;
@@ -623,6 +702,17 @@ export interface NetworkDevice {
   managed_client_id: string | null;
   last_observed_at: string | null;
   sources: string[];
+  sni_domains: string[];
+  dns_queries: string[];
+  ja3_hashes: string[];
+  destination_asns: Array<{ provider: string; description: string; destination_ip?: string; count: number }>;
+  traffic_profile?: {
+    behavioral_pattern?: string | null;
+    bytes_per_window?: number | null;
+    packets_per_window?: number | null;
+    avg_interval_sec?: number | null;
+    [key: string]: unknown;
+  };
 }
 
 /** Lightweight row returned by GET /api/v1/network/devices (list all) */
@@ -1314,7 +1404,14 @@ export const api = {
   triggerSpatialEvaluation: () =>
     post<{ status: string; evaluated_devices: number; items: any[] }>("/spatial/evaluate"),
 
-  // ── 3D Digital Twin & AR Scene Visualization ────────────────────
+  // ── Multi-Floor Spatial Visualization ──────────────────────────
+  getFloorSpatialMap: (floor: number = 1) =>
+    get<FloorSpatialMapResponse>(`/spatial/floor/${floor}`),
+
+  getFloor1SpatialMap: () =>
+    get<FloorSpatialMapResponse>("/spatial/floor/1"),
+
+  // ── Legacy 3D-compatible scene / AR data ─────────────────────────
   getSpatialScene: (params?: { floor?: number; active_only?: boolean; max_age_seconds?: number }) =>
     get<SpatialSceneResponse>("/spatial/scene", {
       ...(params?.floor != null ? { floor: String(params.floor) } : {}),
