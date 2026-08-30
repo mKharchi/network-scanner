@@ -216,9 +216,13 @@ export function DigitalTwinPage() {
       setLoading(true);
       setSceneLoadError(null);
       const [spatialData, replayData, rogueData, sensorData, eventData] = await Promise.all([
-        api.getSpatialScene(selectedFloor !== 'all' ? { floor: selectedFloor, active_only: true } : { active_only: true }).catch(() => null),
+        // Match Rogue Device Manager: include the full scored inventory, not only
+        // endpoints seen inside the live recency window.
+        api.getSpatialScene(
+          selectedFloor !== 'all' ? { floor: selectedFloor, active_only: false } : { active_only: false },
+        ).catch(() => null),
         api.getSpatialReplay().catch(() => null),
-        api.listRogueDevices({ min_score: 20, active_only: true }).catch(() => ({ items: [], total: 0 })),
+        api.listRogueDevices({ min_score: 20, active_only: false }).catch(() => ({ items: [], total: 0 })), 
         api.listSensors().catch(() => ({ items: [] })),
         api.listSpatialEvents(50).catch(() => ({ items: [] })),
       ]);
@@ -677,12 +681,39 @@ export function DigitalTwinPage() {
   }, [scene, selectedFloor, nodeFloor, zoneFilter, searchQuery]);
 
   const displayedThreats = useMemo(() => {
-    if (!scene) return [];
+    // Rogue Device Manager is the canonical assessment list. The scene can
+    // intentionally omit duplicate or unlocalized nodes, so using only
+    // scene.threats made this panel disagree with the manager.
+    const sceneThreatsByDevice = new Map((scene?.threats ?? []).map((threat) => [threat.device_id, threat]));
+    const threats = rogueList.map((rogue) => {
+      const sceneThreat = sceneThreatsByDevice.get(rogue.device_id);
+      if (sceneThreat) return sceneThreat;
+
+      const location = rogue.location;
+      return {
+        id: `threat-${rogue.device_id}`,
+        device_id: rogue.device_id,
+        node_id: `dev-${rogue.device_id}`,
+        name: rogue.hostname || rogue.mac_address,
+        severity: rogue.risk_level.toLowerCase() as 'low' | 'medium' | 'high' | 'critical',
+        score: rogue.rogue_score,
+        position: {
+          x: Number(location?.x ?? 0),
+          y: Number(location?.y ?? 0),
+          z: Number(location?.z ?? 0.8),
+        },
+        confidence: Number(location?.confidence ?? 0),
+        reasons: rogue.reasons,
+        detected_at: rogue.first_seen || new Date().toISOString(),
+        is_restricted_zone: Boolean(location?.is_restricted),
+      };
+    });
+
     if (zoneFilter === 'datacenter') {
-      return scene.threats.filter((t) => t.is_restricted_zone);
+      return threats.filter((threat) => threat.is_restricted_zone);
     }
-    return scene.threats;
-  }, [scene, zoneFilter]);
+    return threats;
+  }, [scene, rogueList, zoneFilter]);
 
   const selectedNode = useMemo(() => {
     if (!scene || !selectedNodeId) return null;
@@ -1208,7 +1239,7 @@ export function DigitalTwinPage() {
         <div className="spatial-page-header__copy">
           <span className="eyebrow eyebrow--accent">SPATIAL INTELLIGENCE / NETWORK TWIN</span>
           <h1 className="page-title">Your infrastructure, mapped in space</h1>
-          <p style={{ color: "var(--text-muted)", marginTop: "var(--space-1)" }}>Inspect devices, sensors, threats, and connectivity in the live spatial scene. Endpoints seen within the last {Math.round((scene?.meta.active_filter?.max_age_seconds ?? 1800) / 60)} minutes are shown.</p>
+          <p style={{ color: "var(--text-muted)", marginTop: "var(--space-1)" }}>Inspect devices, sensors, threats, and connectivity in the spatial scene. Threat counts use the same full scored inventory as Rogue Device Manager.</p>
         </div>
 
         {/* View Mode Switcher */}
@@ -1277,7 +1308,7 @@ export function DigitalTwinPage() {
         />
         <MetricCard
           label="HIGH / CRITICAL THREATS"
-          value={criticalThreatsCount || scene?.threats.length || 0}
+          value={criticalThreatsCount}
           context="Restricted zone or randomized MAC"
           valueVariant={criticalThreatsCount > 0 ? 'danger' : 'success'}
         />

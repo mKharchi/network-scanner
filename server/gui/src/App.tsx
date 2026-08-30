@@ -16,7 +16,7 @@ import { ActivityLogsPage } from './pages/ActivityLogs';
 import { SettingsPage } from './pages/Settings';
 import { LocationsPage } from './pages/Locations';
 import { RogueDevicesPage } from './pages/RogueDevices';
-import { DigitalTwinPage } from './pages/DigitalTwin';
+import { SpatialPage } from './pages/SpatialPage';
 import { ClientLocalizationPage } from './pages/ClientLocalization';
 
 function AppContent() {
@@ -32,9 +32,11 @@ function AppContent() {
         <Route path="/clients/:clientId" element={<ClientDetailPage />} />
         <Route path="/locations" element={<LocationsPage />} />
         <Route path="/rogue-devices" element={<RogueDevicesPage />} />
-        <Route path="/digital-twin" element={<DigitalTwinPage />} />
+        <Route path="/digital-twin" element={<SpatialPage />} />
+        <Route path="/spatial" element={<SpatialPage />} />
+        <Route path="/spatial/map" element={<SpatialPage />} />
         <Route path="/client-localization" element={<ClientLocalizationPage />} />
-        <Route path="/spatial/digital-twin" element={<Navigate to="/digital-twin" replace />} />
+        <Route path="/spatial/digital-twin" element={<Navigate to="/spatial" replace />} />
         <Route path="/spatial/rogue" element={<Navigate to="/rogue-devices" replace />} />
 
         {/* Network */}
