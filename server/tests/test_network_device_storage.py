@@ -492,6 +492,52 @@ class NetworkDeviceStorageTests(unittest.TestCase):
         self.assertEqual(timed_out["status"], "client_timeout")
         self.assertEqual(timed_out["timeout_seconds"], 4.0)
 
+    def test_store_observations_enqueues_device_evaluation(self):
+        connection = FakeConnection()
+        original_get_connection = network_device_storage.get_connection
+        network_device_storage.get_connection = lambda: connection
+        while not server_lib.device_evaluation_queue.empty():
+            server_lib.device_evaluation_queue.get_nowait()
+
+        try:
+            stored = network_device_storage.store_client_neighbour_observations(
+                "AA:BB:CC:DD:EE:FF",
+                [
+                    {
+                        "ip_address": "172.16.0.102",
+                        "mac_address": "11:22:33:44:55:66",
+                        "entry_type": "dynamic",
+                    }
+                ],
+            )
+            self.assertEqual(stored, 1)
+            self.assertFalse(server_lib.device_evaluation_queue.empty())
+            dev_id = server_lib.device_evaluation_queue.get_nowait()
+            self.assertEqual(dev_id, 13)
+        finally:
+            network_device_storage.get_connection = original_get_connection
+
+    def test_store_observations_drops_when_queue_full_without_error(self):
+        import queue
+        connection = FakeConnection()
+        original_get_connection = network_device_storage.get_connection
+        network_device_storage.get_connection = lambda: connection
+
+        with patch.object(server_lib.device_evaluation_queue, "put_nowait", side_effect=queue.Full):
+            stored = network_device_storage.store_client_neighbour_observations(
+                "AA:BB:CC:DD:EE:FF",
+                [
+                    {
+                        "ip_address": "172.16.0.102",
+                        "mac_address": "11:22:33:44:55:66",
+                        "entry_type": "dynamic",
+                    }
+                ],
+            )
+            # Confirms storing succeeds and does not raise or block
+            self.assertEqual(stored, 1)
+        network_device_storage.get_connection = original_get_connection
+
 
 if __name__ == "__main__":
     unittest.main()

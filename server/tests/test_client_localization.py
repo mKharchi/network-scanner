@@ -60,7 +60,7 @@ class AutomaticClientLocalizationTests(unittest.TestCase):
         self.assertEqual(result["reason"], "insufficient_evidence")
         self.assertEqual(result["confidence"], 0.0)
 
-    @patch("server_components.api_service.assign_client_location")
+    @patch("server_components.location_repository.submit_client_location_assignment")
     @patch("server_components.client_localization.calculate_client_location")
     @patch("server_components.client_localization._client_assignment_guard")
     def test_auto_assigns_when_confidence_meets_threshold(
