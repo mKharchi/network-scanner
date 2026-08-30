@@ -799,7 +799,9 @@ def handle_client_alert(mac, alert_data):
 
 
 def send_message(conn, message):
-    data = json.dumps(message).encode()
+    from api_server import DecimalJSONEncoder
+
+    data = json.dumps(message, cls=DecimalJSONEncoder).encode()
     # Prefix with 4-byte big-endian length so the receiver knows exactly how much to read
     conn.sendall(len(data).to_bytes(4, byteorder="big") + data)
 
@@ -1470,7 +1472,9 @@ def print_response(client_id, command, response):
             store_activity_log_file(client["mac"], log_data)
 
     else:
-        print(json.dumps(response, indent=4))
+        from api_server import DecimalJSONEncoder
+
+        print(json.dumps(response, indent=4, cls=DecimalJSONEncoder))
 
 
 # ============================================================
