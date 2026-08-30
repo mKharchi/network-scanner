@@ -464,6 +464,93 @@ class PhysicalNeighborLookupTests(unittest.TestCase):
         self.assertEqual(neighbors[0]["relationship"], "same_row")
         self.assertEqual(neighbors[0]["distance"], 1)
 
+    def test_concurrent_assignments_serialize_and_prevent_double_assignment(self):
+        import concurrent.futures
+        from server_components import location_repository
+
+        # In-memory mock DB state to test concurrency against serialized worker
+        db_state = {
+            "clients": {
+                "client-1": {"id": 1, "client_id": "client-1", "location_id": None, "hostname": "HOST-1"},
+                "client-2": {"id": 2, "client_id": "client-2", "location_id": None, "hostname": "HOST-2"},
+            },
+            "locations": {
+                10: {"id": 10, "label": "F1-T1-P1", "location_type": "pc_position", "floor": 1, "zone_type": "work"},
+            },
+            "history": [],
+        }
+
+        class MockCursor:
+            def __init__(self):
+                self._last_query = ""
+
+            def execute(self, query, params=None):
+                self._last_query = query
+                self.params = params
+                if "UPDATE clients" in query and "SET location_id =" in query:
+                    loc_id = params[0]
+                    cid = params[-1]
+                    for c in db_state["clients"].values():
+                        if c["id"] == cid:
+                            c["location_id"] = loc_id
+                elif "UPDATE client_location_history" in query:
+                    pass
+                elif "INSERT INTO client_location_history" in query:
+                    db_state["history"].append(params)
+
+            def fetchone(self):
+                if "FROM clients WHERE client_id = %s" in self._last_query:
+                    cid = self.params[0]
+                    return db_state["clients"].get(cid)
+                if "FROM locations WHERE id = %s" in self._last_query:
+                    lid = self.params[0]
+                    return db_state["locations"].get(lid)
+                if "FROM clients WHERE location_id = %s AND client_id <> %s" in self._last_query:
+                    lid, cid = self.params
+                    for c in db_state["clients"].values():
+                        if c["location_id"] == lid and c["client_id"] != cid:
+                            return c
+                    return None
+                return None
+
+            def close(self):
+                pass
+
+        class MockConn:
+            def cursor(self, **kwargs):
+                return MockCursor()
+            def commit(self):
+                pass
+            def rollback(self):
+                pass
+            def close(self):
+                pass
+            def is_connected(self):
+                return False
+
+        with patch.object(location_repository, "get_connection", side_effect=MockConn):
+            with patch("server_components.event_broadcaster.broadcast_client_location_updated"):
+                results = {}
+                errors = {}
+
+                def assign(client_id):
+                    try:
+                        res = api_service.assign_client_location(client_id, 10, assigned_by="test")
+                        results[client_id] = res
+                    except Exception as err:
+                        errors[client_id] = err
+
+                with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                    f1 = executor.submit(assign, "client-1")
+                    f2 = executor.submit(assign, "client-2")
+                    concurrent.futures.wait([f1, f2])
+
+                # Exactly one succeeds and one is rejected
+                self.assertEqual(len(results), 1)
+                self.assertEqual(len(errors), 1)
+                error_msg = str(list(errors.values())[0])
+                self.assertIn("already assigned", error_msg)
+
 
 if __name__ == "__main__":
     unittest.main()

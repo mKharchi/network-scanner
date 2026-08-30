@@ -3,6 +3,7 @@
 import ipaddress
 import logging
 import os
+import queue
 import re
 from datetime import datetime, timedelta, timezone
 
@@ -214,22 +215,17 @@ def _store_observations(reporter_mac, neighbours, source_type, *, observed_at=No
             )
         connection.commit()
 
-        # Trigger spatial and rogue evaluation for newly observed devices
+        # Enqueue spatial/rogue evaluation and ML classification asynchronously
         try:
-            from server_components import spatial_engine
-            for dev_id in updated_device_ids:
-                spatial_engine.evaluate_device_spatial_and_rogue_status(dev_id, conn=connection)
-        except Exception as spatial_err:
-            LOGGER.warning("Spatial triangulation evaluation skipped: %s", spatial_err)
+            from server_components.server_lib import device_evaluation_queue
 
-        # Trigger automatic ML device classification for newly observed devices
-        try:
-            from server_components.device_intelligence import get_device_intelligence_service
-            dev_intel = get_device_intelligence_service()
             for dev_id in updated_device_ids:
-                dev_intel.classify_device(dev_id)
-        except Exception as intel_err:
-            LOGGER.debug("Automatic device classification skipped: %s", intel_err)
+                try:
+                    device_evaluation_queue.put_nowait(dev_id)
+                except queue.Full:
+                    LOGGER.warning("evaluation queue full, dropping device_id=%s", dev_id)
+        except Exception as queue_err:
+            LOGGER.warning("Device evaluation queue dispatch failed: %s", queue_err)
 
         return len(neighbours)
     except Exception:

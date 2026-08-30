@@ -456,184 +456,21 @@ def assign_client_location(
     evidence: Any = None,
     last_calculated_at: Optional[Any] = None,
 ) -> Dict[str, Any]:
-    """Assign a client to a PC position and record hybrid assignment metadata.
+    """Assign a client to a PC position and record hybrid assignment metadata."""
+    from server_components.location_repository import submit_client_location_assignment
 
-    Existing operator PATCH/PUT callers remain MANUAL + ASSIGNED. Automatic
-    localization (Phase 3) passes method=AUTO with confidence/evidence.
-    """
-    assignment_method = normalize_assignment_method(method)
-    assignment_status = normalize_assignment_status(status)
-    if verified is None:
-        verified = assignment_method == ASSIGNMENT_METHOD_MANUAL
-    if source is None:
-        source = (
-            SOURCE_ADMINISTRATOR
-            if assignment_method == ASSIGNMENT_METHOD_MANUAL
-            else "localization_engine"
-        )
-    evidence_json = serialize_evidence(evidence)
-
-    conn = get_connection()
-    if not conn:
-        raise ValueError("Database unavailable.")
-    try:
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute(
-            """SELECT id, client_id, location_id,
-                      location_assignment_method, location_assignment_status
-               FROM clients WHERE client_id = %s""",
-            (client_id,),
-        )
-        client = cursor.fetchone()
-        if not client:
-            raise ValueError(f"Client '{client_id}' not found.")
-        cursor.execute("SELECT * FROM locations WHERE id = %s", (location_id,))
-        location = cursor.fetchone()
-        if not location:
-            raise ValueError(f"Location '{location_id}' not found.")
-        if (location.get("location_type") or LOCATION_TYPE_PC_POSITION) not in ASSIGNABLE_LOCATION_TYPES:
-            raise ValueError(
-                f"Location '{location.get('label') or location_id}' is not an assignable PC position."
-            )
-        cursor.execute(
-            "SELECT client_id, hostname FROM clients WHERE location_id = %s AND client_id <> %s",
-            (location_id, client_id),
-        )
-        occupant = cursor.fetchone()
-        if occupant:
-            occupant_name = occupant.get("hostname") or occupant["client_id"]
-            raise ValueError(f"This physical position is already assigned to {occupant_name}.")
-
-        location_changed = client["location_id"] != location_id
-        if location_changed:
-            cursor.execute(
-                "UPDATE client_location_history SET unassigned_at = CURRENT_TIMESTAMP WHERE client_id = %s AND unassigned_at IS NULL",
-                (client["id"],),
-            )
-            cursor.execute(
-                """UPDATE clients
-                   SET location_id = %s,
-                       location_assignment_method = %s,
-                       location_assignment_status = %s,
-                       location_confidence = %s,
-                       location_verified = %s,
-                       location_assigned_at = CURRENT_TIMESTAMP,
-                       location_assigned_by = %s,
-                       location_last_calculated_at = %s,
-                       location_source = %s,
-                       location_evidence = %s,
-                       location_failure_reason = NULL
-                   WHERE id = %s""",
-                (
-                    location_id,
-                    assignment_method,
-                    assignment_status,
-                    confidence,
-                    bool(verified),
-                    assigned_by,
-                    last_calculated_at,
-                    source,
-                    evidence_json,
-                    client["id"],
-                ),
-            )
-            cursor.execute(
-                """INSERT INTO client_location_history (
-                       client_id, location_id, assigned_by,
-                       assignment_method, assignment_status, confidence,
-                       verified, source, evidence
-                   ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                (
-                    client["id"],
-                    location_id,
-                    assigned_by,
-                    assignment_method,
-                    assignment_status,
-                    confidence,
-                    bool(verified),
-                    source,
-                    evidence_json,
-                ),
-            )
-        else:
-            # Same seat: refresh assignment metadata (e.g. confirm / recalculate accept).
-            cursor.execute(
-                """UPDATE clients
-                   SET location_assignment_method = %s,
-                       location_assignment_status = %s,
-                       location_confidence = %s,
-                       location_verified = %s,
-                       location_assigned_at = COALESCE(location_assigned_at, CURRENT_TIMESTAMP),
-                       location_assigned_by = COALESCE(%s, location_assigned_by),
-                       location_last_calculated_at = COALESCE(%s, location_last_calculated_at),
-                       location_source = %s,
-                       location_evidence = %s,
-                       location_failure_reason = NULL
-                   WHERE id = %s""",
-                (
-                    assignment_method,
-                    assignment_status,
-                    confidence,
-                    bool(verified),
-                    assigned_by,
-                    last_calculated_at,
-                    source,
-                    evidence_json,
-                    client["id"],
-                ),
-            )
-        conn.commit()
-        try:
-            from server_components import event_broadcaster
-
-            event_broadcaster.broadcast_client_location_updated(
-                client_id=client_id,
-                location=_location_from_row({
-                    **location,
-                    "client_id": client_id,
-                    "location_assignment_method": assignment_method,
-                    "location_assignment_status": assignment_status,
-                    "location_confidence": confidence,
-                    "location_verified": bool(verified),
-                    "location_assigned_at": datetime.now(timezone.utc),
-                    "location_assigned_by": assigned_by,
-                    "location_last_calculated_at": last_calculated_at,
-                    "location_source": source,
-                    "location_evidence": evidence_json,
-                }),
-                assignment=assignment_payload(
-                    method=assignment_method,
-                    status=assignment_status,
-                    confidence=confidence,
-                    verified=bool(verified),
-                    assigned_at=datetime.now(timezone.utc).isoformat(),
-                    assigned_by=assigned_by,
-                    last_calculated_at=_iso_utc(last_calculated_at),
-                    source=source,
-                    evidence=evidence_json,
-                ),
-                previous_location_id=client["location_id"] if location_changed else location_id,
-                change="moved" if location_changed and client["location_id"] is not None else "assigned",
-            )
-        except Exception:
-            # Database assignment remains authoritative if SSE delivery fails.
-            pass
-        assigned = _location_from_row({
-            **location,
-            "client_id": client_id,
-            "location_assignment_method": assignment_method,
-            "location_assignment_status": assignment_status,
-            "location_confidence": confidence,
-            "location_verified": bool(verified),
-            "location_assigned_at": datetime.now(timezone.utc),
-            "location_assigned_by": assigned_by,
-            "location_last_calculated_at": last_calculated_at,
-            "location_source": source,
-            "location_evidence": evidence_json,
-        }) or {}
-        return assigned
-    finally:
-        conn.close()
+    return submit_client_location_assignment(
+        client_id=client_id,
+        location_id=location_id,
+        assigned_by=assigned_by,
+        method=method,
+        status=status,
+        confidence=confidence,
+        verified=verified,
+        source=source,
+        evidence=evidence,
+        last_calculated_at=last_calculated_at,
+    )
 
 
 def confirm_client_location(

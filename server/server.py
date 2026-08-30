@@ -112,6 +112,28 @@ def start_server():
         daemon=True
     ).start()
 
+    # Start device evaluation worker in background
+    try:
+        from server_components.server_lib import _run_device_evaluation_worker
+        threading.Thread(
+            target=_run_device_evaluation_worker,
+            daemon=True,
+            name="device-evaluation-worker"
+        ).start()
+    except Exception as e:
+        print(f"Note: Device evaluation worker could not start: {e}")
+
+    # Start location assignment worker in background
+    try:
+        from server_components.location_repository import _run_location_assignment_worker
+        threading.Thread(
+            target=_run_location_assignment_worker,
+            daemon=True,
+            name="location-assignment-worker"
+        ).start()
+    except Exception as e:
+        print(f"Note: Location assignment worker could not start: {e}")
+
     # Start REST API server for GUI in background
     try:
         from api_server import run_api_server, API_HOST, API_PORT
