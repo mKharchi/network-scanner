@@ -793,6 +793,98 @@ def handle_client_alert(mac, alert_data):
             conn.close()
 
 
+_PACKAGE_RESULT_LOCK = threading.Lock()
+_PACKAGE_RESULT_NOTIFIERS = {}
+
+
+def register_package_result_waiter(action_id):
+    """Register an in-memory queue to receive the asynchronous PACKAGE_RESULT for action_id."""
+    q = queue.Queue(maxsize=1)
+    with _PACKAGE_RESULT_LOCK:
+        _PACKAGE_RESULT_NOTIFIERS[action_id] = q
+    return q
+
+
+def unregister_package_result_waiter(action_id):
+    """Unregister the package result waiter."""
+    with _PACKAGE_RESULT_LOCK:
+        _PACKAGE_RESULT_NOTIFIERS.pop(action_id, None)
+
+
+def handle_package_result(mac, message):
+    """Handle an asynchronous PACKAGE_RESULT message from a client."""
+    if not isinstance(message, dict):
+        return False
+
+    action_id = message.get("action_id")
+    status = message.get("status")
+    if not action_id:
+        return False
+
+    client_id = _client_id_for_mac(mac)
+    target_status = "SUCCESS" if status == "SUCCESS" else "FAILED"
+
+    # Persist to database
+    conn = None
+    cursor = None
+    try:
+        from api_server import DecimalJSONEncoder
+
+        conn = get_connection()
+        if conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """UPDATE action_targets at
+                   JOIN actions a ON a.id = at.action_id
+                   JOIN clients c ON c.id = at.client_id
+                   SET at.status = %s, at.completed_at = %s, at.result = %s, at.error = %s
+                   WHERE a.action_id = %s AND (c.client_id = %s OR c.mac_address = %s)""",
+                (
+                    target_status,
+                    datetime.now(timezone.utc).replace(tzinfo=None),
+                    json.dumps(message, cls=DecimalJSONEncoder) if target_status == "SUCCESS" else None,
+                    json.dumps(message, cls=DecimalJSONEncoder) if target_status == "FAILED" else None,
+                    action_id,
+                    client_id or "",
+                    mac,
+                ),
+            )
+            conn.commit()
+    except Exception as err:
+        print(f"Error persisting PACKAGE_RESULT for action {action_id}: {err}")
+    finally:
+        if cursor:
+            cursor.close()
+        if conn and conn.is_connected():
+            conn.close()
+
+    # Broadcast update to connected GUI clients via SSE
+    try:
+        from server_components import event_broadcaster
+
+        event_broadcaster.broadcast(
+            "action_update",
+            {
+                "action_id": action_id,
+                "client_id": client_id,
+                "status": target_status,
+                "data": message,
+            },
+        )
+    except Exception as err:
+        print(f"Error broadcasting action_update for {action_id}: {err}")
+
+    # Wake up any waiting execution thread
+    with _PACKAGE_RESULT_LOCK:
+        waiter = _PACKAGE_RESULT_NOTIFIERS.get(action_id)
+        if waiter:
+            try:
+                waiter.put_nowait(message)
+            except Exception:
+                pass
+    return True
+
+
 # ============================================================
 # SEND / RECEIVE
 # ============================================================
@@ -1413,6 +1505,8 @@ def receive_client_messages(mac, conn, *, agent_role="service"):
                 handle_client_alert(mac, message.get("alert"))
             elif message_type == "NETWORK_NEIGHBOURS":
                 handle_network_neighbour_report(mac, message.get("data"))
+            elif message_type == "PACKAGE_RESULT":
+                handle_package_result(mac, message)
             elif message_type == "RESPONSE":
                 client = get_client_by_mac(mac, agent_role=agent_role)
                 if client and client["connection"] is conn:

@@ -1,6 +1,9 @@
+import base64
 import glob
+import hashlib
 import json
 import os
+from pathlib import Path
 import platform
 import re
 import shutil
@@ -15,7 +18,12 @@ from datetime import datetime, timedelta
 
 import psutil
 
-from action_framework import ActionManager, ActionType, normalize_action_name
+from action_framework import (
+    ActionManager,
+    ActionType,
+    DEPLOY_PACKAGE_INIT_COMMAND,
+    normalize_action_name,
+)
 
 # ============================================================
 # SYSTEM INFORMATION
@@ -1022,6 +1030,161 @@ def _handle_flush_neighbourhood_storage(_message, **_context):
     return flush_neighbourhood_storage()
 
 
+PACKAGE_INCOMING_DIR = Path(__file__).resolve().parent / "updates" / "incoming"
+ACTIVE_PACKAGE_SESSIONS = {}
+_PACKAGE_SESSION_LOCK = threading.Lock()
+
+
+def _handle_deploy_package_init(message, **_context):
+    args = message.get("args") if isinstance(message.get("args"), dict) else {}
+    action_id = message.get("action_id") or args.get("action_id")
+    package_id = args.get("package_id") or action_id
+    sha256 = args.get("sha256")
+    total_size = args.get("total_size", 0)
+    chunk_size = args.get("chunk_size", 131072)
+    total_chunks = args.get("total_chunks", 1)
+
+    if not action_id or not package_id or not sha256:
+        return {
+            "status": "error",
+            "message": "Missing required package parameters (action_id, package_id, sha256).",
+        }
+
+    try:
+        staging_dir = PACKAGE_INCOMING_DIR
+        staging_dir.mkdir(parents=True, exist_ok=True)
+        part_path = staging_dir / f"{package_id}.zip.part"
+        final_path = staging_dir / f"{package_id}.zip"
+
+        try:
+            if part_path.exists():
+                part_path.unlink()
+        except OSError as err:
+            return {
+                "status": "error",
+                "message": f"Could not clear stale partial package file: {err}",
+            }
+
+        file_handle = open(part_path, "wb")
+
+        with _PACKAGE_SESSION_LOCK:
+            old_session = ACTIVE_PACKAGE_SESSIONS.get(action_id)
+            if old_session and old_session.get("file_handle"):
+                try:
+                    old_session["file_handle"].close()
+                except Exception:
+                    pass
+
+            ACTIVE_PACKAGE_SESSIONS[action_id] = {
+                "action_id": action_id,
+                "package_id": package_id,
+                "sha256": str(sha256).strip().lower(),
+                "total_size": int(total_size),
+                "chunk_size": int(chunk_size),
+                "total_chunks": int(total_chunks),
+                "part_path": part_path,
+                "final_path": final_path,
+                "file_handle": file_handle,
+                "received_chunks": 0,
+                "hasher": hashlib.sha256(),
+                "bytes_written": 0,
+            }
+
+        return {
+            "status": "ready",
+            "action_id": action_id,
+            "package_id": package_id,
+            "total_chunks": total_chunks,
+        }
+    except Exception as exc:
+        return {
+            "status": "error",
+            "message": f"Failed to initialize package staging: {exc}",
+        }
+
+
+def process_package_chunk(message):
+    """Process an incoming PACKAGE_CHUNK frame and write directly to disk."""
+    if not isinstance(message, dict):
+        return {"type": "PACKAGE_RESULT", "status": "FAILED", "error": "Invalid message format"}
+
+    action_id = message.get("action_id")
+    seq = message.get("seq")
+    data_b64 = message.get("data")
+
+    with _PACKAGE_SESSION_LOCK:
+        session = ACTIVE_PACKAGE_SESSIONS.get(action_id)
+        if not session:
+            return {
+                "type": "PACKAGE_RESULT",
+                "action_id": action_id,
+                "status": "FAILED",
+                "error": f"No active package session found for action_id={action_id}",
+            }
+
+        file_handle = session["file_handle"]
+        part_path = session["part_path"]
+        final_path = session["final_path"]
+        expected_hash = session["sha256"]
+        package_id = session["package_id"]
+
+        try:
+            chunk_bytes = base64.b64decode(data_b64, validate=True)
+            file_handle.write(chunk_bytes)
+            file_handle.flush()
+            session["hasher"].update(chunk_bytes)
+            session["bytes_written"] += len(chunk_bytes)
+            session["received_chunks"] += 1
+
+            if seq == session["total_chunks"]:
+                file_handle.close()
+                ACTIVE_PACKAGE_SESSIONS.pop(action_id, None)
+
+                computed_hash = session["hasher"].hexdigest().lower()
+                if computed_hash == expected_hash:
+                    os.replace(part_path, final_path)
+                    return {
+                        "type": "PACKAGE_RESULT",
+                        "action_id": action_id,
+                        "package_id": package_id,
+                        "status": "SUCCESS",
+                        "sha256": computed_hash,
+                        "file_path": str(final_path),
+                        "total_bytes": session["bytes_written"],
+                    }
+                else:
+                    try:
+                        part_path.unlink(missing_ok=True)
+                    except OSError:
+                        pass
+                    return {
+                        "type": "PACKAGE_RESULT",
+                        "action_id": action_id,
+                        "package_id": package_id,
+                        "status": "FAILED",
+                        "sha256": computed_hash,
+                        "error": f"hash mismatch: expected {expected_hash}, got {computed_hash}",
+                    }
+            return None
+        except Exception as error:
+            try:
+                file_handle.close()
+            except Exception:
+                pass
+            try:
+                part_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+            ACTIVE_PACKAGE_SESSIONS.pop(action_id, None)
+            return {
+                "type": "PACKAGE_RESULT",
+                "action_id": action_id,
+                "package_id": package_id,
+                "status": "FAILED",
+                "error": f"chunk write failed: {error}",
+            }
+
+
 ACTION_MANAGER = ActionManager()
 ACTION_MANAGER.register(ActionType.GET_SYSTEM_INFO.value, _handle_get_system_info)
 ACTION_MANAGER.register(ActionType.GET_NETWORK_INFO.value, _handle_get_network_info)
@@ -1054,6 +1217,14 @@ ACTION_MANAGER.register(ActionType.UPDATE_LOCATION.value, _handle_update_locatio
 ACTION_MANAGER.register(
     ActionType.FLUSH_NEIGHBOURHOOD_STORAGE.value,
     _handle_flush_neighbourhood_storage,
+)
+ACTION_MANAGER.register(
+    DEPLOY_PACKAGE_INIT_COMMAND,
+    _handle_deploy_package_init,
+)
+ACTION_MANAGER.register(
+    ActionType.DEPLOY_PACKAGE.value,
+    _handle_deploy_package_init,
 )
 
 
