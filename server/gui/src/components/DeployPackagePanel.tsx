@@ -3,7 +3,14 @@ import { api, type ActionDetail } from "../api/client";
 import { Button } from "./Button";
 import { Notice } from "./States";
 
-const MAX_PACKAGE_BYTES = 100 * 1024 * 1024;
+const MAX_PACKAGE_BYTES = 4777 * 1024 * 1024;
+
+function deployTimeoutMs(fileSizeBytes: number): number {
+  const chunkSize = 128 * 1024;
+  const totalChunks = Math.max(1, Math.ceil(fileSizeBytes / chunkSize));
+  // Match server watchdog: 3s per chunk, minimum 5 minutes, plus a small GUI buffer.
+  return Math.max(5 * 60 * 1000, totalChunks * 3 * 1000 + 60 * 1000);
+}
 
 function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) {
@@ -57,7 +64,7 @@ export function DeployPackagePanel({
   targets,
   disabled = false,
   title = "Deploy package",
-  description = "Upload a .zip archive. The agent verifies the hash, extracts safely, and swaps it into updates/current/.",
+  description = "Upload a .zip archive (up to 4777 MB). The agent verifies the hash, extracts safely, and swaps it into updates/current/.",
   onCompleted,
 }: DeployPackagePanelProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -112,15 +119,18 @@ export function DeployPackagePanel({
 
     try {
       const packageDataBase64 = await readFileAsBase64(selectedFile);
+      const transferTimeoutMs = deployTimeoutMs(selectedFile.size);
       const created = await api.deployPackage({
         targets: uniqueTargets,
         packageId: packageId.trim() || defaultPackageId(selectedFile),
         packageDataBase64,
+        timeoutSeconds: transferTimeoutMs / 1000,
       });
       setAction(created);
 
       const finalAction = await api.waitForAction(created.action_id, {
         onUpdate: setAction,
+        timeoutMs: transferTimeoutMs,
       });
       setAction(finalAction);
       onCompleted?.(finalAction);

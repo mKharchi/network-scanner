@@ -1187,20 +1187,25 @@ export const api = {
     packageDataBase64: string;
     packageId?: string;
     actionId?: string;
+    timeoutSeconds?: number;
   }) => {
     const actionId =
       payload.actionId ??
       (typeof crypto !== "undefined" && crypto.randomUUID
         ? crypto.randomUUID()
         : `deploy-${Date.now()}`);
+    const parameters: Record<string, unknown> = {
+      package_id: payload.packageId ?? `pkg-${Date.now()}`,
+      package_data_base64: payload.packageDataBase64,
+    };
+    if (payload.timeoutSeconds !== undefined) {
+      parameters.timeout = payload.timeoutSeconds;
+    }
     return api.createAction({
       action_id: actionId,
       action_type: "DEPLOY_PACKAGE",
       targets: payload.targets,
-      parameters: {
-        package_id: payload.packageId ?? `pkg-${Date.now()}`,
-        package_data_base64: payload.packageDataBase64,
-      },
+      parameters,
     });
   },
 
