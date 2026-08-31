@@ -1,6 +1,6 @@
 /* ============================================================
    State Components: Loading Skeletons, Empty, Error, Notice
-   Deep Navy Intelligence Platform
+   Light Intelligence Platform
    ============================================================ */
 
 /* ── Skeleton Loader ──────────────────────────────────────── */
@@ -10,12 +10,12 @@
 }
 
 .skeleton {
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   background: linear-gradient(
     90deg,
-    rgba(27, 50, 107, 0.6) 25%,
-    rgba(44, 65, 117, 0.9) 50%,
-    rgba(27, 50, 107, 0.6) 75%
+    var(--surface-muted) 25%,
+    var(--surface-card-subtle) 50%,
+    var(--surface-muted) 75%
   );
   background-size: 200% 100%;
   animation: skeleton-shimmer 1.8s ease-in-out infinite;
@@ -33,8 +33,8 @@
 .skeleton--text-sm  { height: 0.75rem;  width: 60%; }
 .skeleton--text-lg  { height: 1.125rem; width: 80%; }
 .skeleton--title    { height: 1.75rem;  width: 45%; }
-.skeleton--badge    { height: 1.5rem;   width: 5rem;  border-radius: var(--radius-pill); }
-.skeleton--icon     { height: 1.25rem;  width: 1.25rem;  border-radius: 50%; }
+.skeleton--badge    { height: 1.5rem;   width: 5rem;  border-radius: var(--radius); }
+.skeleton--icon     { height: 1.25rem;  width: 1.25rem;  border-radius: var(--radius); }
 .skeleton--row      { height: 52px;     width: 100%;  border-radius: 0; }
 
 .skeleton-group {
@@ -52,29 +52,30 @@
   padding: var(--space-12) var(--space-8);
   text-align: center;
   gap: var(--space-4);
-  color: var(--muted-text);
-  background: rgba(27, 50, 107, 0.35);
-  border: 1px dashed var(--navy-border);
+  color: var(--text-muted);
+  background: var(--surface-card-subtle);
+  border: 1px dashed var(--border);
   border-radius: var(--radius-card);
 }
 
 .empty-state__icon {
   font-size: 2.5rem;
-  color: #60A5FA;
+  color: var(--steel-blue);
   opacity: 0.8;
   margin-bottom: var(--space-2);
 }
 
 .empty-state__title {
+  font-family: var(--font-display);
   font-size: var(--font-lg);
   font-weight: 700;
-  color: var(--white);
+  color: var(--text-primary);
   letter-spacing: -0.01em;
 }
 
 .empty-state__body {
   font-size: var(--font-sm);
-  color: var(--muted-text);
+  color: var(--text-muted);
   max-width: 32rem;
   line-height: var(--lh-base);
 }
@@ -88,26 +89,27 @@
   padding: var(--space-12) var(--space-8);
   text-align: center;
   gap: var(--space-4);
-  background: rgba(239, 68, 68, 0.08);
+  background: var(--danger-bg);
   border: 1px solid var(--danger-border);
   border-radius: var(--radius-card);
 }
 
 .error-state__icon {
   font-size: 2.5rem;
-  color: #F87171;
+  color: var(--danger);
   opacity: 0.9;
 }
 
 .error-state__title {
+  font-family: var(--font-display);
   font-size: var(--font-lg);
   font-weight: 700;
-  color: var(--white);
+  color: var(--text-primary);
 }
 
 .error-state__body {
   font-size: var(--font-sm);
-  color: var(--muted-text);
+  color: var(--text-muted);
   max-width: 32rem;
   line-height: var(--lh-base);
 }
@@ -118,10 +120,10 @@
   align-items: flex-start;
   gap: var(--space-3);
   padding: var(--space-4) var(--space-5);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius);
   border: 1px solid transparent;
   font-size: var(--font-sm);
-  color: var(--white);
+  color: var(--text-primary);
 }
 
 .notice__icon {
@@ -138,11 +140,11 @@
 .notice__title {
   font-weight: 700;
   margin-bottom: 2px;
-  color: var(--white);
+  color: var(--text-primary);
 }
 
 .notice__text {
-  color: var(--muted-text);
+  color: var(--text-muted);
   margin-top: 2px;
   line-height: var(--lh-sm);
 }
@@ -150,22 +152,22 @@
 .notice--info {
   background: var(--info-bg);
   border-color: var(--info-border);
-  color: #7DD3FC;
+  color: var(--info);
 }
 .notice--warning {
   background: var(--warning-bg);
   border-color: var(--warning-border);
-  color: #FDE68A;
+  color: var(--warning);
 }
 .notice--danger {
   background: var(--danger-bg);
   border-color: var(--danger-border);
-  color: #FCA5A5;
+  color: var(--danger);
 }
 .notice--success {
   background: var(--success-bg);
   border-color: var(--success-border);
-  color: #6EE7B7;
+  color: var(--success);
 }
 
 .notice .notice__text {
@@ -183,7 +185,7 @@
   background: var(--warning-bg);
   border-bottom: 1px solid var(--warning-border);
   font-size: var(--font-xs);
-  color: #FCD34D;
+  color: var(--warning);
   font-weight: 600;
   letter-spacing: 0.03em;
 }

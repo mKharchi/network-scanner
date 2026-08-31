@@ -1,8 +1,8 @@
 /* ============================================================
-   Global Reset and Base Styles — Deep Navy Intelligence Platform
+   Global Reset and Base Styles — Light Intelligence Platform
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import './tokens.css';
 
 *,
@@ -19,7 +19,7 @@ html {
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: var(--dark-background-navy);
+  background-color: var(--canvas);
   color: var(--text-primary);
 }
 
@@ -28,7 +28,7 @@ body {
   font-size: var(--font-sm);
   line-height: var(--lh-sm);
   color: var(--text-primary);
-  background-color: var(--dark-background-navy);
+  background-color: var(--canvas);
   min-height: 100dvh;
   overflow-x: hidden;
 }
@@ -39,7 +39,7 @@ body {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--muted-text);
+  color: var(--text-muted);
   line-height: var(--lh-xs);
   display: inline-flex;
   align-items: center;
@@ -47,30 +47,33 @@ body {
 }
 
 .eyebrow--accent {
-  color: #60A5FA;
+  color: var(--steel-blue);
 }
 
 .heading-hero {
+  font-family: var(--font-display);
   font-size: var(--font-3xl);
-  font-weight: 800;
+  font-weight: 700;
   line-height: var(--lh-3xl);
-  color: var(--white);
+  color: var(--text-primary);
   letter-spacing: -0.02em;
 }
 
 .heading-section {
+  font-family: var(--font-display);
   font-size: var(--font-xl);
   font-weight: 700;
   line-height: var(--lh-xl);
-  color: var(--white);
+  color: var(--text-primary);
   letter-spacing: -0.01em;
 }
 
 .heading-card {
+  font-family: var(--font-display);
   font-size: var(--font-lg);
   font-weight: 600;
   line-height: var(--lh-lg);
-  color: var(--white);
+  color: var(--text-primary);
 }
 
 .font-mono {
@@ -82,7 +85,7 @@ body {
 }
 
 .text-muted {
-  color: var(--muted-text);
+  color: var(--text-muted);
 }
 
 .text-faint {
@@ -94,7 +97,7 @@ body {
 }
 
 .text-accent {
-  color: #60A5FA;
+  color: var(--steel-blue);
 }
 
 /* ── Link Reset ────────────────────────────────────────────── */
@@ -107,27 +110,25 @@ a {
 :focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
-  border-radius: var(--radius-sm);
 }
 
-/* ── Custom Dark Navy Scrollbars ───────────────────────────── */
+/* ── Scrollbars ─────────────────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--dark-background-navy);
+  background: var(--canvas);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--badge-solid);
-  border-radius: 99px;
-  border: 2px solid var(--dark-background-navy);
+  background: var(--slate-muted);
+  border: 2px solid var(--canvas);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #3B5490;
+  background: var(--midnight-navy);
 }
 
 /* ── Common Utility Classes ────────────────────────────────── */
@@ -154,7 +155,6 @@ a {
   height: 8px;
   border-radius: 50%;
   background-color: var(--success);
-  box-shadow: 0 0 8px rgba(16, 185, 129, 0.7);
   display: inline-block;
   animation: pulse-glow 2.5s infinite;
 }

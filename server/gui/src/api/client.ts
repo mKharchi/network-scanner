@@ -197,6 +197,16 @@ export interface ActionDetail {
   completed_at?: string | null;
 }
 
+export interface PackageUpload {
+  package_id: string;
+  filename: string;
+  size_bytes: number;
+  sha256: string;
+  storage_path?: string;
+  uploaded_by?: string | null;
+  created_at?: string;
+}
+
 export interface ClientLocalizationDebug {
   client: {
     database_id: number;
@@ -1184,8 +1194,7 @@ export const api = {
 
   deployPackage: async (payload: {
     targets: string[];
-    packageDataBase64: string;
-    packageId?: string;
+    packageId: string;
     actionId?: string;
     timeoutSeconds?: number;
   }) => {
@@ -1195,8 +1204,7 @@ export const api = {
         ? crypto.randomUUID()
         : `deploy-${Date.now()}`);
     const parameters: Record<string, unknown> = {
-      package_id: payload.packageId ?? `pkg-${Date.now()}`,
-      package_data_base64: payload.packageDataBase64,
+      package_id: payload.packageId,
     };
     if (payload.timeoutSeconds !== undefined) {
       parameters.timeout = payload.timeoutSeconds;
@@ -1207,6 +1215,35 @@ export const api = {
       targets: payload.targets,
       parameters,
     });
+  },
+
+  uploadPackage: async (
+    file: File,
+    options?: { packageId?: string },
+  ): Promise<PackageUpload> => {
+    const fullUrl = `${API_ORIGIN.replace(/\/+$/, "")}/api/packages`;
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+      "Content-Type": "application/zip",
+      "X-Package-Filename": file.name,
+    };
+    if (options?.packageId) {
+      headers["X-Package-Id"] = options.packageId;
+    }
+    const response = await fetch(fullUrl, {
+      method: "POST",
+      headers,
+      body: file,
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new ApiError(
+        body?.error?.code ?? "UNKNOWN_ERROR",
+        body?.error?.message ?? `HTTP ${response.status}`,
+        response.status,
+      );
+    }
+    return body?.data as PackageUpload;
   },
 
   waitForAction: async (

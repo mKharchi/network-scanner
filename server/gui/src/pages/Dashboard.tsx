@@ -38,7 +38,7 @@ function AlertRow({ alert }: { alert: AlertModel }) {
         <div
           style={{
             fontWeight: 600,
-            color: "var(--white)",
+            color: "var(--text-primary)",
             fontSize: "var(--font-sm)",
             overflow: "hidden",
             textOverflow: "ellipsis",
@@ -48,7 +48,7 @@ function AlertRow({ alert }: { alert: AlertModel }) {
           {alert.title}
         </div>
         <div style={{ fontSize: "var(--font-xs)", color: "var(--muted-text)", marginTop: "2px" }}>
-          Target: <span style={{ color: "#93C5FD", fontFamily: "var(--font-mono)" }}>{alert.client?.hostname ?? "Infrastructure"}</span>
+          Target: <span style={{ color: "var(--steel-blue)", fontFamily: "var(--font-mono)" }}>{alert.client?.hostname ?? "Infrastructure"}</span>
         </div>
       </div>
 
@@ -96,7 +96,7 @@ function ClientRow({
           <span
             style={{
               fontWeight: 700,
-              color: "var(--white)",
+              color: "var(--text-primary)",
               fontSize: "var(--font-sm)",
             }}
           >
@@ -107,7 +107,7 @@ function ClientRow({
           style={{
             fontFamily: "var(--font-mono)",
             fontSize: "var(--font-xs)",
-            color: "#93C5FD",
+            color: "var(--steel-blue)",
             marginTop: "2px",
           }}
         >
@@ -178,8 +178,8 @@ export function DashboardPage() {
       {/* ── 1. Hero Command Center Banner ─────────────────────────── */}
       <div
         style={{
-          background: "linear-gradient(135deg, rgba(27, 50, 107, 0.9) 0%, rgba(8, 19, 41, 0.95) 100%)",
-          border: "1px solid var(--navy-border)",
+          background: "var(--surface-card)",
+          border: "1px solid var(--border)",
           borderRadius: "var(--radius-card)",
           padding: "var(--space-10) var(--space-12)",
           display: "flex",
@@ -229,14 +229,14 @@ export function DashboardPage() {
             top: "-20px",
             bottom: "-20px",
             width: "360px",
-            background: "radial-gradient(circle at center, rgba(37, 99, 235, 0.15) 0%, transparent 70%)",
+            background: "radial-gradient(circle at center, rgba(59, 96, 228, 0.1) 0%, transparent 70%)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             pointerEvents: "none",
           }}
         >
-          <HiOutlineSquare3Stack3D size={240} style={{ opacity: 0.12, color: "#2563EB" }} />
+          <HiOutlineSquare3Stack3D size={240} style={{ opacity: 0.1, color: "var(--steel-blue)" }} />
         </div>
       </div>
 
@@ -311,8 +311,8 @@ export function DashboardPage() {
       {/* ── 3. First-Class 3D Spatial Intelligence Section ─────────── */}
       <div
         style={{
-          background: "var(--deep-card-navy)",
-          border: "1px solid var(--navy-border)",
+          background: "var(--surface-card)",
+          border: "1px solid var(--border)",
           borderRadius: "var(--radius-card)",
           padding: "var(--space-8)",
           boxShadow: "var(--shadow-card)",
@@ -444,8 +444,8 @@ export function DashboardPage() {
               <div
                 key={cat.label}
                 style={{
-                  background: "rgba(8, 19, 41, 0.4)",
-                  border: "1px solid var(--navy-border-subtle)",
+                  background: "var(--surface-muted)",
+                  border: "1px solid var(--border-subtle)",
                   borderRadius: "var(--radius-lg)",
                   padding: "var(--space-4)",
                   display: "flex",
@@ -457,7 +457,7 @@ export function DashboardPage() {
                   <div style={{ fontSize: "var(--font-xs)", color: "var(--muted-text)", fontWeight: 600 }}>
                     {cat.label}
                   </div>
-                  <div style={{ fontSize: "var(--font-xl)", fontWeight: 800, color: "var(--white)", marginTop: "2px" }}>
+                  <div style={{ fontSize: "var(--font-xl)", fontWeight: 800, color: "var(--text-primary)", marginTop: "2px" }}>
                     {cat.count}
                   </div>
                 </div>
@@ -475,7 +475,7 @@ export function DashboardPage() {
 function DashboardSkeleton() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-8)" }}>
-      <div style={{ height: "180px", background: "var(--deep-card-navy)", borderRadius: "var(--radius-card)" }}>
+      <div style={{ height: "180px", background: "var(--surface-card)", border: "1px solid var(--border)", borderRadius: "var(--radius-card)" }}>
         <Skeleton variant="row" style={{ height: "100%", borderRadius: "var(--radius-card)" }} />
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "var(--space-6)" }}>

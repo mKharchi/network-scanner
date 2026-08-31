@@ -3,7 +3,7 @@ import { api, type ActionDetail } from "../api/client";
 import { Button } from "./Button";
 import { Notice } from "./States";
 
-const MAX_PACKAGE_BYTES = 4777 * 1024 * 1024;
+const MAX_PACKAGE_BYTES = 200 * 1024 * 1024;
 
 function deployTimeoutMs(fileSizeBytes: number): number {
   const chunkSize = 128 * 1024;
@@ -24,23 +24,6 @@ function formatBytes(bytes: number): string {
     unitIndex += 1;
   }
   return `${size >= 10 || unitIndex === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[unitIndex]}`;
-}
-
-function readFileAsBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result;
-      if (typeof result !== "string") {
-        reject(new Error("Could not read package file."));
-        return;
-      }
-      const comma = result.indexOf(",");
-      resolve(comma >= 0 ? result.slice(comma + 1) : result);
-    };
-    reader.onerror = () => reject(reader.error ?? new Error("Could not read package file."));
-    reader.readAsDataURL(file);
-  });
 }
 
 function defaultPackageId(file: File): string {
@@ -64,7 +47,7 @@ export function DeployPackagePanel({
   targets,
   disabled = false,
   title = "Deploy package",
-  description = "Upload a .zip archive (up to 4777 MB). The agent verifies the hash, extracts safely, and swaps it into updates/current/.",
+  description = "Upload a .zip archive (up to 200 MB). The agent verifies the hash, extracts safely, and swaps it into updates/current/.",
   onCompleted,
 }: DeployPackagePanelProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -75,7 +58,10 @@ export function DeployPackagePanel({
   const [action, setAction] = useState<ActionDetail | null>(null);
 
   const uniqueTargets = useMemo(
-    () => Array.from(new Set(targets.map((target) => target.trim()).filter(Boolean))),
+    () =>
+      Array.from(
+        new Set(targets.map((target) => target.trim()).filter(Boolean)),
+      ),
     [targets],
   );
 
@@ -85,7 +71,10 @@ export function DeployPackagePanel({
       if (!action?.action_id || detail?.action_id !== action.action_id) {
         return;
       }
-      void api.getAction(action.action_id).then(setAction).catch(() => undefined);
+      void api
+        .getAction(action.action_id)
+        .then(setAction)
+        .catch(() => undefined);
     };
 
     window.addEventListener("app:action_update", handler);
@@ -109,7 +98,9 @@ export function DeployPackagePanel({
       return;
     }
     if (selectedFile.size > MAX_PACKAGE_BYTES) {
-      setError(`Package is too large (${formatBytes(selectedFile.size)}). Limit is ${formatBytes(MAX_PACKAGE_BYTES)}.`);
+      setError(
+        `Package is too large (${formatBytes(selectedFile.size)}). Limit is ${formatBytes(MAX_PACKAGE_BYTES)}.`,
+      );
       return;
     }
 
@@ -118,12 +109,15 @@ export function DeployPackagePanel({
     setAction(null);
 
     try {
-      const packageDataBase64 = await readFileAsBase64(selectedFile);
+      const resolvedPackageId =
+        packageId.trim() || defaultPackageId(selectedFile);
       const transferTimeoutMs = deployTimeoutMs(selectedFile.size);
+      const uploaded = await api.uploadPackage(selectedFile, {
+        packageId: resolvedPackageId,
+      });
       const created = await api.deployPackage({
         targets: uniqueTargets,
-        packageId: packageId.trim() || defaultPackageId(selectedFile),
-        packageDataBase64,
+        packageId: uploaded.package_id,
         timeoutSeconds: transferTimeoutMs / 1000,
       });
       setAction(created);
@@ -145,24 +139,27 @@ export function DeployPackagePanel({
   const rows = targetRows(action);
   const isTerminal =
     action &&
-    ["SUCCESS", "FAILED", "PARTIAL_SUCCESS", "CANCELLED", "EXPIRED"].includes(action.status);
+    ["SUCCESS", "FAILED", "PARTIAL_SUCCESS", "CANCELLED", "EXPIRED"].includes(
+      action.status,
+    );
 
   return (
     <div
       style={{
         display: "grid",
         gap: "var(--space-3)",
+        width: "100%",
         padding: "var(--space-3)",
         border: "1px solid var(--border)",
         borderRadius: "var(--radius)",
         background: "var(--surface)",
       }}
     >
-      <div>
+      <div style={{ display: "grid", gap: "var(--space-1)", width: "100%" }}>
         <div
           style={{
             fontSize: "var(--font-xs)",
-            color: "var(--text-muted)",
+            color: "var(--text)",
             fontWeight: 600,
             textTransform: "uppercase",
             letterSpacing: "0.06em",
@@ -171,7 +168,13 @@ export function DeployPackagePanel({
         >
           {title}
         </div>
-        <p style={{ margin: 0, fontSize: "var(--font-sm)", color: "var(--text-muted)" }}>
+        <p
+          style={{
+            margin: 0,
+            fontSize: "var(--font-sm)",
+            color: "var(--text-muted)",
+          }}
+        >
           {description}
         </p>
       </div>
@@ -182,24 +185,139 @@ export function DeployPackagePanel({
         </Notice>
       )}
 
-      <label style={{ display: "grid", gap: "var(--space-1)" }}>
-        <span style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>Package (.zip)</span>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".zip,application/zip"
-          disabled={disabled || deploying}
-          onChange={(event) => handleFileChange(event.target.files?.[0] ?? null)}
-        />
-        {selectedFile && (
-          <span style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>
-            {selectedFile.name} ({formatBytes(selectedFile.size)})
+      <label
+        style={{
+          width: "100%",
+          display: "flex",
+          flexDirection: "column",
+          gap: "var(--space-1)",
+          cursor: disabled || deploying ? "not-allowed" : "pointer",
+        }}
+      >
+        <span
+          style={{
+            fontSize: "var(--font-xs)",
+            color: "var(--text-muted)",
+          }}
+        >
+          Package (.zip)
+        </span>
+
+        <div
+          style={{
+            position: "relative",
+            width: "100%",
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--space-2)",
+            padding: "var(--space-2) var(--space-3)",
+            border: "1px solid var(--border-color)",
+            borderRadius: "var(--radius-md)",
+            background: "var(--bg-secondary)",
+            transition: "all 0.2s ease",
+            opacity: disabled || deploying ? 0.6 : 1,
+          }}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".zip,application/zip"
+            disabled={disabled || deploying}
+            onChange={(event) =>
+              handleFileChange(event.target.files?.[0] ?? null)
+            }
+            style={{
+              position: "absolute",
+              width: "1px",
+              height: "1px",
+              opacity: 0,
+              pointerEvents: "none",
+            }}
+          />
+
+          <div
+            style={{
+              width: "34px",
+              height: "34px",
+              flexShrink: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: "var(--radius-sm)",
+              background: "rgba(37, 99, 235, 0.12)",
+              color: "var(--accent-blue)",
+            }}
+          >
+            {/* Upload / package icon */}
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M12 16V4" />
+              <path d="M8 8l4-4 4 4" />
+              <path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" />
+            </svg>
+          </div>
+
+          <div
+            style={{
+              minWidth: 0,
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              gap: "2px",
+            }}
+          >
+            <span
+              style={{
+                fontSize: "var(--font-xs)",
+                fontWeight: 500,
+                color: "var(--text-primary)",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {selectedFile ? selectedFile.name : "Choose ZIP package"}
+            </span>
+
+            <span
+              style={{
+                fontSize: "var(--font-xs)",
+                color: "var(--text-muted)",
+              }}
+            >
+              {selectedFile
+                ? formatBytes(selectedFile.size)
+                : "Select a package to deploy"}
+            </span>
+          </div>
+
+          <span
+            style={{
+              flexShrink: 0,
+              fontSize: "var(--font-xs)",
+              fontWeight: 500,
+              color: "var(--accent-blue)",
+            }}
+          >
+            {selectedFile ? "Change" : "Browse"}
           </span>
-        )}
+        </div>
       </label>
 
       <label style={{ display: "grid", gap: "var(--space-1)" }}>
-        <span style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>Package ID</span>
+        <span
+          style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}
+        >
+          Package ID
+        </span>
         <input
           type="text"
           value={packageId}
@@ -217,11 +335,20 @@ export function DeployPackagePanel({
         />
       </label>
 
-      <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap", alignItems: "center" }}>
+      <div
+        style={{
+          display: "flex",
+          gap: "var(--space-2)",
+          flexWrap: "wrap",
+          alignItems: "center",
+        }}
+      >
         <Button
           variant="primary"
           size="md"
-          disabled={disabled || deploying || !selectedFile || uniqueTargets.length === 0}
+          disabled={
+            disabled || deploying || !selectedFile || uniqueTargets.length === 0
+          }
           onClick={() => void handleDeploy()}
         >
           {deploying
@@ -229,7 +356,9 @@ export function DeployPackagePanel({
             : `Deploy to ${uniqueTargets.length} client${uniqueTargets.length === 1 ? "" : "s"}`}
         </Button>
         {uniqueTargets.length > 1 && (
-          <span style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>
+          <span
+            style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}
+          >
             Up to 5 transfers run concurrently on the server.
           </span>
         )}
@@ -250,15 +379,21 @@ export function DeployPackagePanel({
           </div>
 
           {progress && (
-            <div style={{ fontSize: "var(--font-sm)", color: "var(--text-muted)" }}>
-              {progress.completed}/{progress.total} completed · {progress.succeeded} succeeded ·{" "}
-              {progress.failed} failed · {progress.in_progress} in progress · {progress.pending} pending
+            <div
+              style={{ fontSize: "var(--font-sm)", color: "var(--text-muted)" }}
+            >
+              {progress.completed}/{progress.total} completed ·{" "}
+              {progress.succeeded} succeeded · {progress.failed} failed ·{" "}
+              {progress.in_progress} in progress · {progress.pending} pending
             </div>
           )}
 
           {rows.length > 0 && (
             <div className="data-table-wrap">
-              <table className="data-table" aria-label="Deployment target status">
+              <table
+                className="data-table"
+                aria-label="Deployment target status"
+              >
                 <thead>
                   <tr>
                     <th>Client</th>
@@ -280,7 +415,14 @@ export function DeployPackagePanel({
                       <tr key={row.client_id ?? `target-${index}`}>
                         <td className="cell--mono">{row.client_id ?? "—"}</td>
                         <td>{row.status ?? "—"}</td>
-                        <td style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>{detail}</td>
+                        <td
+                          style={{
+                            fontSize: "var(--font-xs)",
+                            color: "var(--text-muted)",
+                          }}
+                        >
+                          {detail}
+                        </td>
                       </tr>
                     );
                   })}
@@ -296,7 +438,8 @@ export function DeployPackagePanel({
           )}
           {isTerminal && action.status === "PARTIAL_SUCCESS" && (
             <Notice variant="warning" title="Partial success">
-              Some clients failed. Review per-target status above and retry failed clients.
+              Some clients failed. Review per-target status above and retry
+              failed clients.
             </Notice>
           )}
         </div>

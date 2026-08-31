@@ -5,8 +5,7 @@
   display: grid;
   place-items: center;
   padding: var(--space-4);
-  background: rgb(15 23 42 / 0.48);
-  backdrop-filter: blur(2px);
+  background: rgba(11, 25, 44, 0.35);
 }
 
 .confirm-dialog {
@@ -14,11 +13,12 @@
   padding: var(--space-6);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 24px 48px rgb(15 23 42 / 0.24);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
 }
 
 .confirm-dialog__title {
+  font-family: var(--font-display);
   color: var(--text);
   font-size: var(--font-lg);
   line-height: var(--lh-lg);

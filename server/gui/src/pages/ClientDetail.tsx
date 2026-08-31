@@ -443,7 +443,9 @@ export function ClientDetailPage() {
     if (!clientId) return;
     setQuarantineLoading(true);
     try {
-      await api.quarantineClient(clientId, { reason: reason.trim() || undefined });
+      await api.quarantineClient(clientId, {
+        reason: reason.trim() || undefined,
+      });
       addToast({
         title: "Quarantine applied",
         message: `${c.hostname} has been isolated on the network.`,
@@ -632,11 +634,21 @@ export function ClientDetailPage() {
           pendingConfirmation?.kind === "shutdown" ||
           pendingConfirmation?.kind === "kill"
         }
-        inputLabel={pendingConfirmation?.kind === "quarantine" ? "Reason (optional)" : undefined}
-        inputValue={pendingConfirmation?.kind === "quarantine" ? quarantineReason : undefined}
+        inputLabel={
+          pendingConfirmation?.kind === "quarantine"
+            ? "Reason (optional)"
+            : undefined
+        }
+        inputValue={
+          pendingConfirmation?.kind === "quarantine"
+            ? quarantineReason
+            : undefined
+        }
         inputPlaceholder="Administrator requested network quarantine"
         onInputChange={
-          pendingConfirmation?.kind === "quarantine" ? setQuarantineReason : undefined
+          pendingConfirmation?.kind === "quarantine"
+            ? setQuarantineReason
+            : undefined
         }
         onCancel={() => setPendingConfirmation(null)}
         onConfirm={confirmPendingAction}
@@ -706,6 +718,79 @@ export function ClientDetailPage() {
         </div>
       )}
 
+      <div className="client-detail-hero">
+        <div className="client-detail-identity">
+          <div className="client-detail-icon" aria-hidden="true">
+            {isIsolated ? "⛨" : "◈"}
+          </div>
+          <div>
+            <span className="eyebrow eyebrow--accent">
+              CLIENT AGENT / OPERATIONS
+            </span>
+            <h1 className="client-detail-title">{c.hostname}</h1>
+            <p className="client-detail-subtitle">
+              {c.ip_address || c.mac_address} ·{" "}
+              {c.os.system || "Operating system unavailable"}
+            </p>
+            <div className="client-detail-badges">
+              <ClientStatusBadge state={c.connection.state} />
+              {c.location && <Badge variant="info">{c.location.label}</Badge>}
+              {c.health?.status && (
+                <Badge
+                  variant={
+                    c.health.status === "healthy"
+                      ? "success"
+                      : c.health.status === "critical"
+                        ? "danger"
+                        : "warning"
+                  }
+                >
+                  {c.health.status.toUpperCase()}
+                </Badge>
+              )}
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "var(--space-3)",
+                flexWrap: "wrap",
+                marginTop: "var(--space-4)",
+              }}
+            >
+              <Button
+                variant="danger"
+                size="sm"
+                disabled={!isOnline || commandLoading}
+                onClick={() => setPendingConfirmation({ kind: "disconnect" })}
+              >
+                Disconnect agent
+              </Button>
+              <span
+                style={{
+                  fontSize: "var(--font-xs)",
+                  color: "var(--muted-text)",
+                }}
+              >
+                {isIsolated
+                  ? `Isolated · last contact ${formatRelative(c.connection.last_connected_at)}`
+                  : isOnline
+                    ? `Connected ${formatRelative(c.connection.last_connected_at)}`
+                    : `Last seen ${formatRelative(c.connection.last_connected_at)}`}
+              </span>
+            </div>
+          </div>
+        </div>
+        <div className="client-detail-alerts">
+          <MetricCard
+            label="New alerts"
+            value={d.alert_counts.new}
+            valueVariant={d.alert_counts.new > 0 ? "danger" : "default"}
+          />
+          <MetricCard label="Total alerts" value={d.alert_counts.total} />
+        </div>
+      </div>
+
       <div
         role="tablist"
         aria-label="Client detail sections"
@@ -758,282 +843,267 @@ export function ClientDetailPage() {
         role="tabpanel"
         aria-labelledby="client-tab-overview"
         hidden={activeTab !== "overview"}
-        style={{ display: activeTab === "overview" ? "block" : "none" }}
+        style={{ display: activeTab === "overview" ? "flex" : "none" }}
       >
-      <SectionCard title="Physical Location">
-        <div style={{ display: "grid", gap: "var(--space-3)" }}>
-          <div
-            style={{ color: c.location ? "var(--text)" : "var(--text-muted)" }}
-          >
-            {c.location ? c.location.label : "Location unassigned"}
-          </div>
-          <div
-            style={{
-              display: "flex",
-              gap: "var(--space-3)",
-              alignItems: "end",
-              flexWrap: "wrap",
-            }}
-          >
-            {/**  floor one aisle one only has table two make sure to only display that table and not both  */}
-            <LocationSelect
-              label="Floor"
-              value={assignFloor}
-              options={floorOptions}
-              disabled={locationLoading || locationSaving}
-              onChange={(value) => {
-                setAssignFloor(value);
-                setAssignAisle("");
-                setAssignTable("");
-                setAssignColumn("");
-                setAssignPosition("");
-              }}
-            />
-            <LocationSelect
-              label="Aisle"
-              value={assignAisle}
-              options={aisleOptions}
-              disabled={!assignFloor || locationLoading || locationSaving}
-              onChange={(value) => {
-                setAssignAisle(value);
-                setAssignTable("");
-                setAssignColumn("");
-                setAssignPosition("");
-              }}
-            />
-            <LocationSelect
-              label="Table"
-              value={assignTable}
-              options={tableOptions}
-              disabled={!assignAisle || locationLoading || locationSaving}
-              onChange={(value) => {
-                setAssignTable(value);
-                setAssignColumn("");
-                setAssignPosition("");
-              }}
-            />
-            <LocationSelect
-              label="Column"
-              value={assignColumn}
-              options={columnOptions}
-              disabled={!assignTable || locationLoading || locationSaving}
-              onChange={(value) => {
-                setAssignColumn(value);
-                setAssignPosition("");
-              }}
-            />
-            <LocationSelect
-              label="Position"
-              value={assignPosition}
-              options={positionOptions}
-              disabled={!assignColumn || locationLoading || locationSaving}
-              onChange={setAssignPosition}
-            />
-            <Button
-              variant="primary"
-              size="sm"
-              disabled={
-                !selectedLocationId || locationSaving || locationLoading
-              }
-              onClick={assignLocation}
-            >
-              {locationSaving
-                ? "Saving…"
-                : c.location
-                  ? "Change Location"
-                  : "Assign Location"}
-            </Button>
-          </div>
-          {selectedSeat && (
-            <div
-              style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}
-            >
-              {selectedSeat.label}
-            </div>
-          )}
-        </div>
-        {locationHistoryState.status === "success" &&
-          locationHistoryState.data.items.length > 0 && (
+        <SectionCard title="Physical Location">
+          <div style={{ display: "grid", gap: "var(--space-3)" }}>
             <div
               style={{
-                marginTop: "var(--space-4)",
-                borderTop: "1px solid var(--border-subtle)",
-                paddingTop: "var(--space-3)",
+                color: c.location ? "var(--text)" : "var(--text-muted)",
               }}
             >
+              {c.location ? c.location.label : "Location unassigned"}
+            </div>
+            <div
+              style={{
+                display: "flex",
+                gap: "var(--space-3)",
+                alignItems: "end",
+                flexWrap: "wrap",
+              }}
+            >
+              {/**  floor one aisle one only has table two make sure to only display that table and not both  */}
+              <LocationSelect
+                label="Floor"
+                value={assignFloor}
+                options={floorOptions}
+                disabled={locationLoading || locationSaving}
+                onChange={(value) => {
+                  setAssignFloor(value);
+                  setAssignAisle("");
+                  setAssignTable("");
+                  setAssignColumn("");
+                  setAssignPosition("");
+                }}
+              />
+              <LocationSelect
+                label="Aisle"
+                value={assignAisle}
+                options={aisleOptions}
+                disabled={!assignFloor || locationLoading || locationSaving}
+                onChange={(value) => {
+                  setAssignAisle(value);
+                  setAssignTable("");
+                  setAssignColumn("");
+                  setAssignPosition("");
+                }}
+              />
+              <LocationSelect
+                label="Table"
+                value={assignTable}
+                options={tableOptions}
+                disabled={!assignAisle || locationLoading || locationSaving}
+                onChange={(value) => {
+                  setAssignTable(value);
+                  setAssignColumn("");
+                  setAssignPosition("");
+                }}
+              />
+              <LocationSelect
+                label="Column"
+                value={assignColumn}
+                options={columnOptions}
+                disabled={!assignTable || locationLoading || locationSaving}
+                onChange={(value) => {
+                  setAssignColumn(value);
+                  setAssignPosition("");
+                }}
+              />
+              <LocationSelect
+                label="Position"
+                value={assignPosition}
+                options={positionOptions}
+                disabled={!assignColumn || locationLoading || locationSaving}
+                onChange={setAssignPosition}
+              />
+              <Button
+                variant="primary"
+                size="sm"
+                disabled={
+                  !selectedLocationId || locationSaving || locationLoading
+                }
+                onClick={assignLocation}
+              >
+                {locationSaving
+                  ? "Saving…"
+                  : c.location
+                    ? "Change Location"
+                    : "Assign Location"}
+              </Button>
+            </div>
+            {selectedSeat && (
               <div
                 style={{
                   fontSize: "var(--font-xs)",
                   color: "var(--text-muted)",
-                  marginBottom: "var(--space-2)",
                 }}
               >
-                Assignment history
+                {selectedSeat.label}
               </div>
+            )}
+          </div>
+          {locationHistoryState.status === "success" &&
+            locationHistoryState.data.items.length > 0 && (
+              <div
+                style={{
+                  marginTop: "var(--space-4)",
+                  borderTop: "1px solid var(--border-subtle)",
+                  paddingTop: "var(--space-3)",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "var(--font-xs)",
+                    color: "var(--text-muted)",
+                    marginBottom: "var(--space-2)",
+                  }}
+                >
+                  Assignment history
+                </div>
+                <div style={{ display: "grid", gap: "var(--space-2)" }}>
+                  {locationHistoryState.data.items.map((entry) => (
+                    <div
+                      key={entry.id}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: "var(--space-3)",
+                        fontSize: "var(--font-xs)",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <span>{entry.location.label}</span>
+                      <span style={{ color: "var(--text-muted)" }}>
+                        {formatDateTime(entry.assigned_at)} ·{" "}
+                        {entry.assigned_by || "Unknown operator"}
+                        {entry.unassigned_at
+                          ? ` · ended ${formatDateTime(entry.unassigned_at)}`
+                          : " · current"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+        </SectionCard>
+
+        <SectionCard title="Health">
+          <div style={{ display: "grid", gap: "var(--space-2)" }}>
+            <DetailRow
+              label="Status"
+              value={
+                c.health?.status ? c.health.status.replace("_", " ") : "Unknown"
+              }
+            />
+            <DetailRow
+              label="CPU"
+              value={
+                typeof c.health?.cpu_percent === "number"
+                  ? `${Math.round(c.health.cpu_percent)}%`
+                  : "—"
+              }
+            />
+            <DetailRow
+              label="Memory"
+              value={
+                typeof c.health?.memory_percent === "number"
+                  ? `${Math.round(c.health.memory_percent)}%`
+                  : "—"
+              }
+            />
+            <DetailRow
+              label="Disk"
+              value={
+                typeof c.health?.disk_percent === "number"
+                  ? `${Math.round(c.health.disk_percent)}%`
+                  : "—"
+              }
+            />
+            <DetailRow
+              label="Updated"
+              value={
+                c.health?.updated_at
+                  ? formatDateTime(c.health.updated_at)
+                  : "Not collected yet"
+              }
+            />
+          </div>
+        </SectionCard>
+
+        {c.location && (
+          <SectionCard title="Physical Neighbors">
+            {neighborsState.status === "error" ? (
+              <div
+                style={{
+                  color: "var(--text-muted)",
+                  fontSize: "var(--font-xs)",
+                }}
+              >
+                {neighborsState.error.message}
+              </div>
+            ) : neighborsState.status !== "success" ||
+              neighborsState.data.items.length === 0 ? (
+              <div
+                style={{
+                  color: "var(--text-muted)",
+                  fontSize: "var(--font-xs)",
+                }}
+              >
+                {neighborsState.status === "loading"
+                  ? "Loading neighbors…"
+                  : "No assigned neighbors at adjacent positions."}
+              </div>
+            ) : (
               <div style={{ display: "grid", gap: "var(--space-2)" }}>
-                {locationHistoryState.data.items.map((entry) => (
-                  <div
-                    key={entry.id}
+                {neighborsState.data.items.map((neighbor) => (
+                  <button
+                    key={neighbor.client_id}
+                    type="button"
+                    onClick={() =>
+                      navigate(
+                        `/clients/${encodeURIComponent(neighbor.client_id)}`,
+                      )
+                    }
                     style={{
                       display: "flex",
                       justifyContent: "space-between",
                       gap: "var(--space-3)",
-                      fontSize: "var(--font-xs)",
-                      flexWrap: "wrap",
+                      textAlign: "left",
+                      border: 0,
+                      padding: "var(--space-2) 0",
+                      background: "transparent",
+                      color: "var(--text)",
+                      cursor: "pointer",
+                      borderBottom: "1px solid var(--border-subtle)",
                     }}
                   >
-                    <span>{entry.location.label}</span>
-                    <span style={{ color: "var(--text-muted)" }}>
-                      {formatDateTime(entry.assigned_at)} ·{" "}
-                      {entry.assigned_by || "Unknown operator"}
-                      {entry.unassigned_at
-                        ? ` · ended ${formatDateTime(entry.unassigned_at)}`
-                        : " · current"}
+                    <span>
+                      {neighbor.hostname}{" "}
+                      <span style={{ color: "var(--text-muted)" }}>
+                        {NEIGHBOR_RELATIONSHIP_LABELS[neighbor.relationship]} ·{" "}
+                        {neighbor.location.label}
+                      </span>
                     </span>
-                  </div>
+                    <span
+                      style={{
+                        color:
+                          neighbor.state === "ONLINE"
+                            ? "var(--success)"
+                            : neighbor.state === "ISOLATED"
+                              ? "var(--danger)"
+                              : "var(--text-muted)",
+                        fontSize: "var(--font-xs)",
+                      }}
+                    >
+                      {neighbor.state}
+                    </span>
+                  </button>
                 ))}
               </div>
-            </div>
-          )}
-      </SectionCard>
-
-      <SectionCard title="Health">
-        <div style={{ display: "grid", gap: "var(--space-2)" }}>
-          <DetailRow
-            label="Status"
-            value={
-              c.health?.status ? c.health.status.replace("_", " ") : "Unknown"
-            }
-          />
-          <DetailRow
-            label="CPU"
-            value={
-              typeof c.health?.cpu_percent === "number"
-                ? `${Math.round(c.health.cpu_percent)}%`
-                : "—"
-            }
-          />
-          <DetailRow
-            label="Memory"
-            value={
-              typeof c.health?.memory_percent === "number"
-                ? `${Math.round(c.health.memory_percent)}%`
-                : "—"
-            }
-          />
-          <DetailRow
-            label="Disk"
-            value={
-              typeof c.health?.disk_percent === "number"
-                ? `${Math.round(c.health.disk_percent)}%`
-                : "—"
-            }
-          />
-          <DetailRow
-            label="Updated"
-            value={
-              c.health?.updated_at
-                ? formatDateTime(c.health.updated_at)
-                : "Not collected yet"
-            }
-          />
-        </div>
-      </SectionCard>
-
-      {c.location && (
-        <SectionCard title="Physical Neighbors">
-          {neighborsState.status === "error" ? (
-            <div
-              style={{ color: "var(--text-muted)", fontSize: "var(--font-xs)" }}
-            >
-              {neighborsState.error.message}
-            </div>
-          ) : neighborsState.status !== "success" ||
-            neighborsState.data.items.length === 0 ? (
-            <div
-              style={{ color: "var(--text-muted)", fontSize: "var(--font-xs)" }}
-            >
-              {neighborsState.status === "loading"
-                ? "Loading neighbors…"
-                : "No assigned neighbors at adjacent positions."}
-            </div>
-          ) : (
-            <div style={{ display: "grid", gap: "var(--space-2)" }}>
-              {neighborsState.data.items.map((neighbor) => (
-                <button
-                  key={neighbor.client_id}
-                  type="button"
-                  onClick={() =>
-                    navigate(
-                      `/clients/${encodeURIComponent(neighbor.client_id)}`,
-                    )
-                  }
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: "var(--space-3)",
-                    textAlign: "left",
-                    border: 0,
-                    padding: "var(--space-2) 0",
-                    background: "transparent",
-                    color: "var(--text)",
-                    cursor: "pointer",
-                    borderBottom: "1px solid var(--border-subtle)",
-                  }}
-                >
-                  <span>
-                    {neighbor.hostname}{" "}
-                    <span style={{ color: "var(--text-muted)" }}>
-                      {NEIGHBOR_RELATIONSHIP_LABELS[neighbor.relationship]} ·{" "}
-                      {neighbor.location.label}
-                    </span>
-                  </span>
-                  <span
-                    style={{
-                      color:
-                        neighbor.state === "ONLINE"
-                          ? "var(--success)"
-                          : neighbor.state === "ISOLATED"
-                            ? "var(--danger)"
-                            : "var(--text-muted)",
-                      fontSize: "var(--font-xs)",
-                    }}
-                  >
-                    {neighbor.state}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </SectionCard>
-      )}
+            )}
+          </SectionCard>
+        )}
       </section>
-
-      <div className="client-detail-hero">
-        <div className="client-detail-identity">
-          <div className="client-detail-icon" aria-hidden="true">{isIsolated ? "⛨" : "◈"}</div>
-          <div>
-            <span className="eyebrow eyebrow--accent">CLIENT AGENT / OPERATIONS</span>
-            <h1 className="client-detail-title">{c.hostname}</h1>
-            <p className="client-detail-subtitle">{c.ip_address || c.mac_address} · {c.os.system || "Operating system unavailable"}</p>
-            <div className="client-detail-badges">
-              <ClientStatusBadge state={c.connection.state} />
-              {c.location && <Badge variant="info">{c.location.label}</Badge>}
-              {c.health?.status && <Badge variant={c.health.status === "healthy" ? "success" : c.health.status === "critical" ? "danger" : "warning"}>{c.health.status.toUpperCase()}</Badge>}
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", flexWrap: "wrap", marginTop: "var(--space-4)" }}>
-              <Button variant="danger" size="sm" disabled={!isOnline || commandLoading} onClick={() => setPendingConfirmation({ kind: "disconnect" })}>Disconnect agent</Button>
-              <span style={{ fontSize: "var(--font-xs)", color: "var(--muted-text)" }}>
-                {isIsolated ? `Isolated · last contact ${formatRelative(c.connection.last_connected_at)}` : isOnline ? `Connected ${formatRelative(c.connection.last_connected_at)}` : `Last seen ${formatRelative(c.connection.last_connected_at)}`}
-              </span>
-            </div>
-          </div>
-        </div>
-        <div className="client-detail-alerts">
-          <MetricCard label="New alerts" value={d.alert_counts.new} valueVariant={d.alert_counts.new > 0 ? "danger" : "default"} />
-          <MetricCard label="Total alerts" value={d.alert_counts.total} />
-        </div>
-      </div>
 
       <section
         id="client-panel-actions"
@@ -1056,391 +1126,395 @@ export function ClientDetailPage() {
               : "none",
         }}
       >
-      {/* Interactive Command Control Center */}
-      <SectionCard title="Client actions and telemetry">
-        {!isOnline && (
-          <div style={{ marginBottom: "var(--space-3)" }}>
-            <Notice
-              variant={isIsolated ? "warning" : "info"}
-              title={isIsolated ? "Client is isolated" : "Client is offline"}
-            >
-              {isIsolated
-                ? "Device static isolation is active. Communication with the server has been severed as expected until local administrator restoration."
-                : "Agent must be online and connected to execute remote diagnostics."}
-            </Notice>
-          </div>
-        )}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-            gap: "var(--space-4)",
-          }}
-        >
-          <div
-            style={{
-              display: activeTab === "remote" ? "grid" : "none",
-              gap: "var(--space-2)",
-              alignContent: "start",
-            }}
-          >
-            <span
-              style={{
-                fontSize: "var(--font-xs)",
-                color: "var(--text-muted)",
-                fontWeight: 600,
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-              }}
-            >
-              Diagnostics
-            </span>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: "var(--space-2)",
-                flexWrap: "wrap",
-              }}
-            >
-              <Button
-                variant="primary"
-                size="md"
-                disabled={!isOnline || commandLoading}
-                onClick={() => executeCommand("GET_PROCESSES")}
+        {/* Interactive Command Control Center */}
+        <SectionCard title="Client actions and telemetry">
+          {!isOnline && (
+            <div style={{ marginBottom: "var(--space-3)" }}>
+              <Notice
+                variant={isIsolated ? "warning" : "info"}
+                title={isIsolated ? "Client is isolated" : "Client is offline"}
               >
-                {commandLoading && activeCommand === "GET_PROCESSES"
-                  ? "Fetching..."
-                  : "Get Processes"}
-              </Button>
-
-              <Button
-                variant="secondary"
-                size="md"
-                disabled={!isOnline || commandLoading}
-                onClick={() => executeCommand("GET_CPU_INFO")}
-              >
-                CPU Info
-              </Button>
-
-              <Button
-                variant="secondary"
-                size="md"
-                disabled={!isOnline || commandLoading}
-                onClick={() => executeCommand("GET_MEMORY_INFO")}
-              >
-                Memory Info
-              </Button>
-
-              <Button
-                variant="secondary"
-                size="md"
-                disabled={!isOnline || commandLoading}
-                onClick={() => executeCommand("GET_DISK_INFO")}
-              >
-                Disk Info
-              </Button>
-
-              <Button
-                variant="secondary"
-                size="md"
-                disabled={!isOnline || commandLoading}
-                onClick={() => executeCommand("GET_NETWORK_INFO")}
-              >
-                Network Info
-              </Button>
-
-              <Button
-                variant="secondary"
-                size="md"
-                disabled={!isOnline || commandLoading}
-                onClick={() => executeCommand("PING")}
-              >
-                Ping
-              </Button>
+                {isIsolated
+                  ? "Device static isolation is active. Communication with the server has been severed as expected until local administrator restoration."
+                  : "Agent must be online and connected to execute remote diagnostics."}
+              </Notice>
             </div>
-          </div>
-
+          )}
           <div
             style={{
-              display: activeTab === "network" ? "grid" : "none",
-              gap: "var(--space-2)",
-              alignContent: "start",
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: "var(--space-4)",
             }}
           >
-            <span
-              style={{
-                fontSize: "var(--font-xs)",
-                color: "var(--text-muted)",
-                fontWeight: 600,
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-              }}
-            >
-              Network collection
-            </span>
             <div
               style={{
-                display: "flex",
-                flexDirection: "column",
+                display: activeTab === "remote" ? "grid" : "none",
                 gap: "var(--space-2)",
-                flexWrap: "wrap",
-              }}
-            >
-              <Button
-                variant="primary"
-                size="md"
-                disabled={
-                  !isOnline ||
-                  commandLoading ||
-                  neighbourhoodLoading ||
-                  passiveNeighbourhoodLoading
-                }
-                onClick={requestNeighbourhood}
-              >
-                {neighbourhoodLoading
-                  ? "Collecting Neighbourhood…"
-                  : "Collect Neighbourhood"}
-              </Button>
-              <Button
-                variant="secondary"
-                size="md"
-                disabled={!isOnline || screenshotLoading}
-                onClick={requestScreenshot}
-              >
-                {screenshotLoading
-                  ? "Capturing Screenshot…"
-                  : "Capture Screenshot"}
-              </Button>
-              <Button
-                variant="secondary"
-                size="md"
-                disabled={
-                  !isOnline ||
-                  commandLoading ||
-                  neighbourhoodLoading ||
-                  passiveNeighbourhoodLoading
-                }
-                onClick={requestPassiveNeighbourhood}
-              >
-                {passiveNeighbourhoodLoading
-                  ? "Requesting Passive Info…"
-                  : "Get Passive Network Information"}
-              </Button>
-            </div>
-          </div>
 
-          <div
-            style={{
-              display: activeTab === "remote" ? "grid" : "none",
-              gap: "var(--space-2)",
-              alignContent: "start",
-            }}
-          >
-            <span
-              style={{
-                fontSize: "var(--font-xs)",
-                color: "var(--text-muted)",
-                fontWeight: 600,
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
+                alignContent: "start",
               }}
             >
-              Operations
-            </span>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: "8px",
-                alignItems: "start",
-              }}
-            >
-              {/* Activity Log dropdown & button */}
-
-              <select
-                value={activityPeriod}
-                onChange={(e) => setActivityPeriod(e.target.value as any)}
-                disabled={!isOnline || commandLoading}
+              <span
                 style={{
+                  fontSize: "var(--font-xs)",
+                  color: "var(--text-muted)",
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                }}
+              >
+                Diagnostics
+              </span>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "var(--space-2)",
+                  flexWrap: "wrap",
+                }}
+              >
+                <Button
+                  variant="primary"
+                  size="md"
+                  disabled={!isOnline || commandLoading}
+                  onClick={() => executeCommand("GET_PROCESSES")}
+                >
+                  {commandLoading && activeCommand === "GET_PROCESSES"
+                    ? "Fetching..."
+                    : "Get Processes"}
+                </Button>
+
+                <Button
+                  variant="secondary"
+                  size="md"
+                  disabled={!isOnline || commandLoading}
+                  onClick={() => executeCommand("GET_CPU_INFO")}
+                >
+                  CPU Info
+                </Button>
+
+                <Button
+                  variant="secondary"
+                  size="md"
+                  disabled={!isOnline || commandLoading}
+                  onClick={() => executeCommand("GET_MEMORY_INFO")}
+                >
+                  Memory Info
+                </Button>
+
+                <Button
+                  variant="secondary"
+                  size="md"
+                  disabled={!isOnline || commandLoading}
+                  onClick={() => executeCommand("GET_DISK_INFO")}
+                >
+                  Disk Info
+                </Button>
+
+                <Button
+                  variant="secondary"
+                  size="md"
+                  disabled={!isOnline || commandLoading}
+                  onClick={() => executeCommand("GET_NETWORK_INFO")}
+                >
+                  Network Info
+                </Button>
+
+                <Button
+                  variant="secondary"
+                  size="md"
+                  disabled={!isOnline || commandLoading}
+                  onClick={() => executeCommand("PING")}
+                >
+                  Ping
+                </Button>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: activeTab === "network" ? "grid" : "none",
+                gap: "var(--space-2)",
+                alignContent: "start",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: "var(--font-xs)",
+                  color: "var(--text-muted)",
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                }}
+              >
+                Network collection
+              </span>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "var(--space-2)",
+                  flexWrap: "wrap",
+                }}
+              >
+                <Button
+                  variant="primary"
+                  size="md"
+                  disabled={
+                    !isOnline ||
+                    commandLoading ||
+                    neighbourhoodLoading ||
+                    passiveNeighbourhoodLoading
+                  }
+                  onClick={requestNeighbourhood}
+                >
+                  {neighbourhoodLoading
+                    ? "Collecting Neighbourhood…"
+                    : "Collect Neighbourhood"}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="md"
+                  disabled={!isOnline || screenshotLoading}
+                  onClick={requestScreenshot}
+                >
+                  {screenshotLoading
+                    ? "Capturing Screenshot…"
+                    : "Capture Screenshot"}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="md"
+                  disabled={
+                    !isOnline ||
+                    commandLoading ||
+                    neighbourhoodLoading ||
+                    passiveNeighbourhoodLoading
+                  }
+                  onClick={requestPassiveNeighbourhood}
+                >
+                  {passiveNeighbourhoodLoading
+                    ? "Requesting Passive Info…"
+                    : "Get Passive Network Information"}
+                </Button>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: activeTab === "remote" ? "grid" : "none",
+                gap: "var(--space-2)",
+                alignContent: "start",
+                }}
+            >
+              <span
+                style={{
+                  fontSize: "var(--font-xs)",
+                  color: "var(--text-muted)",
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                }}
+              >
+                Operations
+              </span>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "8px",
+                  alignItems: "start",
+                }}
+              >
+                {/* Activity Log dropdown & button */}
+
+                <select
+                  value={activityPeriod}
+                  onChange={(e) => setActivityPeriod(e.target.value as any)}
+                  disabled={!isOnline || commandLoading}
+                  style={{
+                    background: "var(--surface)",
+                    color: "var(--text)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "var(--radius-sm)",
+                    padding: "4px 8px",
+                    fontSize: "var(--font-xs)",
+                    width: "100%",
+                  }}
+                >
+                  <option value="1d">Last 24h</option>
+                  <option value="1w">Last 7d</option>
+                  <option value="1m">Last 30d</option>
+                </select>
+                <Button
+                  variant="primary"
+                  size="md"
+                  disabled={!isOnline || commandLoading}
+                  onClick={() =>
+                    executeCommand("GET_ACTIVITY_LOG", activityPeriod)
+                  }
+                  style={{ width: "100%", height: "100%" }}
+                >
+                  Fetch Log
+                </Button>
+
+                <Button
+                  style={{
+                    // i want it to take two columns
+                    gridColumn: "1 / span 2",
+                  }}
+                  variant="secondary"
+                  size="md"
+                  disabled={!isOnline || commandLoading}
+                  onClick={() => setShowStartModal(true)}
+                >
+                  Start Process
+                </Button>
+
+                <Button
+                  variant="secondary"
+                  size="md"
+                  disabled={!isOnline || commandLoading}
+                  onClick={() => setPendingConfirmation({ kind: "restart" })}
+                >
+                  Restart
+                </Button>
+
+                <Button
+                  variant="danger"
+                  size="md"
+                  disabled={!isOnline || commandLoading}
+                  onClick={() => setPendingConfirmation({ kind: "shutdown" })}
+                >
+                  Shut Down
+                </Button>
+              </div>
+            </div>
+            <div style={{
+              display: activeTab=== "remote" ? "grid" : "none",
+            }}>
+              {clientId && (
+                <DeployPackagePanel
+                  targets={[clientId]}
+                  disabled={!isOnline || commandLoading}
+                  onCompleted={(action) => {
+                    addToast({
+                      title:
+                        action.status === "SUCCESS"
+                          ? "Package deployed"
+                          : action.status === "PARTIAL_SUCCESS"
+                            ? "Package partially deployed"
+                            : "Package deployment failed",
+                      message: `Action ${action.action_id} finished with status ${action.status}.`,
+                      severity:
+                        action.status === "SUCCESS"
+                          ? "SUCCESS"
+                          : action.status === "PARTIAL_SUCCESS"
+                            ? "HIGH"
+                            : "CRITICAL",
+                    });
+                  }}
+                />
+              )}
+            </div>
+
+            <div
+              style={{
+                display: activeTab === "security" ? "grid" : "none",
+                gap: "var(--space-2)",
+                alignContent: "start",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: "var(--font-xs)",
+                  color: "var(--text-muted)",
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                }}
+              >
+                Containment
+              </span>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "var(--space-2)",
+                  flexWrap: "wrap",
+                }}
+              >
+                <Button
+                  variant="danger"
+                  size="md"
+                  disabled={!isOnline || commandLoading || quarantineLoading}
+                  onClick={handleQuarantine}
+                >
+                  {quarantineLoading ? "Quarantining…" : "Isolate / Quarantine"}
+                </Button>
+
+                <Button
+                  variant="secondary"
+                  size="md"
+                  disabled={!isIsolated || commandLoading || quarantineLoading}
+                  onClick={() => setPendingConfirmation({ kind: "release" })}
+                >
+                  Release Quarantine
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Start Process Modal / Bar */}
+          {showStartModal && (
+            <div
+              style={{
+                marginTop: "var(--space-4)",
+                padding: "var(--space-3)",
+                background: "var(--surface-muted)",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius)",
+                display: "flex",
+                gap: "var(--space-2)",
+                alignItems: "center",
+              }}
+            >
+              <input
+                type="text"
+                placeholder="Absolute path to executable (e.g. /usr/bin/htop or notepad.exe)..."
+                value={startProcessPath}
+                onChange={(e) => setStartProcessPath(e.target.value)}
+                style={{
+                  flex: 1,
+                  padding: "var(--space-2)",
                   background: "var(--surface)",
-                  color: "var(--text)",
                   border: "1px solid var(--border)",
                   borderRadius: "var(--radius-sm)",
-                  padding: "4px 8px",
-                  fontSize: "var(--font-xs)",
-                  width: "100%",
+                  color: "var(--text)",
+                  fontSize: "var(--font-sm)",
                 }}
-              >
-                <option value="1d">Last 24h</option>
-                <option value="1w">Last 7d</option>
-                <option value="1m">Last 30d</option>
-              </select>
+              />
               <Button
                 variant="primary"
                 size="md"
-                disabled={!isOnline || commandLoading}
+                disabled={!startProcessPath.trim() || commandLoading}
                 onClick={() =>
-                  executeCommand("GET_ACTIVITY_LOG", activityPeriod)
+                  executeCommand("START_PROCESS", startProcessPath.trim())
                 }
-                style={{ width: "100%", height: "100%" }}
               >
-                Fetch Log
+                Launch
               </Button>
-
               <Button
-                style={{
-                  // i want it to take two columns
-                  gridColumn: "1 / span 2",
-                }}
-                variant="secondary"
+                variant="quiet"
                 size="md"
-                disabled={!isOnline || commandLoading}
-                onClick={() => setShowStartModal(true)}
+                onClick={() => setShowStartModal(false)}
               >
-                Start Process
-              </Button>
-
-              <Button
-                variant="secondary"
-                size="md"
-                disabled={!isOnline || commandLoading}
-                onClick={() => setPendingConfirmation({ kind: "restart" })}
-              >
-                Restart
-              </Button>
-
-              <Button
-                variant="danger"
-                size="md"
-                disabled={!isOnline || commandLoading}
-                onClick={() => setPendingConfirmation({ kind: "shutdown" })}
-              >
-                Shut Down
+                Cancel
               </Button>
             </div>
-
-            {clientId && (
-              <DeployPackagePanel
-                targets={[clientId]}
-                disabled={!isOnline || commandLoading}
-                onCompleted={(action) => {
-                  addToast({
-                    title:
-                      action.status === "SUCCESS"
-                        ? "Package deployed"
-                        : action.status === "PARTIAL_SUCCESS"
-                          ? "Package partially deployed"
-                          : "Package deployment failed",
-                    message: `Action ${action.action_id} finished with status ${action.status}.`,
-                    severity:
-                      action.status === "SUCCESS"
-                        ? "SUCCESS"
-                        : action.status === "PARTIAL_SUCCESS"
-                          ? "HIGH"
-                          : "CRITICAL",
-                  });
-                }}
-              />
-            )}
-          </div>
-
-          <div
-            style={{
-              display: activeTab === "security" ? "grid" : "none",
-              gap: "var(--space-2)",
-              alignContent: "start",
-            }}
-          >
-            <span
-              style={{
-                fontSize: "var(--font-xs)",
-                color: "var(--text-muted)",
-                fontWeight: 600,
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-              }}
-            >
-              Containment
-            </span>
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "var(--space-2)",
-                flexWrap: "wrap",
-              }}
-            >
-              <Button
-                variant="danger"
-                size="md"
-                disabled={!isOnline || commandLoading || quarantineLoading}
-                onClick={handleQuarantine}
-              >
-                {quarantineLoading ? "Quarantining…" : "Isolate / Quarantine"}
-              </Button>
-
-              <Button
-                variant="secondary"
-                size="md"
-                disabled={!isIsolated || commandLoading || quarantineLoading}
-                onClick={() => setPendingConfirmation({ kind: "release" })}
-              >
-                Release Quarantine
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        {/* Start Process Modal / Bar */}
-        {showStartModal && (
-          <div
-            style={{
-              marginTop: "var(--space-4)",
-              padding: "var(--space-3)",
-              background: "var(--surface-muted)",
-              border: "1px solid var(--border)",
-              borderRadius: "var(--radius)",
-              display: "flex",
-              gap: "var(--space-2)",
-              alignItems: "center",
-            }}
-          >
-            <input
-              type="text"
-              placeholder="Absolute path to executable (e.g. /usr/bin/htop or notepad.exe)..."
-              value={startProcessPath}
-              onChange={(e) => setStartProcessPath(e.target.value)}
-              style={{
-                flex: 1,
-                padding: "var(--space-2)",
-                background: "var(--surface)",
-                border: "1px solid var(--border)",
-                borderRadius: "var(--radius-sm)",
-                color: "var(--text)",
-                fontSize: "var(--font-sm)",
-              }}
-            />
-            <Button
-              variant="primary"
-              size="md"
-              disabled={!startProcessPath.trim() || commandLoading}
-              onClick={() =>
-                executeCommand("START_PROCESS", startProcessPath.trim())
-              }
-            >
-              Launch
-            </Button>
-            <Button
-              variant="quiet"
-              size="md"
-              onClick={() => setShowStartModal(false)}
-            >
-              Cancel
-            </Button>
-          </div>
-        )}
-      </SectionCard>
+          )}
+        </SectionCard>
       </section>
 
       <section
@@ -1449,171 +1523,182 @@ export function ClientDetailPage() {
         hidden={activeTab !== "remote"}
         style={{ display: activeTab === "remote" ? "block" : "none" }}
       >
-      {/* Live Process Explorer & Manager */}
-      {processList && (
-        <div style={{ marginTop: "var(--space-6)" }}>
-          <SectionCard
-            title={`Command Result: Running Processes on ${c.hostname} (${filteredProcesses.length} / ${processList.length})`}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                marginBottom: "var(--space-3)",
-                gap: "var(--space-3)",
-                flexWrap: "wrap",
-              }}
+        {/* Live Process Explorer & Manager */}
+        {processList && (
+          <div style={{ marginTop: "var(--space-6)" }}>
+            <SectionCard
+              title={`Command Result: Running Processes on ${c.hostname} (${filteredProcesses.length} / ${processList.length})`}
             >
-              <input
-                type="search"
-                placeholder="Filter by process name, PID, or user..."
-                value={processFilter}
-                onChange={(e) => setProcessFilter(e.target.value)}
+              <div
                 style={{
-                  minWidth: "280px",
-                  padding: "var(--space-2) var(--space-3)",
-                  background: "var(--surface)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "var(--radius-sm)",
-                  color: "var(--text)",
-                  fontSize: "var(--font-sm)",
-                }}
-              />
-              <div style={{ display: "flex", gap: "var(--space-2)" }}>
-                <Button
-                  variant="quiet"
-                  size="md"
-                  onClick={() => executeCommand("GET_PROCESSES")}
-                  disabled={commandLoading}
-                >
-                  Refresh Processes
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="md"
-                  onClick={() => {
-                    setProcessList(null);
-                    setCommandResult(null);
-                    setActiveCommand(null);
-                  }}
-                >
-                  Close result
-                </Button>
-              </div>
-            </div>
-
-            <div
-              style={{
-                overflowX: "auto",
-                maxHeight: "420px",
-                overflowY: "auto",
-              }}
-            >
-              <table
-                style={{
-                  width: "100%",
-                  borderCollapse: "collapse",
-                  fontSize: "var(--font-xs)",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  marginBottom: "var(--space-3)",
+                  gap: "var(--space-3)",
+                  flexWrap: "wrap",
                 }}
               >
-                <thead>
-                  <tr
-                    style={{
-                      borderBottom: "1px solid var(--border)",
-                      textAlign: "left",
+                <input
+                  type="search"
+                  placeholder="Filter by process name, PID, or user..."
+                  value={processFilter}
+                  onChange={(e) => setProcessFilter(e.target.value)}
+                  style={{
+                    minWidth: "280px",
+                    padding: "var(--space-2) var(--space-3)",
+                    background: "var(--surface)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "var(--radius-sm)",
+                    color: "var(--text)",
+                    fontSize: "var(--font-sm)",
+                  }}
+                />
+                <div style={{ display: "flex", gap: "var(--space-2)" }}>
+                  <Button
+                    variant="quiet"
+                    size="md"
+                    onClick={() => executeCommand("GET_PROCESSES")}
+                    disabled={commandLoading}
+                  >
+                    Refresh Processes
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    onClick={() => {
+                      setProcessList(null);
+                      setCommandResult(null);
+                      setActiveCommand(null);
                     }}
                   >
-                    <th style={{ padding: "8px" }}>PID</th>
-                    <th style={{ padding: "8px" }}>Process Name</th>
-                    <th style={{ padding: "8px" }}>User</th>
-                    <th style={{ padding: "8px" }}>CPU %</th>
-                    <th style={{ padding: "8px" }}>Memory %</th>
-                    <th style={{ padding: "8px" }}>Status</th>
-                    <th style={{ padding: "8px", textAlign: "right" }}>
-                      Action
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredProcesses.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={7}
-                        style={{
-                          padding: "16px",
-                          textAlign: "center",
-                          color: "var(--text-muted)",
-                        }}
-                      >
-                        No processes matching filter.
-                      </td>
+                    Close result
+                  </Button>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  overflowX: "auto",
+                  maxHeight: "420px",
+                  overflowY: "auto",
+                }}
+              >
+                <table
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    fontSize: "var(--font-xs)",
+                  }}
+                >
+                  <thead>
+                    <tr
+                      style={{
+                        borderBottom: "1px solid var(--border)",
+                        textAlign: "left",
+                      }}
+                    >
+                      <th style={{ padding: "8px" }}>PID</th>
+                      <th style={{ padding: "8px" }}>Process Name</th>
+                      <th style={{ padding: "8px" }}>User</th>
+                      <th style={{ padding: "8px" }}>CPU %</th>
+                      <th style={{ padding: "8px" }}>Memory %</th>
+                      <th style={{ padding: "8px" }}>Status</th>
+                      <th style={{ padding: "8px", textAlign: "right" }}>
+                        Action
+                      </th>
                     </tr>
-                  ) : (
-                    filteredProcesses.map((p, idx) => (
-                      <tr
-                        key={p.pid ?? idx}
-                        style={{
-                          borderBottom: "1px solid var(--border-subtle)",
-                          fontFamily: "var(--font-mono)",
-                        }}
-                      >
+                  </thead>
+                  <tbody>
+                    {filteredProcesses.length === 0 ? (
+                      <tr>
                         <td
-                          style={{ padding: "8px", color: "var(--text-muted)" }}
-                        >
-                          {p.pid ?? "—"}
-                        </td>
-                        <td
+                          colSpan={7}
                           style={{
-                            padding: "8px",
-                            fontWeight: 600,
-                            color: "var(--text)",
+                            padding: "16px",
+                            textAlign: "center",
+                            color: "var(--text-muted)",
                           }}
                         >
-                          {p.name ?? "unknown"}
-                        </td>
-                        <td
-                          style={{ padding: "8px", color: "var(--text-muted)" }}
-                        >
-                          {p.username ?? "—"}
-                        </td>
-                        <td style={{ padding: "8px" }}>
-                          {p.cpu_percent !== undefined
-                            ? `${p.cpu_percent.toFixed(1)}%`
-                            : "—"}
-                        </td>
-                        <td style={{ padding: "8px" }}>
-                          {p.memory_percent !== undefined
-                            ? `${p.memory_percent.toFixed(1)}%`
-                            : "—"}
-                        </td>
-                        <td style={{ padding: "8px" }}>
-                          <Badge variant="info">{p.status ?? "RUNNING"}</Badge>
-                        </td>
-                        <td style={{ padding: "8px", textAlign: "right" }}>
-                          <button
-                            className="btn btn--danger btn--sm"
-                            style={{ padding: "2px 8px", fontSize: "11px" }}
-                            disabled={commandLoading}
-                            onClick={() => {
-                              const target = p.name || String(p.pid);
-                              setPendingConfirmation({ kind: "kill", target });
-                            }}
-                          >
-                            {killingProcess === (p.name || String(p.pid)) &&
-                            commandLoading
-                              ? "Killing..."
-                              : "Kill"}
-                          </button>
+                          No processes matching filter.
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </SectionCard>
-        </div>
-      )}
+                    ) : (
+                      filteredProcesses.map((p, idx) => (
+                        <tr
+                          key={p.pid ?? idx}
+                          style={{
+                            borderBottom: "1px solid var(--border-subtle)",
+                            fontFamily: "var(--font-mono)",
+                          }}
+                        >
+                          <td
+                            style={{
+                              padding: "8px",
+                              color: "var(--text-muted)",
+                            }}
+                          >
+                            {p.pid ?? "—"}
+                          </td>
+                          <td
+                            style={{
+                              padding: "8px",
+                              fontWeight: 600,
+                              color: "var(--text)",
+                            }}
+                          >
+                            {p.name ?? "unknown"}
+                          </td>
+                          <td
+                            style={{
+                              padding: "8px",
+                              color: "var(--text-muted)",
+                            }}
+                          >
+                            {p.username ?? "—"}
+                          </td>
+                          <td style={{ padding: "8px" }}>
+                            {p.cpu_percent !== undefined
+                              ? `${p.cpu_percent.toFixed(1)}%`
+                              : "—"}
+                          </td>
+                          <td style={{ padding: "8px" }}>
+                            {p.memory_percent !== undefined
+                              ? `${p.memory_percent.toFixed(1)}%`
+                              : "—"}
+                          </td>
+                          <td style={{ padding: "8px" }}>
+                            <Badge variant="info">
+                              {p.status ?? "RUNNING"}
+                            </Badge>
+                          </td>
+                          <td style={{ padding: "8px", textAlign: "right" }}>
+                            <button
+                              className="btn btn--danger btn--sm"
+                              style={{ padding: "2px 8px", fontSize: "11px" }}
+                              disabled={commandLoading}
+                              onClick={() => {
+                                const target = p.name || String(p.pid);
+                                setPendingConfirmation({
+                                  kind: "kill",
+                                  target,
+                                });
+                              }}
+                            >
+                              {killingProcess === (p.name || String(p.pid)) &&
+                              commandLoading
+                                ? "Killing..."
+                                : "Kill"}
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </SectionCard>
+          </div>
+        )}
       </section>
       <section
         id="client-panel-network"
@@ -1622,249 +1707,252 @@ export function ClientDetailPage() {
         hidden={activeTab !== "network"}
         style={{ display: activeTab === "network" ? "block" : "none" }}
       >
-      {passiveNeighbourhood &&
-        (() => {
-          const protocols = [
-            ...new Set(
-              passiveNeighbourhood.observations.map(
-                (observation) => observation.protocol,
+        {passiveNeighbourhood &&
+          (() => {
+            const protocols = [
+              ...new Set(
+                passiveNeighbourhood.observations.map(
+                  (observation) => observation.protocol,
+                ),
               ),
-            ),
-          ].sort();
-          const devices = new Set(
-            passiveNeighbourhood.observations.map(
-              (observation) =>
-                observation.mac_address ||
-                observation.ip_address ||
-                observation.hostname ||
-                observation.service_name ||
-                observation.device_type ||
-                observation.raw_fields?.usn ||
-                observation.protocol,
-            ),
-          );
-          const latestObservation = passiveNeighbourhood.observations.reduce<
-            string | null
-          >(
-            (latest, observation) =>
-              observation.observed_at &&
-              (!latest || observation.observed_at > latest)
-                ? observation.observed_at
-                : latest,
-            null,
-          );
+            ].sort();
+            const devices = new Set(
+              passiveNeighbourhood.observations.map(
+                (observation) =>
+                  observation.mac_address ||
+                  observation.ip_address ||
+                  observation.hostname ||
+                  observation.service_name ||
+                  observation.device_type ||
+                  observation.raw_fields?.usn ||
+                  observation.protocol,
+              ),
+            );
+            const latestObservation = passiveNeighbourhood.observations.reduce<
+              string | null
+            >(
+              (latest, observation) =>
+                observation.observed_at &&
+                (!latest || observation.observed_at > latest)
+                  ? observation.observed_at
+                  : latest,
+              null,
+            );
 
-          return (
-            <div style={{ marginTop: "var(--space-6)", order: 2 }}>
-              <SectionCard
-                title="Passive Network Information"
-                headerAction={
-                  <Button
-                    variant="quiet"
-                    size="md"
-                    onClick={() => setPassiveNeighbourhood(null)}
-                  >
-                    Close
-                  </Button>
-                }
-              >
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-                    gap: "var(--space-3)",
-                  }}
+            return (
+              <div style={{ marginTop: "var(--space-6)", order: 2 }}>
+                <SectionCard
+                  title="Passive Network Information"
+                  headerAction={
+                    <Button
+                      variant="quiet"
+                      size="md"
+                      onClick={() => setPassiveNeighbourhood(null)}
+                    >
+                      Close
+                    </Button>
+                  }
                 >
-                  <MetricCard
-                    label="Observations"
-                    value={String(passiveNeighbourhood.observation_count)}
-                  />
-                  <MetricCard
-                    label="Observed endpoints"
-                    value={String(devices.size)}
-                  />
-                  <MetricCard
-                    label="Protocols"
-                    value={String(protocols.length)}
-                  />
-                </div>
-                <div style={{ marginTop: "var(--space-4)" }}>
-                  <DetailRow
-                    label="Protocols detected"
-                    value={protocols.length ? protocols.join(", ") : "None"}
-                  />
-                  <DetailRow
-                    label="Latest observation"
-                    value={
-                      latestObservation
-                        ? formatDateTime(latestObservation)
-                        : "No observations"
-                    }
-                  />
-                  <DetailRow
-                    label="Snapshot received"
-                    value={formatDateTime(passiveNeighbourhood.observed_at)}
-                  />
-                  <DetailRow
-                    label="Reporter"
-                    value={passiveNeighbourhood.reporter}
-                    mono
-                  />
-                </div>
-                <div style={{ marginTop: "var(--space-4)", overflowX: "auto" }}>
-                  <table
+                  <div
                     style={{
-                      width: "100%",
-                      borderCollapse: "collapse",
-                      fontSize: "var(--font-xs)",
+                      display: "grid",
+                      gridTemplateColumns:
+                        "repeat(auto-fit, minmax(150px, 1fr))",
+                      gap: "var(--space-3)",
                     }}
                   >
-                    <thead>
-                      <tr
-                        style={{
-                          borderBottom: "1px solid var(--border)",
-                          textAlign: "left",
-                        }}
-                      >
-                        <th style={{ padding: "8px" }}>Protocol</th>
-                        <th style={{ padding: "8px" }}>
-                          Observed device or service
-                        </th>
-                        <th style={{ padding: "8px" }}>Address</th>
-                        <th style={{ padding: "8px" }}>
-                          Advertisement details
-                        </th>
-                        <th style={{ padding: "8px" }}>Seen</th>
-                        <th style={{ padding: "8px" }}>Latest</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {passiveNeighbourhood.observations.length === 0 ? (
-                        <tr>
-                          <td
-                            colSpan={6}
-                            style={{
-                              padding: "16px",
-                              textAlign: "center",
-                              color: "var(--text-muted)",
-                            }}
-                          >
-                            No passive protocol observations have been collected
-                            in this client session.
-                          </td>
+                    <MetricCard
+                      label="Observations"
+                      value={String(passiveNeighbourhood.observation_count)}
+                    />
+                    <MetricCard
+                      label="Observed endpoints"
+                      value={String(devices.size)}
+                    />
+                    <MetricCard
+                      label="Protocols"
+                      value={String(protocols.length)}
+                    />
+                  </div>
+                  <div style={{ marginTop: "var(--space-4)" }}>
+                    <DetailRow
+                      label="Protocols detected"
+                      value={protocols.length ? protocols.join(", ") : "None"}
+                    />
+                    <DetailRow
+                      label="Latest observation"
+                      value={
+                        latestObservation
+                          ? formatDateTime(latestObservation)
+                          : "No observations"
+                      }
+                    />
+                    <DetailRow
+                      label="Snapshot received"
+                      value={formatDateTime(passiveNeighbourhood.observed_at)}
+                    />
+                    <DetailRow
+                      label="Reporter"
+                      value={passiveNeighbourhood.reporter}
+                      mono
+                    />
+                  </div>
+                  <div
+                    style={{ marginTop: "var(--space-4)", overflowX: "auto" }}
+                  >
+                    <table
+                      style={{
+                        width: "100%",
+                        borderCollapse: "collapse",
+                        fontSize: "var(--font-xs)",
+                      }}
+                    >
+                      <thead>
+                        <tr
+                          style={{
+                            borderBottom: "1px solid var(--border)",
+                            textAlign: "left",
+                          }}
+                        >
+                          <th style={{ padding: "8px" }}>Protocol</th>
+                          <th style={{ padding: "8px" }}>
+                            Observed device or service
+                          </th>
+                          <th style={{ padding: "8px" }}>Address</th>
+                          <th style={{ padding: "8px" }}>
+                            Advertisement details
+                          </th>
+                          <th style={{ padding: "8px" }}>Seen</th>
+                          <th style={{ padding: "8px" }}>Latest</th>
                         </tr>
-                      ) : (
-                        passiveNeighbourhood.observations.map(
-                          (observation, index) => {
-                            const identity =
-                              `${observation.device_name}
+                      </thead>
+                      <tbody>
+                        {passiveNeighbourhood.observations.length === 0 ? (
+                          <tr>
+                            <td
+                              colSpan={6}
+                              style={{
+                                padding: "16px",
+                                textAlign: "center",
+                                color: "var(--text-muted)",
+                              }}
+                            >
+                              No passive protocol observations have been
+                              collected in this client session.
+                            </td>
+                          </tr>
+                        ) : (
+                          passiveNeighbourhood.observations.map(
+                            (observation, index) => {
+                              const identity =
+                                `${observation.device_name}
                            ${observation.service_name}
                            ${observation.hostname}
                            ${observation.device_type}
                           ${observation.raw_fields?.usn}` ||
-                              "Unidentified observation";
-                            const address = [
-                              observation.ip_address,
-                              observation.mac_address,
-                            ]
-                              .filter(Boolean)
-                              .join("\n");
-                            const details = [
-                              observation.observation_kind,
-                              observation.service_type,
-                              observation.service_port
-                                ? `port ${observation.service_port}`
-                                : null,
-                              observation.server,
-                              observation.location,
-                            ]
-                              .filter(Boolean)
-                              .join("\n");
+                                "Unidentified observation";
+                              const address = [
+                                observation.ip_address,
+                                observation.mac_address,
+                              ]
+                                .filter(Boolean)
+                                .join("\n");
+                              const details = [
+                                observation.observation_kind,
+                                observation.service_type,
+                                observation.service_port
+                                  ? `port ${observation.service_port}`
+                                  : null,
+                                observation.server,
+                                observation.location,
+                              ]
+                                .filter(Boolean)
+                                .join("\n");
 
-                            return (
-                              <tr
-                                key={`${observation.protocol}-${observation.observed_at ?? index}-${index}`}
-                                style={{
-                                  borderBottom:
-                                    "1px solid var(--border-subtle)",
-                                }}
-                              >
-                                <td
+                              return (
+                                <tr
+                                  key={`${observation.protocol}-${observation.observed_at ?? index}-${index}`}
                                   style={{
-                                    padding: "8px",
-                                    verticalAlign: "top",
+                                    borderBottom:
+                                      "1px solid var(--border-subtle)",
                                   }}
                                 >
-                                  <Badge variant="info">
-                                    {observation.protocol}
-                                  </Badge>
-                                </td>
-                                <td
-                                  style={{
-                                    padding: "8px",
-                                    verticalAlign: "top",
-                                    fontWeight: 600,
-                                    maxWidth: "260px",
-                                    wordBreak: "break-word",
-                                  }}
-                                >
-                                  {identity}
-                                </td>
-                                <td
-                                  style={{
-                                    padding: "8px",
-                                    verticalAlign: "top",
-                                    whiteSpace: "pre-line",
-                                    fontFamily: "var(--font-mono)",
-                                  }}
-                                >
-                                  {address || "—"}
-                                </td>
-                                <td
-                                  style={{
-                                    padding: "8px",
-                                    verticalAlign: "top",
-                                    whiteSpace: "pre-line",
-                                    maxWidth: "360px",
-                                    overflowWrap: "anywhere",
-                                    color: "var(--text-muted)",
-                                  }}
-                                >
-                                  {details || "—"}
-                                </td>
-                                <td
-                                  style={{
-                                    padding: "8px",
-                                    verticalAlign: "top",
-                                    textAlign: "right",
-                                  }}
-                                >
-                                  {observation.seen_count ?? 1}
-                                </td>
-                                <td
-                                  style={{
-                                    padding: "8px",
-                                    verticalAlign: "top",
-                                    whiteSpace: "nowrap",
-                                    color: "var(--text-muted)",
-                                  }}
-                                >
-                                  {observation.observed_at
-                                    ? formatDateTime(observation.observed_at)
-                                    : "—"}
-                                </td>
-                              </tr>
-                            );
-                          },
-                        )
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </SectionCard>
-            </div>
-          );
-        })()}
+                                  <td
+                                    style={{
+                                      padding: "8px",
+                                      verticalAlign: "top",
+                                    }}
+                                  >
+                                    <Badge variant="info">
+                                      {observation.protocol}
+                                    </Badge>
+                                  </td>
+                                  <td
+                                    style={{
+                                      padding: "8px",
+                                      verticalAlign: "top",
+                                      fontWeight: 600,
+                                      maxWidth: "260px",
+                                      wordBreak: "break-word",
+                                    }}
+                                  >
+                                    {identity}
+                                  </td>
+                                  <td
+                                    style={{
+                                      padding: "8px",
+                                      verticalAlign: "top",
+                                      whiteSpace: "pre-line",
+                                      fontFamily: "var(--font-mono)",
+                                    }}
+                                  >
+                                    {address || "—"}
+                                  </td>
+                                  <td
+                                    style={{
+                                      padding: "8px",
+                                      verticalAlign: "top",
+                                      whiteSpace: "pre-line",
+                                      maxWidth: "360px",
+                                      overflowWrap: "anywhere",
+                                      color: "var(--text-muted)",
+                                    }}
+                                  >
+                                    {details || "—"}
+                                  </td>
+                                  <td
+                                    style={{
+                                      padding: "8px",
+                                      verticalAlign: "top",
+                                      textAlign: "right",
+                                    }}
+                                  >
+                                    {observation.seen_count ?? 1}
+                                  </td>
+                                  <td
+                                    style={{
+                                      padding: "8px",
+                                      verticalAlign: "top",
+                                      whiteSpace: "nowrap",
+                                      color: "var(--text-muted)",
+                                    }}
+                                  >
+                                    {observation.observed_at
+                                      ? formatDateTime(observation.observed_at)
+                                      : "—"}
+                                  </td>
+                                </tr>
+                              );
+                            },
+                          )
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </SectionCard>
+              </div>
+            );
+          })()}
       </section>
 
       <section
@@ -1874,119 +1962,58 @@ export function ClientDetailPage() {
         hidden={activeTab !== "history"}
         style={{ display: activeTab === "history" ? "block" : "none" }}
       >
-      <div
-        id="screenshot-history"
-        style={{ marginTop: "var(--space-6)" }}
-      >
-        <SectionCard
-          title="Screenshot History"
-          headerAction={
-            <Button
-              variant="quiet"
-              size="md"
-              onClick={refetchScreenshots}
-              disabled={screenshotLoadingState}
-            >
-              Refresh
-            </Button>
-          }
-        >
-          {screenshotState.status === "error" && !screenshotState.staleData && (
-            <Notice variant="warning" title="Unable to load screenshots">
-              {screenshotState.error.message}
-            </Notice>
-          )}
+        <div id="screenshot-history" style={{ marginTop: "var(--space-6)" }}>
+          <SectionCard
+            title="Screenshot History"
+            headerAction={
+              <Button
+                variant="quiet"
+                size="md"
+                onClick={refetchScreenshots}
+                disabled={screenshotLoadingState}
+              >
+                Refresh
+              </Button>
+            }
+          >
+            {screenshotState.status === "error" &&
+              !screenshotState.staleData && (
+                <Notice variant="warning" title="Unable to load screenshots">
+                  {screenshotState.error.message}
+                </Notice>
+              )}
 
-          {screenshotState.status === "error" && screenshotState.staleData && (
-            <div style={{ marginBottom: "var(--space-4)" }}>
-              <Notice variant="warning" title="Stale screenshot history shown">
-                {screenshotState.error.message}
-              </Notice>
-            </div>
-          )}
-
-          {screenshotLoadingState ? (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-                gap: "var(--space-4)",
-              }}
-            >
-              {Array.from({ length: 4 }).map((_, index) => (
-                <div
-                  key={index}
-                  style={{
-                    border: "1px solid var(--border)",
-                    borderRadius: "var(--radius)",
-                    overflow: "hidden",
-                    background: "var(--surface-muted)",
-                  }}
-                >
-                  <Skeleton variant="icon" width="100%" height="160px" />
-                  <div
-                    style={{
-                      padding: "var(--space-3)",
-                      display: "grid",
-                      gap: "var(--space-2)",
-                    }}
+            {screenshotState.status === "error" &&
+              screenshotState.staleData && (
+                <div style={{ marginBottom: "var(--space-4)" }}>
+                  <Notice
+                    variant="warning"
+                    title="Stale screenshot history shown"
                   >
-                    <Skeleton variant="text-sm" width="80%" />
-                    <Skeleton variant="text" width="60%" />
-                    <Skeleton variant="text" width="40%" />
-                  </div>
+                    {screenshotState.error.message}
+                  </Notice>
                 </div>
-              ))}
-            </div>
-          ) : screenshotItems.length === 0 ? (
-            <EmptyState
-              icon="🖼️"
-              title="No screenshots yet"
-              body="Request a screenshot from an online interactive client to start building a history."
-            />
-          ) : (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-                gap: "var(--space-4)",
-              }}
-            >
-              {screenshotItems.map((shot) => {
-                const fileUrl = api.getScreenshotFileUrl(shot.id);
-                return (
+              )}
+
+            {screenshotLoadingState ? (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+                  gap: "var(--space-4)",
+                }}
+              >
+                {Array.from({ length: 4 }).map((_, index) => (
                   <div
-                    key={shot.id}
+                    key={index}
                     style={{
                       border: "1px solid var(--border)",
                       borderRadius: "var(--radius)",
                       overflow: "hidden",
-                      background: "var(--surface)",
-                      boxShadow: "var(--shadow-sm)",
+                      background: "var(--surface-muted)",
                     }}
                   >
-                    <a
-                      href={fileUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{
-                        display: "block",
-                        aspectRatio: "16 / 9",
-                        background: "var(--surface-muted)",
-                        overflow: "hidden",
-                      }}
-                    >
-                      <img
-                        src={fileUrl}
-                        alt={`Screenshot captured ${shot.captured_at ? formatDateTime(shot.captured_at) : "recently"}`}
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "cover",
-                          display: "block",
-                        }}
-                      />
-                    </a>
+                    <Skeleton variant="icon" width="100%" height="160px" />
                     <div
                       style={{
                         padding: "var(--space-3)",
@@ -1994,319 +2021,392 @@ export function ClientDetailPage() {
                         gap: "var(--space-2)",
                       }}
                     >
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          gap: "var(--space-2)",
-                        }}
-                      >
-                        <strong style={{ fontSize: "var(--font-sm)" }}>
-                          {shot.filename}
-                        </strong>
-                        <Badge
-                          variant={
-                            shot.status === "FAILED" ? "danger" : "success"
-                          }
-                        >
-                          {shot.status.toLowerCase()}
-                        </Badge>
-                      </div>
-                      <div
-                        style={{
-                          fontSize: "var(--font-xs)",
-                          color: "var(--text-muted)",
-                        }}
-                      >
-                        {shot.captured_at
-                          ? formatRelative(shot.captured_at)
-                          : "Capture time unavailable"}
-                      </div>
-                      <div style={{ fontSize: "var(--font-xs)" }}>
-                        <DetailRow
-                          label="Captured"
-                          value={
-                            shot.captured_at
-                              ? formatDateTime(shot.captured_at)
-                              : null
-                          }
-                        />
-                        <DetailRow
-                          label="Size"
-                          value={formatBytes(shot.file_size)}
-                        />
-                        <DetailRow
-                          label="Requested by"
-                          value={shot.requested_by || "local-network-operator"}
-                          mono
-                        />
-                      </div>
-                      <div
-                        style={{
-                          display: "flex",
-                          gap: "var(--space-2)",
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        <Button
-                          variant="secondary"
-                          size="md"
-                          onClick={() =>
-                            window.open(
-                              fileUrl,
-                              "_blank",
-                              "noopener,noreferrer",
-                            )
-                          }
-                        >
-                          Open full size
-                        </Button>
-                      </div>
+                      <Skeleton variant="text-sm" width="80%" />
+                      <Skeleton variant="text" width="60%" />
+                      <Skeleton variant="text" width="40%" />
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </SectionCard>
-      </div>
-
-      {/* Command Output Inspector (when non-process commands are run) */}
-      {commandResult && activeCommand !== "GET_PROCESSES" && (
-        <div style={{ marginTop: "var(--space-6)", order: 1 }}>
-          <SectionCard title={`Command Result: ${activeCommand}`}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: "var(--space-3)",
-              }}
-            >
-              <Badge variant="success">Status: OK</Badge>
-              <Button
-                variant="quiet"
-                size="md"
-                onClick={() => {
-                  setCommandResult(null);
-                  setActiveCommand(null);
+                ))}
+              </div>
+            ) : screenshotItems.length === 0 ? (
+              <EmptyState
+                icon="🖼️"
+                title="No screenshots yet"
+                body="Request a screenshot from an online interactive client to start building a history."
+              />
+            ) : (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+                  gap: "var(--space-4)",
                 }}
               >
-                Close result
-              </Button>
-            </div>
-            {activeCommand === "REQUEST_SCREENSHOT" ? (
-              <div style={{ display: "grid", gap: "var(--space-3)" }}>
-                {capturedScreenshot ? (
-                  <img
-                    src={api.getScreenshotFileUrl(capturedScreenshot.id)}
-                    alt={`Captured screenshot ${capturedScreenshot.filename}`}
-                    style={{
-                      width: "100%",
-                      maxHeight: "520px",
-                      objectFit: "contain",
-                      display: "block",
-                      borderRadius: "var(--radius)",
-                      background: "var(--surface-muted)",
-                      border: "1px solid var(--border)",
-                    }}
-                  />
-                ) : (
-                  <Notice variant="info" title="Preparing screenshot preview">
-                    The screenshot was captured. Refresh the history to load its
-                    preview.
-                  </Notice>
-                )}
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    flexWrap: "wrap",
-                    gap: "var(--space-3)",
-                    padding: "var(--space-2) var(--space-3)",
-                    background: "var(--surface-muted)",
-                    border: "1px solid var(--border-subtle)",
-                    borderRadius: "var(--radius-sm)",
-                    fontSize: "var(--font-xs)",
-                  }}
-                >
-                  <span>
-                    <span style={{ color: "var(--text-muted)" }}>Status: </span>
-                    <strong>{commandResult.status ?? "unknown"}</strong>
-                  </span>
-                  <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>
-                    <span style={{ color: "var(--text-muted)" }}>File: </span>
-                    <strong>{commandResult.filename ?? "Unavailable"}</strong>
-                  </span>
-                  <span>
-                    <span style={{ color: "var(--text-muted)" }}>
-                      Captured:{" "}
-                    </span>
-                    <strong>
-                      {commandResult.captured_at
-                        ? formatRelative(commandResult.captured_at)
-                        : "Unavailable"}
-                    </strong>
-                  </span>
-                  <div style={{ marginLeft: "auto" }}>
-                    <Button
-                      variant="secondary"
-                      size="md"
-                      onClick={() => {
-                        refetchScreenshots();
-                        document
-                          .getElementById("screenshot-history")
-                          ?.scrollIntoView({
-                            behavior: "smooth",
-                            block: "start",
-                          });
+                {screenshotItems.map((shot) => {
+                  const fileUrl = api.getScreenshotFileUrl(shot.id);
+                  return (
+                    <div
+                      key={shot.id}
+                      style={{
+                        border: "1px solid var(--border)",
+                        borderRadius: "var(--radius)",
+                        overflow: "hidden",
+                        background: "var(--surface)",
+                        boxShadow: "var(--shadow-sm)",
                       }}
                     >
-                      Show in history
-                    </Button>
-                  </div>
-                </div>
+                      <a
+                        href={fileUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          display: "block",
+                          aspectRatio: "16 / 9",
+                          background: "var(--surface-muted)",
+                          overflow: "hidden",
+                        }}
+                      >
+                        <img
+                          src={fileUrl}
+                          alt={`Screenshot captured ${shot.captured_at ? formatDateTime(shot.captured_at) : "recently"}`}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                            display: "block",
+                          }}
+                        />
+                      </a>
+                      <div
+                        style={{
+                          padding: "var(--space-3)",
+                          display: "grid",
+                          gap: "var(--space-2)",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: "var(--space-2)",
+                          }}
+                        >
+                          <p style={{ fontSize: "var(--font-xs)" }}>
+                            {shot.filename.slice(0, 24) + (shot.filename.length > 24 ? "…" : "")}
+                          </p>
+                          <Badge
+                            variant={
+                              shot.status === "FAILED" ? "danger" : "success"
+                            }
+                          >
+                            {shot.status.toLowerCase()}
+                          </Badge>
+                        </div>
+                        <div
+                          style={{
+                            fontSize: "var(--font-xs)",
+                            color: "var(--text-muted)",
+                          }}
+                        >
+                          {shot.captured_at
+                            ? formatRelative(shot.captured_at)
+                            : "Capture time unavailable"}
+                        </div>
+                        <div style={{ fontSize: "var(--font-xs)" }}>
+                          <DetailRow
+                            label="Captured"
+                            value={
+                              shot.captured_at
+                                ? formatDateTime(shot.captured_at)
+                                : null
+                            }
+                          />
+                          <DetailRow
+                            label="Size"
+                            value={formatBytes(shot.file_size)}
+                          />
+                          <DetailRow
+                            label="Requested by"
+                            value={
+                              shot.requested_by || "local-network-operator"
+                            }
+                            mono
+                          />
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: "var(--space-2)",
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() =>
+                              window.open(
+                                fileUrl,
+                                "_blank",
+                                "noopener,noreferrer",
+                              )
+                            }
+                          >
+                            Open full size
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            ) : (
-              <pre
-                style={{
-                  background: "var(--surface-muted)",
-                  padding: "var(--space-4)",
-                  borderRadius: "var(--radius)",
-                  border: "1px solid var(--border)",
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "var(--font-xs)",
-                  overflowX: "auto",
-                  maxHeight: "360px",
-                  color: "var(--text)",
-                }}
-              >
-                {JSON.stringify(commandResult.data ?? commandResult, null, 2)}
-              </pre>
             )}
           </SectionCard>
         </div>
-      )}
 
-      {/* Two columns Details */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))",
-          gap: "var(--space-6)",
-          marginTop: "var(--space-6)",
-          order: 3,
-        }}
-      >
-        {/* Identity */}
-        <SectionCard title="Identity">
-          <div>
-            <DetailRow label="Client ID" value={c.id} mono />
-            <DetailRow label="Hostname" value={c.hostname} />
-            <DetailRow label="IP Address" value={c.ip_address} mono />
-            <DetailRow label="MAC Address" value={c.mac_address} mono />
-            <DetailRow
-              label="Registered"
-              value={formatDateTime(c.created_at)}
-            />
-            <DetailRow
-              label="Last updated"
-              value={formatDateTime(c.updated_at)}
-            />
-          </div>
-        </SectionCard>
-
-        {/* Operating system */}
-        <SectionCard title="Operating System">
-          <div>
-            <DetailRow label="System" value={c.os.system} />
-            <DetailRow label="Release" value={c.os.release} />
-            <DetailRow label="Version" value={c.os.version} />
-            <DetailRow label="Arch" value={c.os.machine} />
-          </div>
-        </SectionCard>
-
-        {/* Connection history */}
-        <SectionCard title="Recent Connections">
-          {d.recent_connections.length === 0 ? (
-            <p
-              style={{ fontSize: "var(--font-sm)", color: "var(--text-muted)" }}
-            >
-              No connection records.
-            </p>
-          ) : (
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "var(--space-3)",
-              }}
-            >
-              {d.recent_connections.slice(0, 8).map((conn, i) => (
-                <div
-                  key={i}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: "var(--space-2)",
-                    fontSize: "var(--font-xs)",
-                    padding: "var(--space-2)",
-                    background: "var(--surface-muted)",
-                    borderRadius: "var(--radius-sm)",
+        {/* Command Output Inspector (when non-process commands are run) */}
+        {commandResult && activeCommand !== "GET_PROCESSES" && (
+          <div style={{ marginTop: "var(--space-6)", order: 1 }}>
+            <SectionCard title={`Command Result: ${activeCommand}`}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "var(--space-3)",
+                }}
+              >
+                <Badge variant="success">Status: OK</Badge>
+                <Button
+                  variant="quiet"
+                  size="md"
+                  onClick={() => {
+                    setCommandResult(null);
+                    setActiveCommand(null);
                   }}
                 >
-                  <div>
-                    <span style={{ color: "var(--text-muted)" }}>
-                      Connected{" "}
+                  Close result
+                </Button>
+              </div>
+              {activeCommand === "REQUEST_SCREENSHOT" ? (
+                <div style={{ display: "grid", gap: "var(--space-3)" }}>
+                  {capturedScreenshot ? (
+                    <img
+                      src={api.getScreenshotFileUrl(capturedScreenshot.id)}
+                      alt={`Captured screenshot ${capturedScreenshot.filename}`}
+                      style={{
+                        width: "100%",
+                        maxHeight: "520px",
+                        objectFit: "contain",
+                        display: "block",
+                        borderRadius: "var(--radius)",
+                        background: "var(--surface-muted)",
+                        border: "1px solid var(--border)",
+                      }}
+                    />
+                  ) : (
+                    <Notice variant="info" title="Preparing screenshot preview">
+                      The screenshot was captured. Refresh the history to load
+                      its preview.
+                    </Notice>
+                  )}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                      gap: "var(--space-3)",
+                      padding: "var(--space-2) var(--space-3)",
+                      background: "var(--surface-muted)",
+                      border: "1px solid var(--border-subtle)",
+                      borderRadius: "var(--radius-sm)",
+                      fontSize: "var(--font-xs)",
+                    }}
+                  >
+                    <span>
+                      <span style={{ color: "var(--text-muted)" }}>
+                        Status:{" "}
+                      </span>
+                      <strong>{commandResult.status ?? "unknown"}</strong>
                     </span>
-                    {formatDateTime(conn.connected_at)}
-                  </div>
-                  <div>
-                    <span style={{ color: "var(--text-muted)" }}>
-                      Disconnected{" "}
+                    <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>
+                      <span style={{ color: "var(--text-muted)" }}>File: </span>
+                      <strong>{commandResult.filename ?? "Unavailable"}</strong>
                     </span>
-                    {conn.disconnected_at ? (
-                      formatDateTime(conn.disconnected_at)
-                    ) : (
-                      <span style={{ color: "var(--success)" }}>Active</span>
-                    )}
+                    <span>
+                      <span style={{ color: "var(--text-muted)" }}>
+                        Captured:{" "}
+                      </span>
+                      <strong>
+                        {commandResult.captured_at
+                          ? formatRelative(commandResult.captured_at)
+                          : "Unavailable"}
+                      </strong>
+                    </span>
+                    <div style={{ marginLeft: "auto" }}>
+                      <Button
+                        variant="secondary"
+                        size="md"
+                        onClick={() => {
+                          refetchScreenshots();
+                          document
+                            .getElementById("screenshot-history")
+                            ?.scrollIntoView({
+                              behavior: "smooth",
+                              block: "start",
+                            });
+                        }}
+                      >
+                        Show in history
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </SectionCard>
+              ) : (
+                <pre
+                  style={{
+                    background: "var(--surface-muted)",
+                    padding: "var(--space-4)",
+                    borderRadius: "var(--radius)",
+                    border: "1px solid var(--border)",
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "var(--font-xs)",
+                    overflowX: "auto",
+                    maxHeight: "360px",
+                    color: "var(--text)",
+                  }}
+                >
+                  {JSON.stringify(commandResult.data ?? commandResult, null, 2)}
+                </pre>
+              )}
+            </SectionCard>
+          </div>
+        )}
 
-        {/* Latest activity log */}
-        {d.latest_activity_log && (
-          <SectionCard title="Latest Activity Log">
+        {/* Two columns Details */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))",
+            gap: "var(--space-6)",
+            marginTop: "var(--space-6)",
+            order: 3,
+          }}
+        >
+          {/* Identity */}
+          <SectionCard title="Identity">
             <div>
+              <DetailRow label="Client ID" value={c.id} mono />
+              <DetailRow label="Hostname" value={c.hostname} />
+              <DetailRow label="IP Address" value={c.ip_address} mono />
+              <DetailRow label="MAC Address" value={c.mac_address} mono />
               <DetailRow
-                label="Log ID"
-                value={String(d.latest_activity_log.id)}
-              />
-              <DetailRow label="Period" value={d.latest_activity_log.period} />
-              <DetailRow
-                label="Generated"
-                value={formatDateTime(d.latest_activity_log.generated_at)}
+                label="Registered"
+                value={formatDateTime(c.created_at)}
               />
               <DetailRow
-                label="Received"
-                value={formatDateTime(d.latest_activity_log.received_at)}
+                label="Last updated"
+                value={formatDateTime(c.updated_at)}
               />
-            </div>
-            <div style={{ marginTop: "var(--space-3)" }}>
-              <a
-                href={`/activity/${d.latest_activity_log.id}`}
-                className="btn btn--secondary btn--sm"
-                style={{ textDecoration: "none" }}
-              >
-                View log →
-              </a>
             </div>
           </SectionCard>
-        )}
-      </div>
+
+          {/* Operating system */}
+          <SectionCard title="Operating System">
+            <div>
+              <DetailRow label="System" value={c.os.system} />
+              <DetailRow label="Release" value={c.os.release} />
+              <DetailRow label="Version" value={c.os.version} />
+              <DetailRow label="Arch" value={c.os.machine} />
+            </div>
+          </SectionCard>
+
+          {/* Connection history */}
+          <SectionCard title="Recent Connections">
+            {d.recent_connections.length === 0 ? (
+              <p
+                style={{
+                  fontSize: "var(--font-sm)",
+                  color: "var(--text-muted)",
+                }}
+              >
+                No connection records.
+              </p>
+            ) : (
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "var(--space-3)",
+                }}
+              >
+                {d.recent_connections.slice(0, 8).map((conn, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: "var(--space-2)",
+                      fontSize: "var(--font-xs)",
+                      padding: "var(--space-2)",
+                      background: "var(--surface-muted)",
+                      borderRadius: "var(--radius-sm)",
+                    }}
+                  >
+                    <div>
+                      <span style={{ color: "var(--text-muted)" }}>
+                        Connected{" "}
+                      </span>
+                      {formatDateTime(conn.connected_at)}
+                    </div>
+                    <div>
+                      <span style={{ color: "var(--text-muted)" }}>
+                        Disconnected{" "}
+                      </span>
+                      {conn.disconnected_at ? (
+                        formatDateTime(conn.disconnected_at)
+                      ) : (
+                        <span style={{ color: "var(--success)" }}>Active</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </SectionCard>
+
+          {/* Latest activity log */}
+          {d.latest_activity_log && (
+            <SectionCard title="Latest Activity Log">
+              <div>
+                <DetailRow
+                  label="Log ID"
+                  value={String(d.latest_activity_log.id)}
+                />
+                <DetailRow
+                  label="Period"
+                  value={d.latest_activity_log.period}
+                />
+                <DetailRow
+                  label="Generated"
+                  value={formatDateTime(d.latest_activity_log.generated_at)}
+                />
+                <DetailRow
+                  label="Received"
+                  value={formatDateTime(d.latest_activity_log.received_at)}
+                />
+              </div>
+              <div style={{ marginTop: "var(--space-3)" }}>
+                <a
+                  href={`/activity/${d.latest_activity_log.id}`}
+                  className="btn btn--secondary btn--sm"
+                  style={{ textDecoration: "none" }}
+                >
+                  View log →
+                </a>
+              </div>
+            </SectionCard>
+          )}
+        </div>
       </section>
     </div>
   );

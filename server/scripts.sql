@@ -123,6 +123,18 @@ CREATE TABLE IF NOT EXISTS screenshots (
     INDEX idx_screenshots_command (command_id)
 );
 
+CREATE TABLE IF NOT EXISTS packages (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    package_id VARCHAR(100) NOT NULL UNIQUE,
+    filename VARCHAR(255) NOT NULL,
+    size_bytes BIGINT NOT NULL,
+    sha256 CHAR(64) NOT NULL,
+    storage_path VARCHAR(512) NOT NULL,
+    uploaded_by VARCHAR(255) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_packages_created_at (created_at)
+);
+
 CREATE TABLE IF NOT EXISTS actions (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     action_id VARCHAR(100) NOT NULL UNIQUE,
