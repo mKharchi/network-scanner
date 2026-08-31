@@ -56,6 +56,29 @@ class ActionState(str, Enum):
     CANCELLED = "CANCELLED"
 
 
+def summarize_action_progress(targets: List[Dict[str, Any]]) -> Dict[str, int]:
+    """Roll up per-target statuses into aggregate deployment progress counts."""
+    statuses = [str(item.get("status") or ActionState.PENDING.value) for item in targets]
+    return summarize_action_progress_from_statuses(statuses)
+
+
+def summarize_action_progress_from_statuses(statuses: List[str]) -> Dict[str, int]:
+    total = len(statuses)
+    succeeded = sum(1 for status in statuses if status == ActionState.SUCCESS.value)
+    failed = sum(1 for status in statuses if status == ActionState.FAILED.value)
+    in_progress = sum(1 for status in statuses if status == ActionState.RUNNING.value)
+    completed = succeeded + failed
+    pending = max(0, total - completed - in_progress)
+    return {
+        "total": total,
+        "completed": completed,
+        "succeeded": succeeded,
+        "failed": failed,
+        "in_progress": in_progress,
+        "pending": pending,
+    }
+
+
 LEGACY_SCREENSHOT_COMMAND = "REQUEST_SCREENSHOT"
 DEPLOY_PACKAGE_INIT_COMMAND = "DEPLOY_PACKAGE_INIT"
 DEPLOY_PACKAGE_CANCEL_COMMAND = "DEPLOY_PACKAGE_CANCEL"
