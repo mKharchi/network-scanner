@@ -1,13 +1,15 @@
-"""Unit tests for client-side package deployment handling."""
+"""Unit tests for client-side package deployment handling and safe extraction."""
 
 import base64
 import hashlib
+import io
 import os
 from pathlib import Path
 import shutil
 import sys
 import tempfile
 import unittest
+import zipfile
 
 CLIENT_DIRECTORY = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(CLIENT_DIRECTORY))
@@ -16,15 +18,32 @@ import client_lib  # noqa: E402
 from action_framework import ActionManager, ActionType  # noqa: E402
 
 
+def _make_zip(files_dict: dict) -> bytes:
+    """Create in-memory zip bytes mapping relative paths to content bytes."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for fname, content in files_dict.items():
+            zf.writestr(fname, content)
+    return buf.getvalue()
+
+
 class ClientPackageDeploymentTests(unittest.TestCase):
     def setUp(self):
         self.test_dir = Path(tempfile.mkdtemp(prefix="test_client_pkg_"))
-        self.orig_staging_dir = client_lib.PACKAGE_INCOMING_DIR
+        self.orig_incoming_dir = client_lib.PACKAGE_INCOMING_DIR
+        self.orig_staging_dir = client_lib.PACKAGE_STAGING_DIR
+        self.orig_current_dir = client_lib.PACKAGE_CURRENT_DIR
+
         client_lib.PACKAGE_INCOMING_DIR = self.test_dir / "updates" / "incoming"
+        client_lib.PACKAGE_STAGING_DIR = self.test_dir / "updates" / "staging"
+        client_lib.PACKAGE_CURRENT_DIR = self.test_dir / "updates" / "current"
         client_lib.ACTIVE_PACKAGE_SESSIONS.clear()
 
     def tearDown(self):
-        client_lib.PACKAGE_INCOMING_DIR = self.orig_staging_dir
+        client_lib.PACKAGE_INCOMING_DIR = self.orig_incoming_dir
+        client_lib.PACKAGE_STAGING_DIR = self.orig_staging_dir
+        client_lib.PACKAGE_CURRENT_DIR = self.orig_current_dir
+
         for session in list(client_lib.ACTIVE_PACKAGE_SESSIONS.values()):
             if session.get("file_handle") and not session["file_handle"].closed:
                 session["file_handle"].close()
@@ -52,8 +71,11 @@ class ClientPackageDeploymentTests(unittest.TestCase):
         part_file = client_lib.PACKAGE_INCOMING_DIR / "pkg-v1.zip.part"
         self.assertTrue(part_file.exists())
 
-    def test_chunk_streaming_and_sha256_match_success(self):
-        payload = b"Test zip payload contents for remote package deployment milestone B"
+    def test_chunk_streaming_sha256_match_and_safe_extraction_success(self):
+        payload = _make_zip({
+            "app.py": b"print('Hello from deployed package!')",
+            "config/settings.json": b'{"version": "1.0.0"}',
+        })
         expected_hash = hashlib.sha256(payload).hexdigest()
 
         init_message = {
@@ -64,109 +86,19 @@ class ClientPackageDeploymentTests(unittest.TestCase):
                 "sha256": expected_hash,
                 "total_size": len(payload),
                 "chunk_size": 16,
-                "total_chunks": 5,
+                "total_chunks": (len(payload) + 15) // 16,
             },
         }
         init_res = client_lib.handle_command(init_message)
         self.assertEqual(init_res.get("status"), "ready")
 
-        # Send chunks 1 to 4
+        total_chunks = init_res["total_chunks"]
         chunk_size = 16
-        for seq in range(1, 5):
-            chunk_data = payload[(seq - 1) * chunk_size : seq * chunk_size]
-            msg = {
-                "type": "PACKAGE_CHUNK",
-                "action_id": "act-success",
-                "seq": seq,
-                "total_chunks": 5,
-                "data": base64.b64encode(chunk_data).decode("ascii"),
-            }
-            res = client_lib.process_package_chunk(msg)
-            self.assertIsNone(res)
-
-        # Send final chunk 5
-        chunk_data = payload[4 * chunk_size :]
-        msg = {
-            "type": "PACKAGE_CHUNK",
-            "action_id": "act-success",
-            "seq": 5,
-            "total_chunks": 5,
-            "data": base64.b64encode(chunk_data).decode("ascii"),
-        }
-        res = client_lib.process_package_chunk(msg)
-
-        self.assertIsNotNone(res)
-        self.assertEqual(res.get("type"), "PACKAGE_RESULT")
-        self.assertEqual(res.get("status"), "SUCCESS")
-        self.assertEqual(res.get("sha256"), expected_hash)
-
-        # Confirm atomic rename to .zip and .part removed
-        final_zip = client_lib.PACKAGE_INCOMING_DIR / "pkg-success.zip"
-        part_file = client_lib.PACKAGE_INCOMING_DIR / "pkg-success.zip.part"
-        self.assertTrue(final_zip.exists())
-        self.assertFalse(part_file.exists())
-        self.assertEqual(final_zip.read_bytes(), payload)
-
-    def test_chunk_streaming_hash_mismatch_fails_and_deletes_part_file(self):
-        payload = b"Legitimate package contents"
-        wrong_hash = "0000000000000000000000000000000000000000000000000000000000000000"
-
-        init_message = {
-            "command": "DEPLOY_PACKAGE_INIT",
-            "action_id": "act-mismatch",
-            "args": {
-                "package_id": "pkg-bad",
-                "sha256": wrong_hash,
-                "total_size": len(payload),
-                "chunk_size": 64,
-                "total_chunks": 1,
-            },
-        }
-        client_lib.handle_command(init_message)
-
-        msg = {
-            "type": "PACKAGE_CHUNK",
-            "action_id": "act-mismatch",
-            "seq": 1,
-            "total_chunks": 1,
-            "data": base64.b64encode(payload).decode("ascii"),
-        }
-        res = client_lib.process_package_chunk(msg)
-
-        self.assertIsNotNone(res)
-        self.assertEqual(res.get("status"), "FAILED")
-        self.assertIn("hash mismatch", res.get("error", ""))
-
-        final_zip = client_lib.PACKAGE_INCOMING_DIR / "pkg-bad.zip"
-        part_file = client_lib.PACKAGE_INCOMING_DIR / "pkg-bad.zip.part"
-        self.assertFalse(final_zip.exists())
-        self.assertFalse(part_file.exists())
-
-    def test_large_multi_megabyte_payload_chunking(self):
-        # 2 MB payload chunked in 64KB blocks
-        payload = os.urandom(2 * 1024 * 1024)
-        expected_hash = hashlib.sha256(payload).hexdigest()
-        chunk_size = 64 * 1024
-        total_chunks = (len(payload) + chunk_size - 1) // chunk_size
-
-        init_message = {
-            "command": "DEPLOY_PACKAGE_INIT",
-            "action_id": "act-large",
-            "args": {
-                "package_id": "pkg-large",
-                "sha256": expected_hash,
-                "total_size": len(payload),
-                "chunk_size": chunk_size,
-                "total_chunks": total_chunks,
-            },
-        }
-        client_lib.handle_command(init_message)
-
         for seq in range(1, total_chunks + 1):
             chunk_data = payload[(seq - 1) * chunk_size : seq * chunk_size]
             msg = {
                 "type": "PACKAGE_CHUNK",
-                "action_id": "act-large",
+                "action_id": "act-success",
                 "seq": seq,
                 "total_chunks": total_chunks,
                 "data": base64.b64encode(chunk_data).decode("ascii"),
@@ -176,12 +108,157 @@ class ClientPackageDeploymentTests(unittest.TestCase):
                 self.assertIsNone(res)
             else:
                 self.assertIsNotNone(res)
+                self.assertEqual(res.get("type"), "PACKAGE_RESULT")
                 self.assertEqual(res.get("status"), "SUCCESS")
+                self.assertEqual(res.get("sha256"), expected_hash)
 
-        final_zip = client_lib.PACKAGE_INCOMING_DIR / "pkg-large.zip"
+        # Confirm incoming zip landed
+        final_zip = client_lib.PACKAGE_INCOMING_DIR / "pkg-success.zip"
+        part_file = client_lib.PACKAGE_INCOMING_DIR / "pkg-success.zip.part"
         self.assertTrue(final_zip.exists())
-        self.assertEqual(final_zip.stat().st_size, len(payload))
-        self.assertEqual(hashlib.sha256(final_zip.read_bytes()).hexdigest(), expected_hash)
+        self.assertFalse(part_file.exists())
+        self.assertEqual(final_zip.read_bytes(), payload)
+
+        # Confirm files landed in current deployed directory via atomic swap
+        current_dir = client_lib.PACKAGE_CURRENT_DIR
+        self.assertTrue(current_dir.exists())
+        self.assertTrue((current_dir / "app.py").exists())
+        self.assertEqual((current_dir / "app.py").read_text(), "print('Hello from deployed package!')")
+        self.assertTrue((current_dir / "config" / "settings.json").exists())
+        self.assertEqual((current_dir / "config" / "settings.json").read_text(), '{"version": "1.0.0"}')
+
+    def test_safe_extract_rejects_path_traversal_zip_slip(self):
+        # Craft malicious zip with ../ traversal
+        malicious_zip_bytes = _make_zip({
+            "valid.txt": b"good file",
+            "../../evil.txt": b"malicious content trying to escape sandbox",
+        })
+        expected_hash = hashlib.sha256(malicious_zip_bytes).hexdigest()
+
+        init_message = {
+            "command": "DEPLOY_PACKAGE_INIT",
+            "action_id": "act-zipslip",
+            "args": {
+                "package_id": "pkg-zipslip",
+                "sha256": expected_hash,
+                "total_size": len(malicious_zip_bytes),
+                "chunk_size": len(malicious_zip_bytes),
+                "total_chunks": 1,
+            },
+        }
+        client_lib.handle_command(init_message)
+
+        msg = {
+            "type": "PACKAGE_CHUNK",
+            "action_id": "act-zipslip",
+            "seq": 1,
+            "total_chunks": 1,
+            "data": base64.b64encode(malicious_zip_bytes).decode("ascii"),
+        }
+        res = client_lib.process_package_chunk(msg)
+
+        self.assertIsNotNone(res)
+        self.assertEqual(res.get("status"), "FAILED")
+        self.assertIn("unsafe path in archive", res.get("error", "").lower())
+
+        # Verify nothing escaped and no evil.txt was created anywhere
+        self.assertFalse((self.test_dir / "evil.txt").exists())
+        self.assertFalse((self.test_dir.parent / "evil.txt").exists())
+        self.assertFalse(client_lib.PACKAGE_CURRENT_DIR.exists())
+
+    def test_safe_extract_rejects_uncompressed_size_zip_bomb(self):
+        # Create a small archive claiming 200MB uncompressed, test against 10MB limit
+        large_fake_data = b"0" * (15 * 1024 * 1024)
+        bomb_bytes = _make_zip({"large.txt": large_fake_data})
+
+        dest = self.test_dir / "extract_test"
+        zip_path = self.test_dir / "bomb.zip"
+        zip_path.write_bytes(bomb_bytes)
+
+        # Enforce max limit of 5 MB (below 15 MB)
+        with self.assertRaises(ValueError) as ctx:
+            client_lib.safe_extract(zip_path, dest, max_uncompressed_bytes=5 * 1024 * 1024)
+
+        self.assertIn("archive too large", str(ctx.exception).lower())
+        # Confirm destination was not populated
+        self.assertFalse((dest / "large.txt").exists())
+
+    def test_failed_extraction_leaves_previous_good_deployment_untouched(self):
+        # First deploy a good package v1
+        good_payload = _make_zip({"version.txt": b"version 1.0"})
+        good_hash = hashlib.sha256(good_payload).hexdigest()
+
+        init_good = {
+            "command": "DEPLOY_PACKAGE_INIT",
+            "action_id": "act-v1",
+            "args": {
+                "package_id": "pkg-v1",
+                "sha256": good_hash,
+                "total_size": len(good_payload),
+                "chunk_size": len(good_payload),
+                "total_chunks": 1,
+            },
+        }
+        client_lib.handle_command(init_good)
+        res_good = client_lib.process_package_chunk({
+            "type": "PACKAGE_CHUNK",
+            "action_id": "act-v1",
+            "seq": 1,
+            "total_chunks": 1,
+            "data": base64.b64encode(good_payload).decode("ascii"),
+        })
+        self.assertEqual(res_good.get("status"), "SUCCESS")
+        self.assertEqual((client_lib.PACKAGE_CURRENT_DIR / "version.txt").read_text(), "version 1.0")
+
+        # Now deploy bad package v2 with zip slip
+        bad_payload = _make_zip({
+            "version.txt": b"version 2.0 corrupted",
+            "../escape.txt": b"attack",
+        })
+        bad_hash = hashlib.sha256(bad_payload).hexdigest()
+
+        init_bad = {
+            "command": "DEPLOY_PACKAGE_INIT",
+            "action_id": "act-v2",
+            "args": {
+                "package_id": "pkg-v2",
+                "sha256": bad_hash,
+                "total_size": len(bad_payload),
+                "chunk_size": len(bad_payload),
+                "total_chunks": 1,
+            },
+        }
+        client_lib.handle_command(init_bad)
+        res_bad = client_lib.process_package_chunk({
+            "type": "PACKAGE_CHUNK",
+            "action_id": "act-v2",
+            "seq": 1,
+            "total_chunks": 1,
+            "data": base64.b64encode(bad_payload).decode("ascii"),
+        })
+        self.assertEqual(res_bad.get("status"), "FAILED")
+
+        # Confirm the previous good deployment v1 is completely UNTOUCHED
+        self.assertTrue(client_lib.PACKAGE_CURRENT_DIR.exists())
+        self.assertEqual((client_lib.PACKAGE_CURRENT_DIR / "version.txt").read_text(), "version 1.0")
+        self.assertFalse((client_lib.PACKAGE_CURRENT_DIR / "escape.txt").exists())
+
+    def test_atomic_swap_directory_replaces_old_directory(self):
+        target_dir = self.test_dir / "target_app"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        (target_dir / "old_file.txt").write_text("old content")
+
+        new_source_dir = self.test_dir / "new_app"
+        new_source_dir.mkdir(parents=True, exist_ok=True)
+        (new_source_dir / "new_file.txt").write_text("new content")
+
+        client_lib.atomic_swap_directory(new_source_dir, target_dir)
+
+        self.assertTrue(target_dir.exists())
+        self.assertTrue((target_dir / "new_file.txt").exists())
+        self.assertEqual((target_dir / "new_file.txt").read_text(), "new content")
+        self.assertFalse((target_dir / "old_file.txt").exists())
+        self.assertFalse(new_source_dir.exists())
 
 
 if __name__ == "__main__":

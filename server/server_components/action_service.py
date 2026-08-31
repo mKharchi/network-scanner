@@ -3,14 +3,21 @@
 from __future__ import annotations
 
 import base64
+import concurrent.futures
 from datetime import datetime, timezone
 import hashlib
 import json
 import math
 from pathlib import Path
 import queue
+import threading
 from typing import Any, Dict, List, Optional
 import uuid
+
+# Maximum number of concurrent `DEPLOY_PACKAGE` transfers to active clients.
+# Keeps chunk-stream threads from saturating the TCP server's event loop or
+# starving heartbeat processing for uninvolved clients.
+DEPLOY_PACKAGE_MAX_CONCURRENT = 5
 
 from database import get_connection
 from server_components import server_lib
@@ -292,67 +299,104 @@ def execute_action(action: Dict[str, Any]) -> Dict[str, Any]:
     action["status"] = ActionState.RUNNING.value
     action["started_at"] = _now().isoformat()
 
-    for client_id in targets:
-        if action_type == ActionType.SCREENSHOT.value:
-            result = server_lib.request_client_screenshot(
-                client_id, requested_by=action.get("requested_by") or "local-network-operator"
-            )
-            ok = result.get("status") == "completed"
-        elif action_type == ActionType.ISOLATE_DEVICE.value:
-            reason = (
-                parameters.get("reason")
-                if isinstance(parameters, dict)
-                else None
-            )
-            result = server_lib.isolate_client(
-                client_id,
-                reason=reason or "Administrator requested device isolation",
-            )
-            ok = result.get("status") == "ok"
-        elif action_type == ActionType.DEPLOY_PACKAGE.value:
+    # ── DEPLOY_PACKAGE: concurrent fan-out with a throttle cap ──────────────
+    # Each per-client transfer can take minutes; running them sequentially
+    # would multiply that delay by the number of targets. We use a
+    # ThreadPoolExecutor capped at DEPLOY_PACKAGE_MAX_CONCURRENT so chunk
+    # streams run in parallel without saturating the TCP server thread pool.
+    # All other action types keep the original sequential loop below.
+    if action_type == ActionType.DEPLOY_PACKAGE.value:
+        target_results_lock = threading.Lock()
+
+        def _deploy_one(client_id: str):
             result = deploy_package_to_client(client_id, action_id, parameters)
             ok = result.get("status") == "ok"
-        elif action_type in {
-            ActionType.SHUTDOWN.value,
-            ActionType.RESTART.value,
-            ActionType.KILL_PROCESS.value,
-            ActionType.START_PROCESS.value,
-            ActionType.REFRESH_HEALTH.value,
-            ActionType.COLLECT_DIAGNOSTICS.value,
-            ActionType.UPDATE_LOCATION.value,
-            ActionType.GET_SYSTEM_INFO.value,
-            ActionType.GET_NETWORK_INFO.value,
-            ActionType.GET_CPU_INFO.value,
-            ActionType.GET_MEMORY_INFO.value,
-            ActionType.GET_DISK_INFO.value,
-            ActionType.GET_PROCESSES.value,
-            ActionType.GET_ACTIVITY_LOG.value,
-            ActionType.PING.value,
-            ActionType.DISCONNECT.value,
-            ActionType.QUARANTINE_CLIENT.value,
-            ActionType.RELEASE_CLIENT.value,
-            ActionType.GET_QUARANTINE_STATUS.value,
-            ActionType.GET_DEVICE_ISOLATION_STATUS.value,
-            ActionType.UPDATE_FORBIDDEN_PROCESS_POLICY.value,
-        }:
-            if isinstance(parameters, dict):
-                dispatch_parameters = dict(parameters)
-                dispatch_parameters.setdefault("command_id", action_id)
+            entry = {
+                "client_id": client_id,
+                "status": ActionState.SUCCESS.value if ok else ActionState.FAILED.value,
+                "result": result,
+            }
+            with target_results_lock:
+                target_results.append(entry)
+            return entry
+
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=min(len(targets), DEPLOY_PACKAGE_MAX_CONCURRENT),
+            thread_name_prefix=f"deploy-{action_id[:8]}",
+        ) as executor:
+            futures = {executor.submit(_deploy_one, cid): cid for cid in targets}
+            # Surface any unexpected exceptions rather than silently dropping them
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    future.result()
+                except Exception as exc:
+                    cid = futures[future]
+                    with target_results_lock:
+                        target_results.append({
+                            "client_id": cid,
+                            "status": ActionState.FAILED.value,
+                            "result": {"status": "error", "message": f"Unexpected error: {exc}"},
+                        })
+    else:
+        # ── All other action types: original sequential dispatch ──────────────
+        for client_id in targets:
+            if action_type == ActionType.SCREENSHOT.value:
+                result = server_lib.request_client_screenshot(
+                    client_id, requested_by=action.get("requested_by") or "local-network-operator"
+                )
+                ok = result.get("status") == "completed"
+            elif action_type == ActionType.ISOLATE_DEVICE.value:
+                reason = (
+                    parameters.get("reason")
+                    if isinstance(parameters, dict)
+                    else None
+                )
+                result = server_lib.isolate_client(
+                    client_id,
+                    reason=reason or "Administrator requested device isolation",
+                )
+                ok = result.get("status") == "ok"
+            elif action_type in {
+                ActionType.SHUTDOWN.value,
+                ActionType.RESTART.value,
+                ActionType.KILL_PROCESS.value,
+                ActionType.START_PROCESS.value,
+                ActionType.REFRESH_HEALTH.value,
+                ActionType.COLLECT_DIAGNOSTICS.value,
+                ActionType.UPDATE_LOCATION.value,
+                ActionType.GET_SYSTEM_INFO.value,
+                ActionType.GET_NETWORK_INFO.value,
+                ActionType.GET_CPU_INFO.value,
+                ActionType.GET_MEMORY_INFO.value,
+                ActionType.GET_DISK_INFO.value,
+                ActionType.GET_PROCESSES.value,
+                ActionType.GET_ACTIVITY_LOG.value,
+                ActionType.PING.value,
+                ActionType.DISCONNECT.value,
+                ActionType.QUARANTINE_CLIENT.value,
+                ActionType.RELEASE_CLIENT.value,
+                ActionType.GET_QUARANTINE_STATUS.value,
+                ActionType.GET_DEVICE_ISOLATION_STATUS.value,
+                ActionType.UPDATE_FORBIDDEN_PROCESS_POLICY.value,
+            }:
+                if isinstance(parameters, dict):
+                    dispatch_parameters = dict(parameters)
+                    dispatch_parameters.setdefault("command_id", action_id)
+                else:
+                    dispatch_parameters = parameters
+                result = server_lib.execute_client_command(
+                    client_id, _transport_command(action_type), dispatch_parameters, timeout=12.0
+                )
+                ok = result.get("status") == "ok"
             else:
-                dispatch_parameters = parameters
-            result = server_lib.execute_client_command(
-                client_id, _transport_command(action_type), dispatch_parameters, timeout=12.0
-            )
-            ok = result.get("status") == "ok"
-        else:
-            result = {"status": "error", "message": f"Action '{action_type}' is not implemented."}
-            ok = False
-        if ok and action_type in {
-            ActionType.REFRESH_HEALTH.value,
-            ActionType.COLLECT_DIAGNOSTICS.value,
-        }:
-            record_client_health(client_id, result)
-        target_results.append({"client_id": client_id, "status": ActionState.SUCCESS.value if ok else ActionState.FAILED.value, "result": result})
+                result = {"status": "error", "message": f"Action '{action_type}' is not implemented."}
+                ok = False
+            if ok and action_type in {
+                ActionType.REFRESH_HEALTH.value,
+                ActionType.COLLECT_DIAGNOSTICS.value,
+            }:
+                record_client_health(client_id, result)
+            target_results.append({"client_id": client_id, "status": ActionState.SUCCESS.value if ok else ActionState.FAILED.value, "result": result})
 
     successes = sum(item["status"] == ActionState.SUCCESS.value for item in target_results)
     status = (
