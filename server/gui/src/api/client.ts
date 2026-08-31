@@ -80,6 +80,25 @@ async function get<T>(
   }
 }
 
+async function patch<T>(path: string, payload: unknown): Promise<T> {
+  const baseWithApi = API_ORIGIN.replace(/\/+$/, "") + BASE;
+  const fullUrl = baseWithApi + path;
+  const response = await fetch(fullUrl, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new ApiError(
+      body?.error?.code ?? "UNKNOWN_ERROR",
+      body?.error?.message ?? `HTTP ${response.status}`,
+      response.status,
+    );
+  }
+  return body?.data as T;
+}
+
 async function post<T>(path: string, payload: unknown = {}): Promise<T> {
   const baseWithApi = API_ORIGIN.replace(/\/+$/, "") + BASE;
   const fullUrl = baseWithApi + path;
@@ -1097,6 +1116,16 @@ export const api = {
       client: ManagedClientSummary | null;
       activity_log: ActivityLogRecord | null;
     }>(`/alerts/${alertId}`),
+
+  updateAlertStatus: (
+    alertId: number,
+    status: "ACKNOWLEDGED" | "RESOLVED",
+  ) =>
+    patch<{
+      alert: Alert;
+      client: ManagedClientSummary | null;
+      activity_log: ActivityLogRecord | null;
+    }>(`/alerts/${alertId}`, { status }),
 
   // Activity logs
   getActivityLogs: (params?: {

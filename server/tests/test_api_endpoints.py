@@ -383,6 +383,61 @@ class ApiEndpointsTestCase(unittest.TestCase):
         self.assertEqual(len(body["data"]["items"]), 1)
         self.assertEqual(body["data"]["items"][0]["severity"], "HIGH")
 
+    @patch("server_components.event_broadcaster.broadcast_alert")
+    @patch("server_components.api_service.update_alert_status")
+    def test_update_alert_status_endpoint(self, update_alert_status, broadcast_alert):
+        update_alert_status.return_value = {
+            "alert": {
+                "id": 42,
+                "client": {"id": "client-123", "hostname": "HOST-1"},
+                "type": "FORBIDDEN_PROCESS",
+                "severity": "HIGH",
+                "status": "ACKNOWLEDGED",
+                "detected_at": "2026-08-18T09:15:00+00:00",
+                "activity_time": None,
+                "title": "Forbidden App",
+                "description": "Discord running",
+                "activity_log_id": 5,
+            },
+            "client": None,
+            "activity_log": {"id": 5},
+        }
+        payload = json.dumps({"status": "ACKNOWLEDGED"}).encode("utf-8")
+        req = urllib.request.Request(
+            f"{self.base_url}/api/v1/alerts/42",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="PATCH",
+        )
+
+        with urllib.request.urlopen(req) as resp:
+            self.assertEqual(resp.status, 200)
+            body = json.loads(resp.read().decode("utf-8"))
+
+        self.assertEqual(body["data"]["alert"]["status"], "ACKNOWLEDGED")
+        update_alert_status.assert_called_once_with(42, "ACKNOWLEDGED")
+        broadcast_alert.assert_called_once()
+
+    @patch("server_components.api_service.update_alert_status")
+    def test_update_alert_status_invalid_transition(self, update_alert_status):
+        update_alert_status.side_effect = ValueError(
+            "Cannot change alert #42 from RESOLVED to ACKNOWLEDGED."
+        )
+        payload = json.dumps({"status": "ACKNOWLEDGED"}).encode("utf-8")
+        req = urllib.request.Request(
+            f"{self.base_url}/api/v1/alerts/42",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="PATCH",
+        )
+
+        with self.assertRaises(urllib.error.HTTPError) as raised:
+            urllib.request.urlopen(req)
+
+        self.assertEqual(raised.exception.code, 400)
+        body = json.loads(raised.exception.read().decode("utf-8"))
+        self.assertEqual(body["error"]["code"], "INVALID_STATUS")
+
     # 8. Activity logs
     @patch("server_components.api_service.get_connection")
     def test_activity_logs_list(self, mock_db):

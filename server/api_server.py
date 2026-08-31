@@ -1129,6 +1129,35 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
     def do_PATCH(self) -> None:  # noqa: N802
         parsed_url = urllib.parse.urlparse(self.path)
         path = parsed_url.path.rstrip("/")
+
+        m = re.match(r"^/api/v1/alerts/(\d+)$", path)
+        if m:
+            alert_id = int(m.group(1))
+            payload = self._read_json_payload()
+            if payload is None or not isinstance(payload.get("status"), str):
+                self.send_error_response(400, "INVALID_PAYLOAD", "Field 'status' is required.")
+                return
+            try:
+                result = api_service.update_alert_status(alert_id, payload["status"])
+            except ValueError as exc:
+                self.send_error_response(400, "INVALID_STATUS", str(exc))
+                return
+            except RuntimeError as exc:
+                self.send_error_response(503, "DATABASE_UNAVAILABLE", str(exc))
+                return
+            if not result:
+                self.send_error_response(404, "NOT_FOUND", f"Alert #{alert_id} not found.")
+                return
+            try:
+                from server_components import event_broadcaster
+
+                alert = result.get("alert") or {}
+                event_broadcaster.broadcast_alert({**alert, "kind": "updated"})
+            except Exception:
+                pass
+            self.send_data(result)
+            return
+
         m = re.match(r"^/api/clients/([^/]+)/location$", path)
         if m:
             payload = self._read_json_payload()

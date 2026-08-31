@@ -1824,6 +1824,51 @@ def get_alert_detail(alert_id: int) -> Optional[Dict[str, Any]]:
         conn.close()
 
 
+_ALERT_STATUS_TRANSITIONS = {
+    "NEW": frozenset({"ACKNOWLEDGED", "RESOLVED"}),
+    "ACKNOWLEDGED": frozenset({"RESOLVED"}),
+    "RESOLVED": frozenset(),
+}
+
+
+def update_alert_status(alert_id: int, status: str) -> Optional[Dict[str, Any]]:
+    """Transition an alert to ACKNOWLEDGED or RESOLVED."""
+    normalized = (status or "").strip().upper()
+    if normalized not in {"ACKNOWLEDGED", "RESOLVED"}:
+        raise ValueError(f"Status must be ACKNOWLEDGED or RESOLVED, not '{status}'.")
+
+    conn = get_connection()
+    if not conn:
+        raise RuntimeError("Database unavailable.")
+
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT id, status FROM alerts WHERE id = %s", (alert_id,))
+        row = cursor.fetchone()
+        if not row:
+            return None
+
+        current = row["status"]
+        if current == normalized:
+            return get_alert_detail(alert_id)
+
+        allowed = _ALERT_STATUS_TRANSITIONS.get(current, frozenset())
+        if normalized not in allowed:
+            raise ValueError(
+                f"Cannot change alert #{alert_id} from {current} to {normalized}."
+            )
+
+        cursor.execute(
+            "UPDATE alerts SET status = %s WHERE id = %s",
+            (normalized, alert_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    return get_alert_detail(alert_id)
+
+
 # ============================================================
 # ACTIVITY LOGS
 # ============================================================
