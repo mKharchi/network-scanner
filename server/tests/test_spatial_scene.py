@@ -83,7 +83,7 @@ class SpatialDigitalTwinSceneTests(unittest.TestCase):
         scene = get_spatial_scene(conn=self.mock_conn)
 
         self.assertTrue(scene["meta"]["active_filter"]["enabled"])
-        self.assertEqual(scene["meta"]["active_filter"]["max_age_seconds"], 1800)
+        self.assertEqual(scene["meta"]["active_filter"]["max_age_seconds"], 300)
 
         sensor_query = self.mock_cursor.execute.call_args_list[1].args[0]
         self.assertIn("s.status", sensor_query)
