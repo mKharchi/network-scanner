@@ -13,6 +13,7 @@ import { useToast } from "../hooks/useToast";
 import { ClientStatusBadge, Badge } from "../components/Badge";
 import { Button } from "../components/Button";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { DeployPackagePanel } from "../components/DeployPackagePanel";
 import { SectionCard, MetricCard } from "../components/Card";
 import { Skeleton, ErrorState, Notice, EmptyState } from "../components/States";
 import { formatDateTime, formatRelative } from "../utils/format";
@@ -1318,6 +1319,30 @@ export function ClientDetailPage() {
                 Shut Down
               </Button>
             </div>
+
+            {clientId && (
+              <DeployPackagePanel
+                targets={[clientId]}
+                disabled={!isOnline || commandLoading}
+                onCompleted={(action) => {
+                  addToast({
+                    title:
+                      action.status === "SUCCESS"
+                        ? "Package deployed"
+                        : action.status === "PARTIAL_SUCCESS"
+                          ? "Package partially deployed"
+                          : "Package deployment failed",
+                    message: `Action ${action.action_id} finished with status ${action.status}.`,
+                    severity:
+                      action.status === "SUCCESS"
+                        ? "SUCCESS"
+                        : action.status === "PARTIAL_SUCCESS"
+                          ? "HIGH"
+                          : "CRITICAL",
+                  });
+                }}
+              />
+            )}
           </div>
 
           <div

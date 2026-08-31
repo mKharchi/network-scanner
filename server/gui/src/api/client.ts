@@ -167,6 +167,36 @@ export interface ForbiddenProcessRule {
   description: string | null;
 }
 
+export interface ActionProgress {
+  total: number;
+  completed: number;
+  succeeded: number;
+  failed: number;
+  in_progress: number;
+  pending: number;
+}
+
+export interface ActionTargetStatus {
+  client_id?: string;
+  status?: string;
+  result?: Record<string, unknown> | any;
+  error?: Record<string, unknown> | any;
+  started_at?: string | null;
+  completed_at?: string | null;
+}
+
+export interface ActionDetail {
+  action_id: string;
+  action_type?: string;
+  status: string;
+  progress?: ActionProgress;
+  targets?: ActionTargetStatus[];
+  result?: { targets?: ActionTargetStatus[] };
+  created_at?: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+}
+
 export interface ClientLocalizationDebug {
   client: {
     database_id: number;
@@ -1147,11 +1177,68 @@ export const api = {
     parameters?: any;
     action_id?: string;
   }) =>
-    postAction<{
-      action_id: string;
-      status: string;
-      result?: { targets?: { result?: any }[] };
-    }>('/api/actions', payload),
+    postAction<ActionDetail>('/api/actions', payload),
+
+  getAction: (actionId: string) =>
+    getAction<ActionDetail>(`/api/actions/${encodeURIComponent(actionId)}`),
+
+  deployPackage: async (payload: {
+    targets: string[];
+    packageDataBase64: string;
+    packageId?: string;
+    actionId?: string;
+  }) => {
+    const actionId =
+      payload.actionId ??
+      (typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `deploy-${Date.now()}`);
+    return api.createAction({
+      action_id: actionId,
+      action_type: "DEPLOY_PACKAGE",
+      targets: payload.targets,
+      parameters: {
+        package_id: payload.packageId ?? `pkg-${Date.now()}`,
+        package_data_base64: payload.packageDataBase64,
+      },
+    });
+  },
+
+  waitForAction: async (
+    actionId: string,
+    options?: {
+      intervalMs?: number;
+      timeoutMs?: number;
+      onUpdate?: (action: ActionDetail) => void;
+    },
+  ) => {
+    const intervalMs = options?.intervalMs ?? 1500;
+    const timeoutMs = options?.timeoutMs ?? 10 * 60 * 1000;
+    const terminal = new Set([
+      "SUCCESS",
+      "FAILED",
+      "PARTIAL_SUCCESS",
+      "CANCELLED",
+      "EXPIRED",
+    ]);
+    const started = Date.now();
+
+    while (true) {
+      const action = await api.getAction(actionId);
+      options?.onUpdate?.(action);
+      if (terminal.has(action.status)) {
+        return action;
+      }
+      if (Date.now() - started > timeoutMs) {
+        throw new ApiError(
+          "ACTION_TIMEOUT",
+          `Action ${actionId} did not complete within ${Math.round(timeoutMs / 1000)}s`,
+          408,
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+  },
 
   requestClientScreenshot: (clientId: string) =>
     (async () => {
