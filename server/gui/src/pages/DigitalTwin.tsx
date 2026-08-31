@@ -216,13 +216,14 @@ export function DigitalTwinPage() {
       setLoading(true);
       setSceneLoadError(null);
       const [spatialData, replayData, rogueData, sensorData, eventData] = await Promise.all([
-        // Match Rogue Device Manager: include the full scored inventory, not only
-        // endpoints seen inside the live recency window.
+        // Keep the 3D twin focused on devices seen during the last five minutes.
         api.getSpatialScene(
-          selectedFloor !== 'all' ? { floor: selectedFloor, active_only: false } : { active_only: false },
+          selectedFloor !== 'all'
+            ? { floor: selectedFloor, active_only: true, max_age_seconds: 300 }
+            : { active_only: true, max_age_seconds: 300 },
         ).catch(() => null),
         api.getSpatialReplay().catch(() => null),
-        api.listRogueDevices({ min_score: 20, active_only: false }).catch(() => ({ items: [], total: 0 })), 
+        api.listRogueDevices({ min_score: 20, active_only: true, max_age_seconds: 300 }).catch(() => ({ items: [], total: 0 })), 
         api.listSensors().catch(() => ({ items: [] })),
         api.listSpatialEvents(50).catch(() => ({ items: [] })),
       ]);
@@ -1239,7 +1240,7 @@ export function DigitalTwinPage() {
         <div className="spatial-page-header__copy">
           <span className="eyebrow eyebrow--accent">SPATIAL INTELLIGENCE / NETWORK TWIN</span>
           <h1 className="page-title">Your infrastructure, mapped in space</h1>
-          <p style={{ color: "var(--text-muted)", marginTop: "var(--space-1)" }}>Inspect devices, sensors, threats, and connectivity in the spatial scene. Threat counts use the same full scored inventory as Rogue Device Manager.</p>
+          <p style={{ color: "var(--text-muted)", marginTop: "var(--space-1)" }}>Inspect devices, sensors, threats, and connectivity in the spatial scene. Active device and threat data is limited to endpoints seen in the last 5 minutes.</p>
         </div>
 
         {/* View Mode Switcher */}
