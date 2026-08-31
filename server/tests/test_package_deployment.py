@@ -23,7 +23,11 @@ except ModuleNotFoundError:
     sys.modules["mysql"] = mysql_module
     sys.modules["mysql.connector"] = mysql_module.connector
 
-from server_components.action_framework import ActionState, ActionType  # noqa: E402
+from server_components.action_framework import (  # noqa: E402
+    ActionState,
+    ActionType,
+    summarize_action_progress,
+)
 from server_components import action_service, server_lib  # noqa: E402
 from api_server import LONG_RUNNING_ACTION_TYPES  # noqa: E402
 
@@ -297,6 +301,107 @@ class ServerPackageDeploymentTests(unittest.TestCase):
         # Sequential: exactly in-order
         self.assertEqual(dispatch_order, ["client-a", "client-b", "client-c"])
         self.assertEqual(res["status"], ActionState.SUCCESS.value)
+
+
+    def test_summarize_action_progress_rollup(self):
+        targets = [
+            {"status": ActionState.SUCCESS.value},
+            {"status": ActionState.SUCCESS.value},
+            {"status": ActionState.FAILED.value},
+            {"status": ActionState.RUNNING.value},
+            {"status": ActionState.PENDING.value},
+        ]
+        progress = summarize_action_progress(targets)
+        self.assertEqual(progress["total"], 5)
+        self.assertEqual(progress["completed"], 3)
+        self.assertEqual(progress["succeeded"], 2)
+        self.assertEqual(progress["failed"], 1)
+        self.assertEqual(progress["in_progress"], 1)
+        self.assertEqual(progress["pending"], 1)
+
+    @patch("server_components.action_service.get_connection")
+    @patch("server_components.action_service.server_lib.get_client")
+    @patch("server_components.action_service.server_lib.execute_client_command")
+    @patch("server_components.action_service.server_lib.send_message")
+    def test_concurrent_deploy_same_action_id_routes_package_results(
+        self, mock_send_message, mock_exec_cmd, mock_get_client, mock_get_conn
+    ):
+        """Each client's PACKAGE_RESULT must wake only its own deploy waiter."""
+        mock_get_conn.return_value = _connection()
+        mock_exec_cmd.return_value = {"status": "ok", "data": {"status": "ready"}}
+
+        payload_a = b"Client A package payload"
+        payload_b = b"Client B package payload is different"
+        hash_a = hashlib.sha256(payload_a).hexdigest()
+        hash_b = hashlib.sha256(payload_b).hexdigest()
+
+        clients = {
+            "CLIENT-A": {"mac": "AA:BB:CC:DD:EE:01", "conn": MagicMock(), "lock": threading.Lock()},
+            "CLIENT-B": {"mac": "AA:BB:CC:DD:EE:02", "conn": MagicMock(), "lock": threading.Lock()},
+        }
+
+        def _get_client(client_id):
+            info = clients[client_id]
+            return {
+                "client_id": client_id,
+                "mac": info["mac"],
+                "connection": info["conn"],
+                "send_lock": info["lock"],
+            }
+
+        mock_get_client.side_effect = _get_client
+
+        def _send_side_effect(conn, frame):
+            if frame.get("type") != "PACKAGE_CHUNK":
+                return
+            if frame.get("seq") != frame.get("total_chunks"):
+                return
+            for client_id, info in clients.items():
+                if info["conn"] is conn:
+                    expected_hash = hash_a if client_id == "CLIENT-A" else hash_b
+                    server_lib.handle_package_result(
+                        info["mac"],
+                        {
+                            "type": "PACKAGE_RESULT",
+                            "action_id": frame["action_id"],
+                            "status": "SUCCESS",
+                            "sha256": expected_hash,
+                        },
+                    )
+                    break
+
+        mock_send_message.side_effect = _send_side_effect
+
+        action_id = "act-shared-waiter"
+        params = {
+            "chunk_size": 64,
+            "timeout": 5.0,
+        }
+        results = {}
+
+        def _deploy(client_id, package_bytes, package_id):
+            deploy_params = {
+                **params,
+                "package_bytes": package_bytes,
+                "package_id": package_id,
+            }
+            results[client_id] = action_service.deploy_package_to_client(
+                client_id, action_id, deploy_params
+            )
+
+        threads = [
+            threading.Thread(target=_deploy, args=("CLIENT-A", payload_a, "pkg-a")),
+            threading.Thread(target=_deploy, args=("CLIENT-B", payload_b, "pkg-b")),
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=10)
+
+        self.assertEqual(results["CLIENT-A"]["status"], "ok")
+        self.assertEqual(results["CLIENT-B"]["status"], "ok")
+        self.assertEqual(results["CLIENT-A"]["sha256"], hash_a)
+        self.assertEqual(results["CLIENT-B"]["sha256"], hash_b)
 
 
 if __name__ == "__main__":

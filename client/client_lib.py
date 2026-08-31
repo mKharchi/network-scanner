@@ -16,6 +16,7 @@ import threading
 import uuid
 import zipfile
 from datetime import datetime, timedelta
+from typing import Any, Dict
 
 import psutil
 
@@ -1035,8 +1036,95 @@ PACKAGE_INCOMING_DIR = Path(__file__).resolve().parent / "updates" / "incoming"
 PACKAGE_STAGING_DIR = Path(__file__).resolve().parent / "updates" / "staging"
 PACKAGE_CURRENT_DIR = Path(__file__).resolve().parent / "updates" / "current"
 DEFAULT_MAX_UNCOMPRESSED_BYTES = 500 * 1024 * 1024  # 500 MB
-ACTIVE_PACKAGE_SESSIONS = {}
+
+_PACKAGE_THREAD = threading.local()
+_ALL_PACKAGE_STATES = []
+_ALL_PACKAGE_STATES_LOCK = threading.Lock()
 _PACKAGE_SESSION_LOCK = threading.Lock()
+
+
+def _default_package_paths() -> Dict[str, Path]:
+    base = Path(__file__).resolve().parent / "updates"
+    return {
+        "incoming": base / "incoming",
+        "staging": base / "staging",
+        "current": base / "current",
+        "sessions": {},
+    }
+
+
+def _package_state() -> Dict[str, Any]:
+    state = getattr(_PACKAGE_THREAD, "state", None)
+    if state is None:
+        defaults = _default_package_paths()
+        state = {
+            "incoming": defaults["incoming"],
+            "staging": defaults["staging"],
+            "current": defaults["current"],
+            "sessions": {},
+        }
+        _PACKAGE_THREAD.state = state
+        with _ALL_PACKAGE_STATES_LOCK:
+            _ALL_PACKAGE_STATES.append(state)
+    return state
+
+
+def configure_package_paths(
+    incoming: Path | str | None = None,
+    staging: Path | str | None = None,
+    current: Path | str | None = None,
+) -> None:
+    """Override package directories for the current thread (used by tests)."""
+    state = _package_state()
+    if incoming is not None:
+        state["incoming"] = Path(incoming)
+    if staging is not None:
+        state["staging"] = Path(staging)
+    if current is not None:
+        state["current"] = Path(current)
+
+
+def reset_all_package_states() -> None:
+    """Close and clear package sessions/paths created in any thread (testing helper)."""
+    with _ALL_PACKAGE_STATES_LOCK:
+        for state in _ALL_PACKAGE_STATES:
+            for session in list(state["sessions"].values()):
+                file_handle = session.get("file_handle")
+                if file_handle and not file_handle.closed:
+                    try:
+                        file_handle.close()
+                    except Exception:
+                        pass
+            state["sessions"].clear()
+        _ALL_PACKAGE_STATES.clear()
+    if hasattr(_PACKAGE_THREAD, "state"):
+        delattr(_PACKAGE_THREAD, "state")
+
+
+class _ActivePackageSessionsProxy:
+    def _sessions(self):
+        return _package_state()["sessions"]
+
+    def get(self, key, default=None):
+        return self._sessions().get(key, default)
+
+    def __contains__(self, key):
+        return key in self._sessions()
+
+    def __setitem__(self, key, value):
+        self._sessions()[key] = value
+
+    def pop(self, key, default=None):
+        return self._sessions().pop(key, default)
+
+    def clear(self):
+        self._sessions().clear()
+
+    def values(self):
+        return self._sessions().values()
+
+
+ACTIVE_PACKAGE_SESSIONS = _ActivePackageSessionsProxy()
 
 
 def safe_extract(
@@ -1105,7 +1193,7 @@ def _handle_deploy_package_init(message, **_context):
         }
 
     try:
-        staging_dir = PACKAGE_INCOMING_DIR
+        staging_dir = _package_state()["incoming"]
         staging_dir.mkdir(parents=True, exist_ok=True)
         part_path = staging_dir / f"{package_id}.zip.part"
         final_path = staging_dir / f"{package_id}.zip"
@@ -1122,14 +1210,15 @@ def _handle_deploy_package_init(message, **_context):
         file_handle = open(part_path, "wb")
 
         with _PACKAGE_SESSION_LOCK:
-            old_session = ACTIVE_PACKAGE_SESSIONS.get(action_id)
+            sessions = _package_state()["sessions"]
+            old_session = sessions.get(action_id)
             if old_session and old_session.get("file_handle"):
                 try:
                     old_session["file_handle"].close()
                 except Exception:
                     pass
 
-            ACTIVE_PACKAGE_SESSIONS[action_id] = {
+            sessions[action_id] = {
                 "action_id": action_id,
                 "package_id": package_id,
                 "sha256": str(sha256).strip().lower(),
@@ -1167,7 +1256,8 @@ def process_package_chunk(message):
     data_b64 = message.get("data")
 
     with _PACKAGE_SESSION_LOCK:
-        session = ACTIVE_PACKAGE_SESSIONS.get(action_id)
+        sessions = _package_state()["sessions"]
+        session = sessions.get(action_id)
         if not session:
             return {
                 "type": "PACKAGE_RESULT",
@@ -1192,7 +1282,7 @@ def process_package_chunk(message):
 
             if seq == session["total_chunks"]:
                 file_handle.close()
-                ACTIVE_PACKAGE_SESSIONS.pop(action_id, None)
+                sessions.pop(action_id, None)
 
                 computed_hash = session["hasher"].hexdigest().lower()
                 if computed_hash == expected_hash:
@@ -1200,12 +1290,12 @@ def process_package_chunk(message):
                     os.replace(part_path, final_path)
 
                     # 2. Extract into staging subdirectory
-                    staging_extract_dir = PACKAGE_STAGING_DIR / f"{package_id}_{uuid.uuid4().hex[:8]}"
+                    staging_extract_dir = _package_state()["staging"] / f"{package_id}_{uuid.uuid4().hex[:8]}"
                     shutil.rmtree(staging_extract_dir, ignore_errors=True)
                     staging_extract_dir.mkdir(parents=True, exist_ok=True)
                     try:
                         safe_extract(final_path, staging_extract_dir)
-                        atomic_swap_directory(staging_extract_dir, PACKAGE_CURRENT_DIR)
+                        atomic_swap_directory(staging_extract_dir, _package_state()["current"])
                         return {
                             "type": "PACKAGE_RESULT",
                             "action_id": action_id,
@@ -1213,7 +1303,7 @@ def process_package_chunk(message):
                             "status": "SUCCESS",
                             "sha256": computed_hash,
                             "file_path": str(final_path),
-                            "extracted_path": str(PACKAGE_CURRENT_DIR),
+                            "extracted_path": str(_package_state()["current"]),
                             "total_bytes": session["bytes_written"],
                         }
                     except Exception as extract_error:
@@ -1249,7 +1339,7 @@ def process_package_chunk(message):
                 part_path.unlink(missing_ok=True)
             except OSError:
                 pass
-            ACTIVE_PACKAGE_SESSIONS.pop(action_id, None)
+            sessions.pop(action_id, None)
             return {
                 "type": "PACKAGE_RESULT",
                 "action_id": action_id,
