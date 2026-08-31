@@ -40,6 +40,7 @@ interface SectionCardProps {
   children: React.ReactNode;
   flush?: boolean;
   className?: string;
+  floor?: boolean;
 }
 
 export function SectionCard({
@@ -48,6 +49,7 @@ export function SectionCard({
   children,
   flush = false,
   className = '',
+  floor=false
 }: SectionCardProps) {
   return (
     <div className={`section-card ${className}`}>
@@ -57,7 +59,7 @@ export function SectionCard({
           {headerAction}
         </div>
       )}
-      <div className={`section-card__body${flush ? ' section-card__body--flush' : ''}`}>
+      <div className={`section-card__body${flush ? ' section-card__body--flush' : floor ? ' section-card__body--floor': ''}`}>
         {children}
       </div>
     </div>

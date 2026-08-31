@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from 'react-router-dom';
+import { useLocation, useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { useFetch } from '../hooks/useFetch';
 import { ClassificationBadge } from '../components/Badge';
@@ -6,7 +6,10 @@ import { Button } from '../components/Button';
 import { SectionCard } from '../components/Card';
 import { Skeleton, SkeletonTable, ErrorState, EmptyState, Notice } from '../components/States';
 import { DataTable, type Column } from '../components/DataTable';
+import { Badge } from '../components/Badge';
 import { formatDateTime, formatRelative, normalizeMac } from '../utils/format';
+import '../styles/devices.css';
+import '../styles/device-detail.css';
 
 interface ObservationItem {
   source_type: string;
@@ -96,6 +99,9 @@ const obsColumns: Column<ObservationItem>[] = [
 export function DeviceDetailPage() {
   const { mac } = useParams<{ mac: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const returnTo = typeof location.state?.from === "string" ? location.state.from : "/network/latest";
+  const returnLabel = typeof location.state?.label === "string" ? location.state.label : "Latest Scan";
 
   const { state, refetch } = useFetch(mac ? () => api.getNetworkDevice(mac) : null, [mac]);
 
@@ -127,8 +133,8 @@ export function DeviceDetailPage() {
           marginBottom: 'var(--space-5)',
         }}
       >
-        <Button variant="quiet" size="sm" onClick={() => navigate('/network/latest')}>
-          ← Latest Scan
+        <Button variant="quiet" size="sm" onClick={() => navigate(returnTo)}>
+          ← {returnLabel}
         </Button>
         <Button variant="quiet" size="sm" onClick={refetch}>
           Refresh
@@ -141,72 +147,32 @@ export function DeviceDetailPage() {
         </Notice>
       )}
 
-      {/* Header */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--space-4)',
-          marginBottom: 'var(--space-6)',
-          paddingBottom: 'var(--space-4)',
-          borderBottom: '1px solid var(--border)',
-        }}
-      >
-        <div
-          style={{
-            width: 48,
-            height: 48,
-            borderRadius: 'var(--radius)',
-            background: dev.is_managed ? 'var(--primary)' : 'var(--surface-muted)',
-            color: dev.is_managed ? '#fff' : 'var(--text-muted)',
-            border: '1px solid var(--border)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 20,
-            flexShrink: 0,
-          }}
-          aria-hidden="true"
-        >
-          {dev.is_managed ? '🛡️' : '🌐'}
-        </div>
-        <div>
-          <h1
-            style={{
-              fontSize: 'var(--font-xl)',
-              fontWeight: 600,
-              fontFamily: dev.hostname ? 'var(--font-sans)' : 'var(--font-mono)',
-              marginBottom: 'var(--space-1)',
-            }}
-          >
-            {dev.hostname || normalizeMac(dev.mac_address)}
-          </h1>
-          <div
-            style={{
-              fontSize: 'var(--font-sm)',
-              color: 'var(--text-muted)',
-              marginBottom: 'var(--space-2)',
-              fontWeight: 500,
-            }}
-          >
-            Last seen: {formatDateTime(dev.last_observed_at)} ({formatRelative(dev.last_observed_at)})
-          </div>
-          <div
-            style={{
-              display: 'flex',
-              gap: 'var(--space-2)',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-            }}
-          >
-            <ClassificationBadge managed={dev.is_managed} />
-            {dev.vendor && (
-              <span style={{ fontSize: 'var(--font-xs)', color: 'var(--text-muted)' }}>
-                {dev.vendor}
-              </span>
-            )}
+      <div className="device-detail-hero">
+        <div className="device-detail-hero__identity">
+          <div className="device-detail-icon" aria-hidden="true">{dev.is_managed ? '◈' : '◌'}</div>
+          <div>
+            <span className="eyebrow eyebrow--accent">DEVICE INTELLIGENCE</span>
+            <h1 className="device-detail-title">{dev.hostname || normalizeMac(dev.mac_address)}</h1>
+            <p className="device-detail-subtitle">{dev.vendor || 'Unknown vendor'} · {dev.ip_address || 'No IP address recorded'}</p>
+            <div className="device-detail-badges">
+              <ClassificationBadge managed={dev.is_managed} />
+              <Badge variant={dev.last_observed_at ? 'success' : 'muted'} dot>{dev.last_observed_at ? 'Observed' : 'No recent observation'}</Badge>
+              {dev.os.name && <Badge variant="info">{dev.os.name}</Badge>}
+            </div>
           </div>
         </div>
+        <div className="device-detail-hero__meta">
+          <span className="eyebrow">LAST SEEN</span>
+          <strong>{formatRelative(dev.last_observed_at)}</strong>
+          <span>{formatDateTime(dev.last_observed_at)}</span>
+        </div>
+      </div>
+
+      <div className="device-detail-stat-grid">
+        <div className="device-detail-stat"><span className="eyebrow">DISCOVERY SOURCES</span><strong>{dev.sources.length}</strong><span>{dev.sources.length ? dev.sources.join(' · ') : 'None recorded'}</span></div>
+        <div className="device-detail-stat"><span className="eyebrow">OBSERVATIONS</span><strong>{d.observations.length}</strong><span>Recorded evidence events</span></div>
+        <div className="device-detail-stat"><span className="eyebrow">OS CONFIDENCE</span><strong>{dev.os.confidence !== null ? `${Math.round(dev.os.confidence * 100)}%` : '—'}</strong><span>{dev.os.family || 'Classification unavailable'}</span></div>
+        <div className="device-detail-stat"><span className="eyebrow">MANAGED LINK</span><strong>{dev.is_managed ? 'YES' : 'NO'}</strong><span>{dev.managed_client_id || 'No client linked'}</span></div>
       </div>
 
       {/* Two columns: Identity & OS */}
@@ -264,6 +230,111 @@ export function DeviceDetailPage() {
           </div>
         </SectionCard>
       </div>
+
+      {/* Network Intelligence — passive inspection telemetry */}
+      {(() => {
+        const sni: string[] = dev.sni_domains ?? [];
+        const dns: string[] = dev.dns_queries ?? [];
+        const ja3: string[] = dev.ja3_hashes ?? [];
+        const asns: Array<{ provider: string; description: string; destination_ip?: string; count: number }> =
+          dev.destination_asns ?? [];
+        const traffic = dev.traffic_profile ?? {};
+        const hasIntel = sni.length > 0 || dns.length > 0 || ja3.length > 0 || asns.length > 0 || traffic.behavioral_pattern;
+        if (!hasIntel) return null;
+        return (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
+              gap: "var(--space-6)",
+              marginBottom: "var(--space-6)",
+            }}
+          >
+            {sni.length > 0 && (
+              <SectionCard title="TLS / SNI Hostnames">
+                <ul style={{ margin: 0, padding: "0 0 0 var(--space-4)", listStyle: "disc" }}>
+                  {sni.map((d) => (
+                    <li key={d} style={{ fontSize: "var(--font-sm)", fontFamily: "var(--font-mono)", padding: "2px 0" }}>
+                      {d}
+                    </li>
+                  ))}
+                </ul>
+              </SectionCard>
+            )}
+
+            {dns.length > 0 && (
+              <SectionCard title="Passive DNS Queries">
+                <ul style={{ margin: 0, padding: "0 0 0 var(--space-4)", listStyle: "disc" }}>
+                  {dns.map((d) => (
+                    <li key={d} style={{ fontSize: "var(--font-sm)", fontFamily: "var(--font-mono)", padding: "2px 0" }}>
+                      {d}
+                    </li>
+                  ))}
+                </ul>
+              </SectionCard>
+            )}
+
+            {ja3.length > 0 && (
+              <SectionCard title="JA3 TLS Fingerprints">
+                {ja3.map((h) => (
+                  <div
+                    key={h}
+                    style={{
+                      fontFamily: "var(--font-mono)",
+                      fontSize: "var(--font-xs)",
+                      padding: "var(--space-1) 0",
+                      borderBottom: "1px solid var(--border-subtle)",
+                      wordBreak: "break-all",
+                    }}
+                  >
+                    {h}
+                  </div>
+                ))}
+              </SectionCard>
+            )}
+
+            {asns.length > 0 && (
+              <SectionCard title="Cloud / ASN Destinations">
+                {asns.map((a) => (
+                  <div
+                    key={a.provider}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "baseline",
+                      padding: "var(--space-1) 0",
+                      borderBottom: "1px solid var(--border-subtle)",
+                      fontSize: "var(--font-sm)",
+                    }}
+                  >
+                    <span style={{ fontWeight: 600 }}>{a.provider}</span>
+                    <span style={{ color: "var(--text-muted)", fontSize: "var(--font-xs)" }}>
+                      {a.description} · {a.count}×
+                    </span>
+                  </div>
+                ))}
+              </SectionCard>
+            )}
+
+            {traffic.behavioral_pattern && (
+              <SectionCard title="Traffic Profile">
+                <div>
+                  <DetailRow label="Pattern" value={traffic.behavioral_pattern} />
+                  {traffic.bytes_per_window != null && (
+                    <DetailRow label="Bytes / min" value={traffic.bytes_per_window.toLocaleString()} />
+                  )}
+                  {traffic.packets_per_window != null && (
+                    <DetailRow label="Packets / min" value={traffic.packets_per_window} />
+                  )}
+                  {traffic.avg_interval_sec != null && (
+                    <DetailRow label="Avg interval" value={`${traffic.avg_interval_sec}s`} />
+                  )}
+                </div>
+              </SectionCard>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Observation History */}
       <SectionCard title="Observation History">

@@ -49,6 +49,11 @@ dhcp_observation_queue = queue.Queue(maxsize=DHCP_OBSERVATION_QUEUE_SIZE)
 dhcp_observation_worker_lock = threading.Lock()
 dhcp_observation_worker_started = False
 
+DEVICE_EVALUATION_QUEUE_SIZE = 1024
+device_evaluation_queue = queue.Queue(maxsize=DEVICE_EVALUATION_QUEUE_SIZE)
+device_evaluation_worker_lock = threading.Lock()
+device_evaluation_worker_started = False
+
 
 def merge_and_broadcast_neighbourhood(*, context_overrides=None):
     """Create and announce one MAC-deduplicated client-neighbourhood snapshot."""
@@ -115,6 +120,64 @@ def queue_dhcp_observation(reporter_mac, neighbours, dhcp):
             "Dropped DHCP observation because the audit queue is full "
             f"({DHCP_OBSERVATION_QUEUE_SIZE} pending events)."
         )
+
+
+def _run_device_evaluation_worker():
+    """Evaluate device spatial position, rogue status, and ML classification asynchronously."""
+    while True:
+        dev_id = device_evaluation_queue.get()
+        conn = None
+        try:
+            conn = get_connection()
+            if conn:
+                try:
+                    from server_components import spatial_engine
+
+                    spatial_engine.evaluate_device_spatial_and_rogue_status(
+                        dev_id, conn=conn
+                    )
+                except Exception as spatial_err:
+                    print(
+                        f"[EVALUATION] Spatial evaluation failed for device_id={dev_id}: {spatial_err}"
+                    )
+
+                try:
+                    from server_components.device_intelligence import (
+                        get_device_intelligence_service,
+                    )
+
+                    dev_intel = get_device_intelligence_service()
+                    dev_intel.classify_device(dev_id)
+                except Exception as intel_err:
+                    print(
+                        f"[EVALUATION] Device classification failed for device_id={dev_id}: {intel_err}"
+                    )
+        except Exception as error:
+            print(f"[EVALUATION] Worker error processing device_id={dev_id}: {error}")
+        finally:
+            if conn and conn.is_connected():
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+            device_evaluation_queue.task_done()
+
+
+def queue_device_evaluation(device_id):
+    """Queue a device ID for spatial and ML evaluation."""
+    global device_evaluation_worker_started
+    with device_evaluation_worker_lock:
+        if not device_evaluation_worker_started:
+            threading.Thread(
+                target=_run_device_evaluation_worker,
+                daemon=True,
+                name="device-evaluation-worker",
+            ).start()
+            device_evaluation_worker_started = True
+    try:
+        device_evaluation_queue.put_nowait(device_id)
+    except queue.Full:
+        print(f"evaluation queue full, dropping device_id={device_id}")
 
 
 def _read_positive_float(name, default):
@@ -250,6 +313,126 @@ def get_working_hours_status(checked_at=None):
             conn.close()
 
 
+def create_alert(
+    *,
+    client_mac=None,
+    client_id=None,
+    alert_type,
+    severity="LOW",
+    title,
+    description,
+    detected_at=None,
+    activity_time=None,
+    log_id=None,
+    extra_broadcast_data=None,
+    display_name=None,
+):
+    """Store an alert in the database, validate fields, and broadcast via SSE."""
+    if severity not in ALERT_SEVERITIES:
+        severity = "LOW"
+
+    if detected_at is None:
+        detected_at = datetime.datetime.now()
+
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        client_db_id = None
+        resolved_client_id = client_id
+        resolved_mac = client_mac
+        hostname = display_name
+
+        if client_mac:
+            cursor.execute("SELECT id FROM clients WHERE mac = %s", (client_mac,))
+            client_row = cursor.fetchone()
+            if client_row:
+                client_db_id = client_row[0]
+        elif client_id:
+            cursor.execute("SELECT id FROM clients WHERE client_id = %s", (client_id,))
+            client_row = cursor.fetchone()
+            if client_row:
+                client_db_id = client_row[0]
+
+        if client_db_id is None:
+            identifier = client_mac or client_id or "unknown"
+            print(f"Cannot create {alert_type} alert: unknown client {identifier}.")
+            return False
+
+        cursor.execute(
+            """
+            INSERT INTO alerts (
+                client_id, log_id, alert_type, severity,
+                detected_at, activity_time, title, description, status
+            ) VALUES (%s, NULL, %s, %s, %s, %s, %s, %s, 'NEW')
+            """,
+            (
+                client_db_id,
+                alert_type,
+                severity,
+                detected_at,
+                activity_time,
+                title,
+                description,
+            ),
+        )
+        conn.commit()
+        alert_id = getattr(cursor, "lastrowid", None)
+
+        tag = display_name or client_mac or client_id or "unknown"
+        print(f"\n[!] ALERT: {title} — {tag}", flush=True)
+
+        try:
+            from server_components import event_broadcaster
+
+            client_payload = {}
+            if resolved_client_id:
+                client_payload["id"] = resolved_client_id
+            if resolved_mac:
+                client_payload["mac"] = resolved_mac
+            if hostname:
+                client_payload["hostname"] = hostname
+
+            alert_payload = {
+                "id": alert_id,
+                "client": client_payload if client_payload else {"mac": client_mac},
+                "type": alert_type,
+                "severity": severity,
+                "status": "NEW",
+                "title": title,
+                "description": description,
+                "detected_at": (
+                    detected_at.isoformat()
+                    if hasattr(detected_at, "isoformat")
+                    else str(detected_at)
+                ),
+            }
+            if activity_time:
+                alert_payload["activity_time"] = (
+                    activity_time.isoformat()
+                    if hasattr(activity_time, "isoformat")
+                    else str(activity_time)
+                )
+            if extra_broadcast_data and isinstance(extra_broadcast_data, dict):
+                alert_payload.update(extra_broadcast_data)
+
+            event_broadcaster.broadcast_alert(alert_payload)
+        except Exception as broadcast_err:
+            print(f"Could not broadcast saved alert: {broadcast_err}")
+
+        return True
+    except Exception as error:
+        print(f"Error saving {alert_type} alert: {error}")
+        return False
+    finally:
+        if cursor:
+            cursor.close()
+        if conn and conn.is_connected():
+            conn.close()
+
+
 def create_connection_alert(client_info, registered_at=None):
     """Persist and display the appropriate server-side registration alert."""
     registered_at = registered_at or datetime.datetime.now()
@@ -279,62 +462,28 @@ def create_connection_alert(client_info, registered_at=None):
     hostname = client_info.get("hostname", "Unknown host")
     mac = client_info.get("mac")
     ip = client_info.get("ip", "Unknown IP")
+    client_id = client_info.get("client_id")
     description = (
         f"{hostname} ({mac}, {ip}) registered at "
         f"{registered_at.strftime('%Y-%m-%d %H:%M:%S')} {policy_description}."
     )
 
-    conn = None
-    cursor = None
-    try:
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT id FROM clients WHERE mac = %s", (mac,))
-        client = cursor.fetchone()
-        if not client:
-            print(f"Cannot create registration alert: unknown client {mac}.")
-            return False
-
-        cursor.execute(
-            """
-            INSERT INTO alerts (
-                client_id, log_id, alert_type, severity,
-                detected_at, activity_time, title, description, status
-            ) VALUES (%s, NULL, %s, %s, %s, NULL, %s, %s, 'NEW')
-            """,
-            (
-                client[0],
-                alert_type,
-                severity,
-                registered_at,
-                title,
-                description,
-            ),
-        )
-        conn.commit()
-        alert_id = getattr(cursor, "lastrowid", None)
-        print(f"\n[!] ALERT: {title} — {hostname} ({mac})", flush=True)
-
+    created = create_alert(
+        client_mac=mac,
+        client_id=client_id,
+        alert_type=alert_type,
+        severity=severity,
+        title=title,
+        description=description,
+        detected_at=registered_at,
+        display_name=f"{hostname} ({mac})",
+    )
+    if created:
         try:
             from server_components import event_broadcaster
 
-            event_broadcaster.broadcast_alert(
-                {
-                    "id": alert_id,
-                    "client": {
-                        "id": client_info.get("client_id"),
-                        "hostname": hostname,
-                    },
-                    "type": alert_type,
-                    "severity": severity,
-                    "status": "NEW",
-                    "title": title,
-                    "description": description,
-                    "detected_at": registered_at.isoformat(),
-                }
-            )
             event_broadcaster.broadcast_client_status(
-                client_id=client_info.get("client_id", ""),
+                client_id=client_id or "",
                 mac=mac,
                 hostname=hostname,
                 state="ONLINE",
@@ -342,78 +491,21 @@ def create_connection_alert(client_info, registered_at=None):
             )
         except Exception:
             pass
-
-        return True
-    except Exception as error:
-        print(f"Error saving registration alert: {error}")
-        return False
-    finally:
-        if cursor:
-            cursor.close()
-        if conn and conn.is_connected():
-            conn.close()
+    return created
 
 
 def create_server_alert(
     mac, alert_type, severity, title, description, detected_at=None
 ):
     """Store and immediately display a server-originated alert."""
-    detected_at = detected_at or datetime.datetime.now()
-    conn = None
-    cursor = None
-    try:
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT id FROM clients WHERE mac = %s", (mac,))
-        client = cursor.fetchone()
-        if not client:
-            print(f"Cannot create {alert_type} alert: unknown client {mac}.")
-            return False
-
-        cursor.execute(
-            """
-            INSERT INTO alerts (
-                client_id, log_id, alert_type, severity,
-                detected_at, activity_time, title, description, status
-            ) VALUES (%s, NULL, %s, %s, %s, NULL, %s, %s, 'NEW')
-            """,
-            (client[0], alert_type, severity, detected_at, title, description),
-        )
-        conn.commit()
-        alert_id = cursor.lastrowid
-        print(f"\n[!] ALERT: {title} — {mac}", flush=True)
-
-        try:
-            from server_components import event_broadcaster
-
-            event_broadcaster.broadcast_alert(
-                {
-                    "id": alert_id,
-                    "client": {"mac": mac},
-                    "type": alert_type,
-                    "severity": severity,
-                    "status": "NEW",
-                    "title": title,
-                    "description": description,
-                    "detected_at": (
-                        detected_at.isoformat()
-                        if hasattr(detected_at, "isoformat")
-                        else str(detected_at)
-                    ),
-                }
-            )
-        except Exception:
-            pass
-
-        return True
-    except Exception as error:
-        print(f"Error saving {alert_type} alert: {error}")
-        return False
-    finally:
-        if cursor:
-            cursor.close()
-        if conn and conn.is_connected():
-            conn.close()
+    return create_alert(
+        client_mac=mac,
+        alert_type=alert_type,
+        severity=severity,
+        title=title,
+        description=description,
+        detected_at=detected_at,
+    )
 
 
 def create_disconnect_alert(client, expected_disconnect):
@@ -636,13 +728,6 @@ def handle_client_alert(mac, alert_data):
         conn = get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("SELECT id FROM clients WHERE mac = %s", (mac,))
-        row = cursor.fetchone()
-        if not row:
-            print(f"Rejected alert from unknown client {mac}.")
-            return False
-        client_db_id = row[0]
-
         if alert_type == "FORBIDDEN_PROCESS":
             # The database policy decides whether the process is forbidden and
             # what severity is stored. Compare normalized executable names so
@@ -681,48 +766,23 @@ def handle_client_alert(mac, alert_data):
             title = alert_data.get("title") or f"Security event: {event_type}"
             description = alert_data.get("description") or event_type
 
-        cursor.execute(
-            """
-            INSERT INTO alerts (
-                client_id, log_id, alert_type, severity, 
-                detected_at, activity_time, title, description, status
-            ) VALUES (%s, NULL, %s, %s, %s, %s, %s, %s, 'NEW')
-        """,
-            (
-                client_db_id,
-                stored_type,
-                severity,
-                detected_at,
-                activity_time,
-                title,
-                description,
-            ),
+        extra_data = {
+            "event_type": alert_data.get("event_type"),
+            "action": alert_data.get("action"),
+            "process_name": alert_data.get("process_name"),
+        }
+
+        return create_alert(
+            client_mac=mac,
+            alert_type=stored_type,
+            severity=severity,
+            title=title,
+            description=description,
+            detected_at=detected_at,
+            activity_time=activity_time,
+            extra_broadcast_data=extra_data,
+            display_name=mac,
         )
-        conn.commit()
-        print(f"\n[!] ALERT RECEIVED from {mac}: {title}", flush=True)
-
-        try:
-            from server_components import event_broadcaster
-
-            event_broadcaster.broadcast_alert(
-                {
-                    "id": getattr(cursor, "lastrowid", None),
-                    "client": {"mac": mac},
-                    "type": stored_type,
-                    "event_type": alert_data.get("event_type"),
-                    "severity": severity,
-                    "status": "NEW",
-                    "title": title,
-                    "description": description,
-                    "detected_at": detected_at.isoformat(),
-                    "activity_time": activity_time.isoformat() if activity_time else None,
-                    "action": alert_data.get("action"),
-                    "process_name": alert_data.get("process_name"),
-                }
-            )
-        except Exception as broadcast_error:
-            print(f"Could not broadcast saved client alert: {broadcast_error}")
-        return True
     except Exception as e:
         print(f"Error saving alert: {e}")
         return False
@@ -739,7 +799,9 @@ def handle_client_alert(mac, alert_data):
 
 
 def send_message(conn, message):
-    data = json.dumps(message).encode()
+    from api_server import DecimalJSONEncoder
+
+    data = json.dumps(message, cls=DecimalJSONEncoder).encode()
     # Prefix with 4-byte big-endian length so the receiver knows exactly how much to read
     conn.sendall(len(data).to_bytes(4, byteorder="big") + data)
 
@@ -1410,7 +1472,9 @@ def print_response(client_id, command, response):
             store_activity_log_file(client["mac"], log_data)
 
     else:
-        print(json.dumps(response, indent=4))
+        from api_server import DecimalJSONEncoder
+
+        print(json.dumps(response, indent=4, cls=DecimalJSONEncoder))
 
 
 # ============================================================

@@ -1,0 +1,422 @@
+{
+  "model_version": "device-classifier-v1",
+  "classes": [
+    "WINDOWS_WORKSTATION",
+    "APPLE_WORKSTATION",
+    "ANDROID_MOBILE",
+    "APPLE_MOBILE",
+    "SMART_TV_MEDIA",
+    "PRINTER",
+    "NETWORK_DEVICE",
+    "IOT_DEVICE",
+    "UNKNOWN"
+  ],
+  "tree_count": 3,
+  "trees": [
+    {
+      "leaf": false,
+      "feature": "vendor_family",
+      "operator": "in",
+      "value": [
+        "hp",
+        "canon",
+        "epson",
+        "brother",
+        "xerox"
+      ],
+      "left": {
+        "leaf": true,
+        "probabilities": {
+          "PRINTER": 0.96,
+          "UNKNOWN": 0.04
+        }
+      },
+      "right": {
+        "leaf": false,
+        "feature": "vendor_family",
+        "operator": "eq",
+        "value": "microsoft",
+        "left": {
+          "leaf": true,
+          "probabilities": {
+            "WINDOWS_WORKSTATION": 0.95,
+            "UNKNOWN": 0.05
+          }
+        },
+        "right": {
+          "leaf": false,
+          "feature": "vendor_family",
+          "operator": "eq",
+          "value": "apple",
+          "left": {
+            "leaf": false,
+            "feature": "hostname_pattern",
+            "operator": "in",
+            "value": [
+              "macbook",
+              "mac_desktop"
+            ],
+            "left": {
+              "leaf": true,
+              "probabilities": {
+                "APPLE_WORKSTATION": 0.94,
+                "UNKNOWN": 0.06
+              }
+            },
+            "right": {
+              "leaf": true,
+              "probabilities": {
+                "APPLE_MOBILE": 0.94,
+                "UNKNOWN": 0.06
+              }
+            }
+          },
+          "right": {
+            "leaf": false,
+            "feature": "vendor_family",
+            "operator": "in",
+            "value": [
+              "samsung",
+              "xiaomi",
+              "huawei",
+              "google"
+            ],
+            "left": {
+              "leaf": false,
+              "feature": "ssdp_is_media",
+              "operator": "bool",
+              "value": true,
+              "left": {
+                "leaf": true,
+                "probabilities": {
+                  "SMART_TV_MEDIA": 0.91,
+                  "UNKNOWN": 0.09
+                }
+              },
+              "right": {
+                "leaf": true,
+                "probabilities": {
+                  "ANDROID_MOBILE": 0.93,
+                  "UNKNOWN": 0.07
+                }
+              }
+            },
+            "right": {
+              "leaf": false,
+              "feature": "vendor_family",
+              "operator": "in",
+              "value": [
+                "cisco",
+                "tp_link",
+                "netgear",
+                "ubiquiti"
+              ],
+              "left": {
+                "leaf": true,
+                "probabilities": {
+                  "NETWORK_DEVICE": 0.92,
+                  "UNKNOWN": 0.08
+                }
+              },
+              "right": {
+                "leaf": false,
+                "feature": "vendor_family",
+                "operator": "in",
+                "value": [
+                  "espressif",
+                  "raspberry_pi",
+                  "tuya",
+                  "philips",
+                  "amazon",
+                  "sonos"
+                ],
+                "left": {
+                  "leaf": true,
+                  "probabilities": {
+                    "IOT_DEVICE": 0.9,
+                    "UNKNOWN": 0.1
+                  }
+                },
+                "right": {
+                  "leaf": false,
+                  "feature": "vendor_family",
+                  "operator": "in",
+                  "value": [
+                    "dell",
+                    "lenovo",
+                    "asus",
+                    "acer"
+                  ],
+                  "left": {
+                    "leaf": true,
+                    "probabilities": {
+                      "WINDOWS_WORKSTATION": 0.95,
+                      "UNKNOWN": 0.05
+                    }
+                  },
+                  "right": {
+                    "leaf": true,
+                    "probabilities": {
+                      "UNKNOWN": 0.85,
+                      "WINDOWS_WORKSTATION": 0.05,
+                      "IOT_DEVICE": 0.05,
+                      "ANDROID_MOBILE": 0.05
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "leaf": false,
+      "feature": "mdns_has_printer",
+      "operator": "bool",
+      "value": true,
+      "left": {
+        "leaf": true,
+        "probabilities": {
+          "PRINTER": 0.96,
+          "UNKNOWN": 0.04
+        }
+      },
+      "right": {
+        "leaf": false,
+        "feature": "dhcp_opt60_family",
+        "operator": "eq",
+        "value": "msft",
+        "left": {
+          "leaf": true,
+          "probabilities": {
+            "WINDOWS_WORKSTATION": 0.95,
+            "UNKNOWN": 0.05
+          }
+        },
+        "right": {
+          "leaf": false,
+          "feature": "dhcp_opt60_family",
+          "operator": "eq",
+          "value": "android",
+          "left": {
+            "leaf": true,
+            "probabilities": {
+              "ANDROID_MOBILE": 0.93,
+              "UNKNOWN": 0.07
+            }
+          },
+          "right": {
+            "leaf": false,
+            "feature": "mdns_has_apple_companion",
+            "operator": "bool",
+            "value": true,
+            "left": {
+              "leaf": true,
+              "probabilities": {
+                "APPLE_MOBILE": 0.94,
+                "UNKNOWN": 0.06
+              }
+            },
+            "right": {
+              "leaf": false,
+              "feature": "ssdp_is_media",
+              "operator": "bool",
+              "value": true,
+              "left": {
+                "leaf": true,
+                "probabilities": {
+                  "SMART_TV_MEDIA": 0.91,
+                  "UNKNOWN": 0.09
+                }
+              },
+              "right": {
+                "leaf": false,
+                "feature": "ssdp_is_gateway",
+                "operator": "bool",
+                "value": true,
+                "left": {
+                  "leaf": true,
+                  "probabilities": {
+                    "NETWORK_DEVICE": 0.92,
+                    "UNKNOWN": 0.08
+                  }
+                },
+                "right": {
+                  "leaf": false,
+                  "feature": "mdns_has_iot",
+                  "operator": "bool",
+                  "value": true,
+                  "left": {
+                    "leaf": true,
+                    "probabilities": {
+                      "IOT_DEVICE": 0.9,
+                      "UNKNOWN": 0.1
+                    }
+                  },
+                  "right": {
+                    "leaf": true,
+                    "probabilities": {
+                      "UNKNOWN": 0.85,
+                      "WINDOWS_WORKSTATION": 0.05,
+                      "IOT_DEVICE": 0.05,
+                      "ANDROID_MOBILE": 0.05
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "leaf": false,
+      "feature": "is_managed_client",
+      "operator": "bool",
+      "value": true,
+      "left": {
+        "leaf": false,
+        "feature": "client_os_family",
+        "operator": "eq",
+        "value": "macos",
+        "left": {
+          "leaf": true,
+          "probabilities": {
+            "APPLE_WORKSTATION": 0.94,
+            "UNKNOWN": 0.06
+          }
+        },
+        "right": {
+          "leaf": true,
+          "probabilities": {
+            "WINDOWS_WORKSTATION": 0.95,
+            "UNKNOWN": 0.05
+          }
+        }
+      },
+      "right": {
+        "leaf": false,
+        "feature": "hostname_pattern",
+        "operator": "in",
+        "value": [
+          "desktop_win",
+          "laptop_win",
+          "win_generic",
+          "pc_generic"
+        ],
+        "left": {
+          "leaf": true,
+          "probabilities": {
+            "WINDOWS_WORKSTATION": 0.95,
+            "UNKNOWN": 0.05
+          }
+        },
+        "right": {
+          "leaf": false,
+          "feature": "hostname_pattern",
+          "operator": "in",
+          "value": [
+            "iphone",
+            "ipad"
+          ],
+          "left": {
+            "leaf": true,
+            "probabilities": {
+              "APPLE_MOBILE": 0.94,
+              "UNKNOWN": 0.06
+            }
+          },
+          "right": {
+            "leaf": false,
+            "feature": "hostname_pattern",
+            "operator": "in",
+            "value": [
+              "macbook",
+              "mac_desktop"
+            ],
+            "left": {
+              "leaf": true,
+              "probabilities": {
+                "APPLE_WORKSTATION": 0.94,
+                "UNKNOWN": 0.06
+              }
+            },
+            "right": {
+              "leaf": false,
+              "feature": "hostname_pattern",
+              "operator": "in",
+              "value": [
+                "android_galaxy",
+                "android_pixel",
+                "android_xiaomi",
+                "android_huawei",
+                "android_generic"
+              ],
+              "left": {
+                "leaf": true,
+                "probabilities": {
+                  "ANDROID_MOBILE": 0.93,
+                  "UNKNOWN": 0.07
+                }
+              },
+              "right": {
+                "leaf": false,
+                "feature": "hostname_pattern",
+                "operator": "eq",
+                "value": "printer",
+                "left": {
+                  "leaf": true,
+                  "probabilities": {
+                    "PRINTER": 0.96,
+                    "UNKNOWN": 0.04
+                  }
+                },
+                "right": {
+                  "leaf": false,
+                  "feature": "hostname_pattern",
+                  "operator": "in",
+                  "value": [
+                    "smart_tv",
+                    "audio"
+                  ],
+                  "left": {
+                    "leaf": true,
+                    "probabilities": {
+                      "SMART_TV_MEDIA": 0.91,
+                      "UNKNOWN": 0.09
+                    }
+                  },
+                  "right": {
+                    "leaf": false,
+                    "feature": "hostname_pattern",
+                    "operator": "in",
+                    "value": [
+                      "iot"
+                    ],
+                    "left": {
+                      "leaf": true,
+                      "probabilities": {
+                        "IOT_DEVICE": 0.9,
+                        "UNKNOWN": 0.1
+                      }
+                    },
+                    "right": {
+                      "leaf": true,
+                      "probabilities": {
+                        "UNKNOWN": 0.85,
+                        "WINDOWS_WORKSTATION": 0.05,
+                        "IOT_DEVICE": 0.05,
+                        "ANDROID_MOBILE": 0.05
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

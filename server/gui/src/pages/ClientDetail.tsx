@@ -12,9 +12,11 @@ import { useFetch } from "../hooks/useFetch";
 import { useToast } from "../hooks/useToast";
 import { ClientStatusBadge, Badge } from "../components/Badge";
 import { Button } from "../components/Button";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { SectionCard, MetricCard } from "../components/Card";
 import { Skeleton, ErrorState, Notice, EmptyState } from "../components/States";
 import { formatDateTime, formatRelative } from "../utils/format";
+import "../styles/operations.css";
 
 const NEIGHBOR_RELATIONSHIP_LABELS: Record<
   PhysicalNeighbor["relationship"],
@@ -95,6 +97,14 @@ interface ProcessItem {
   [key: string]: any;
 }
 
+type PendingConfirmation =
+  | { kind: "disconnect" }
+  | { kind: "restart" }
+  | { kind: "shutdown" }
+  | { kind: "quarantine" }
+  | { kind: "release" }
+  | { kind: "kill"; target: string };
+
 export function ClientDetailPage() {
   const { clientId } = useParams<{ clientId: string }>();
   const navigate = useNavigate();
@@ -146,11 +156,51 @@ export function ClientDetailPage() {
   // Start process modal
   const [showStartModal, setShowStartModal] = useState(false);
   const [startProcessPath, setStartProcessPath] = useState("");
+  const [pendingConfirmation, setPendingConfirmation] =
+    useState<PendingConfirmation | null>(null);
+  const [quarantineReason, setQuarantineReason] = useState(
+    "Administrator requested network quarantine",
+  );
 
   // Activity log period selector
   const [activityPeriod, setActivityPeriod] = useState<"1d" | "1w" | "1m">(
     "1d",
   );
+  const [activeTab, setActiveTab] = useState<
+    "overview" | "network" | "remote" | "security" | "history"
+  >("overview");
+
+  const tabs = [
+    { id: "overview", label: "Overview" },
+    { id: "network", label: "Network & observations" },
+    { id: "remote", label: "Remote actions" },
+    { id: "security", label: "Security & quarantine" },
+    { id: "history", label: "History & diagnostics" },
+  ] as const;
+
+  const selectTab = (tab: (typeof tabs)[number]["id"]) => {
+    setActiveTab(tab);
+  };
+
+  const handleTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    const currentIndex = tabs.findIndex((tab) => tab.id === activeTab);
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+      event.preventDefault();
+      const nextTab = tabs[(currentIndex + 1) % tabs.length];
+      selectTab(nextTab.id);
+      document.getElementById(`client-tab-${nextTab.id}`)?.focus();
+    } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const previousTab = tabs[(currentIndex - 1 + tabs.length) % tabs.length];
+      selectTab(previousTab.id);
+      document.getElementById(`client-tab-${previousTab.id}`)?.focus();
+    } else if (event.key === "Home" || event.key === "End") {
+      event.preventDefault();
+      const nextTab = event.key === "Home" ? tabs[0] : tabs[tabs.length - 1];
+      selectTab(nextTab.id);
+      document.getElementById(`client-tab-${nextTab.id}`)?.focus();
+    }
+  };
 
   const { state, refetch } = useFetch(
     clientId ? () => api.getClient(clientId) : null,
@@ -388,16 +438,11 @@ export function ClientDetailPage() {
     }
   };
 
-  const handleQuarantine = async () => {
+  const applyQuarantine = async (reason: string) => {
     if (!clientId) return;
-    const reason = window.prompt(
-      "Enter reason for network quarantine (e.g. repeated malware policy violations):",
-      "Administrator requested network quarantine",
-    );
-    if (reason === null) return;
     setQuarantineLoading(true);
     try {
-      await api.quarantineClient(clientId, { reason: reason || undefined });
+      await api.quarantineClient(clientId, { reason: reason.trim() || undefined });
       addToast({
         title: "Quarantine applied",
         message: `${c.hostname} has been isolated on the network.`,
@@ -415,15 +460,13 @@ export function ClientDetailPage() {
     }
   };
 
-  const handleReleaseQuarantine = async () => {
+  const handleQuarantine = () => {
+    setQuarantineReason("Administrator requested network quarantine");
+    setPendingConfirmation({ kind: "quarantine" });
+  };
+
+  const releaseQuarantine = async () => {
     if (!clientId) return;
-    if (
-      !window.confirm(
-        `Are you sure you want to release ${c.hostname} from network quarantine?`,
-      )
-    ) {
-      return;
-    }
     setQuarantineLoading(true);
     try {
       await api.releaseClientQuarantine(clientId);
@@ -441,6 +484,27 @@ export function ClientDetailPage() {
       });
     } finally {
       setQuarantineLoading(false);
+    }
+  };
+
+  const confirmPendingAction = () => {
+    const pending = pendingConfirmation;
+    setPendingConfirmation(null);
+    if (!pending) return;
+
+    if (pending.kind === "disconnect") {
+      void executeCommand("DISCONNECT");
+    } else if (pending.kind === "restart") {
+      void executeCommand("RESTART", { delay_seconds: 5 });
+    } else if (pending.kind === "shutdown") {
+      void executeCommand("SHUTDOWN", { delay_seconds: 5 });
+    } else if (pending.kind === "quarantine") {
+      void applyQuarantine(quarantineReason);
+    } else if (pending.kind === "release") {
+      void releaseQuarantine();
+    } else {
+      setKillingProcess(pending.target);
+      void executeCommand("KILL_PROCESS", pending.target);
     }
   };
 
@@ -521,6 +585,61 @@ export function ClientDetailPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column" }}>
+      <ConfirmDialog
+        open={pendingConfirmation !== null}
+        title={
+          pendingConfirmation?.kind === "quarantine"
+            ? "Quarantine this client?"
+            : pendingConfirmation?.kind === "release"
+              ? "Release quarantine?"
+              : pendingConfirmation?.kind === "disconnect"
+                ? "Disconnect this client?"
+                : pendingConfirmation?.kind === "restart"
+                  ? "Restart this client?"
+                  : pendingConfirmation?.kind === "shutdown"
+                    ? "Shut down this client?"
+                    : "Terminate this process?"
+        }
+        description={
+          pendingConfirmation?.kind === "quarantine"
+            ? `This will isolate ${c.hostname} from the network until an administrator restores access.`
+            : pendingConfirmation?.kind === "release"
+              ? `This will restore network access for ${c.hostname}.`
+              : pendingConfirmation?.kind === "disconnect"
+                ? `Disconnect ${c.hostname} (${c.id}) from the server?`
+                : pendingConfirmation?.kind === "restart"
+                  ? `Restart ${c.hostname} after a short delay?`
+                  : pendingConfirmation?.kind === "shutdown"
+                    ? `Shut down ${c.hostname} after a short delay?`
+                    : `Terminate '${pendingConfirmation?.kind === "kill" ? pendingConfirmation.target : ""}' on ${c.hostname}?`
+        }
+        confirmLabel={
+          pendingConfirmation?.kind === "quarantine"
+            ? "Quarantine"
+            : pendingConfirmation?.kind === "release"
+              ? "Release"
+              : pendingConfirmation?.kind === "disconnect"
+                ? "Disconnect"
+                : pendingConfirmation?.kind === "restart"
+                  ? "Restart"
+                  : pendingConfirmation?.kind === "shutdown"
+                    ? "Shut down"
+                    : "Terminate"
+        }
+        danger={
+          pendingConfirmation?.kind === "quarantine" ||
+          pendingConfirmation?.kind === "shutdown" ||
+          pendingConfirmation?.kind === "kill"
+        }
+        inputLabel={pendingConfirmation?.kind === "quarantine" ? "Reason (optional)" : undefined}
+        inputValue={pendingConfirmation?.kind === "quarantine" ? quarantineReason : undefined}
+        inputPlaceholder="Administrator requested network quarantine"
+        onInputChange={
+          pendingConfirmation?.kind === "quarantine" ? setQuarantineReason : undefined
+        }
+        onCancel={() => setPendingConfirmation(null)}
+        onConfirm={confirmPendingAction}
+      />
       {/* Top navigation */}
       <div
         style={{
@@ -586,6 +705,60 @@ export function ClientDetailPage() {
         </div>
       )}
 
+      <div
+        role="tablist"
+        aria-label="Client detail sections"
+        style={{
+          display: "flex",
+          gap: "var(--space-1)",
+          overflowX: "auto",
+          borderBottom: "1px solid var(--border)",
+          marginBottom: "var(--space-5)",
+        }}
+      >
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            id={`client-tab-${tab.id}`}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            aria-controls={
+              tab.id === "overview"
+                ? "client-panel-overview"
+                : tab.id === "network"
+                  ? "client-panel-network"
+                  : tab.id === "history"
+                    ? "client-panel-history"
+                    : "client-panel-actions"
+            }
+            tabIndex={activeTab === tab.id ? 0 : -1}
+            onClick={() => selectTab(tab.id)}
+            onKeyDown={handleTabKeyDown}
+            style={{
+              flexShrink: 0,
+              padding: "var(--space-3) var(--space-4)",
+              border: 0,
+              borderBottom: `2px solid ${activeTab === tab.id ? "var(--primary)" : "transparent"}`,
+              background: "transparent",
+              color: activeTab === tab.id ? "var(--text)" : "var(--text-muted)",
+              fontWeight: activeTab === tab.id ? 600 : 500,
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      <section
+        id="client-panel-overview"
+        role="tabpanel"
+        aria-labelledby="client-tab-overview"
+        hidden={activeTab !== "overview"}
+        style={{ display: activeTab === "overview" ? "block" : "none" }}
+      >
       <SectionCard title="Physical Location">
         <div style={{ display: "grid", gap: "var(--space-3)" }}>
           <div
@@ -833,100 +1006,57 @@ export function ClientDetailPage() {
           )}
         </SectionCard>
       )}
+      </section>
 
-      {/* Header Banner */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "var(--space-4)",
-          marginBottom: "var(--space-6)",
-          paddingBottom: "var(--space-4)",
-          borderBottom: "1px solid var(--border)",
-        }}
-      >
-        <div
-          style={{
-            width: 48,
-            height: 48,
-            borderRadius: "var(--radius)",
-            background: isIsolated
-              ? "var(--danger-bg, #fee2e2)"
-              : isOnline
-                ? "var(--success-bg)"
-                : "var(--surface-muted)",
-            border: "1px solid var(--border)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 22,
-            flexShrink: 0,
-          }}
-          aria-hidden="true"
-        >
-          {isIsolated ? "🔒" : "💻"}
-        </div>
-        <div>
-          <h1
-            style={{
-              fontSize: "var(--font-xl)",
-              fontWeight: 600,
-              marginBottom: "var(--space-1)",
-            }}
-          >
-            {c.hostname}
-          </h1>
-          <div
-            style={{
-              display: "flex",
-              gap: "var(--space-2)",
-              alignItems: "center",
-              flexWrap: "wrap",
-            }}
-          >
-            <ClientStatusBadge state={c.connection.state} />
-
-            <Button
-              variant="danger"
-              size="md"
-              disabled={!isOnline || commandLoading}
-              onClick={() => {
-                if (
-                  window.confirm(`Disconnect client ${c.hostname} (${c.id})?`)
-                ) {
-                  executeCommand("DISCONNECT");
-                }
-              }}
-            >
-              Disconnect
-            </Button>
-            <span
-              style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}
-            >
-              {isIsolated
-                ? `Isolated (last contact ${formatRelative(c.connection.last_connected_at)})`
-                : isOnline
-                  ? `Connected ${formatRelative(c.connection.last_connected_at)}`
-                  : `Last seen ${formatRelative(c.connection.last_connected_at)}`}
-            </span>
+      <div className="client-detail-hero">
+        <div className="client-detail-identity">
+          <div className="client-detail-icon" aria-hidden="true">{isIsolated ? "⛨" : "◈"}</div>
+          <div>
+            <span className="eyebrow eyebrow--accent">CLIENT AGENT / OPERATIONS</span>
+            <h1 className="client-detail-title">{c.hostname}</h1>
+            <p className="client-detail-subtitle">{c.ip_address || c.mac_address} · {c.os.system || "Operating system unavailable"}</p>
+            <div className="client-detail-badges">
+              <ClientStatusBadge state={c.connection.state} />
+              {c.location && <Badge variant="info">{c.location.label}</Badge>}
+              {c.health?.status && <Badge variant={c.health.status === "healthy" ? "success" : c.health.status === "critical" ? "danger" : "warning"}>{c.health.status.toUpperCase()}</Badge>}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", flexWrap: "wrap", marginTop: "var(--space-4)" }}>
+              <Button variant="danger" size="sm" disabled={!isOnline || commandLoading} onClick={() => setPendingConfirmation({ kind: "disconnect" })}>Disconnect agent</Button>
+              <span style={{ fontSize: "var(--font-xs)", color: "var(--muted-text)" }}>
+                {isIsolated ? `Isolated · last contact ${formatRelative(c.connection.last_connected_at)}` : isOnline ? `Connected ${formatRelative(c.connection.last_connected_at)}` : `Last seen ${formatRelative(c.connection.last_connected_at)}`}
+              </span>
+            </div>
           </div>
         </div>
-
-        {/* Alert Metrics */}
-        <div
-          style={{ marginLeft: "auto", display: "flex", gap: "var(--space-3)" }}
-        >
-          <MetricCard
-            label="New alerts"
-            value={d.alert_counts.new}
-            valueVariant={d.alert_counts.new > 0 ? "danger" : "default"}
-          />
+        <div className="client-detail-alerts">
+          <MetricCard label="New alerts" value={d.alert_counts.new} valueVariant={d.alert_counts.new > 0 ? "danger" : "default"} />
           <MetricCard label="Total alerts" value={d.alert_counts.total} />
         </div>
       </div>
 
+      <section
+        id="client-panel-actions"
+        role="tabpanel"
+        aria-labelledby={
+          activeTab === "security" ? "client-tab-security" : "client-tab-remote"
+        }
+        aria-label="Client actions"
+        hidden={
+          activeTab !== "remote" &&
+          activeTab !== "network" &&
+          activeTab !== "security"
+        }
+        style={{
+          display:
+            activeTab === "remote" ||
+            activeTab === "network" ||
+            activeTab === "security"
+              ? "block"
+              : "none",
+        }}
+      >
       {/* Interactive Command Control Center */}
-      <SectionCard title="Agent Remote Control & Telemetry">
+      <SectionCard title="Client actions and telemetry">
         {!isOnline && (
           <div style={{ marginBottom: "var(--space-3)" }}>
             <Notice
@@ -948,7 +1078,7 @@ export function ClientDetailPage() {
         >
           <div
             style={{
-              display: "grid",
+              display: activeTab === "remote" ? "grid" : "none",
               gap: "var(--space-2)",
               alignContent: "start",
             }}
@@ -1032,7 +1162,7 @@ export function ClientDetailPage() {
 
           <div
             style={{
-              display: "grid",
+              display: activeTab === "network" ? "grid" : "none",
               gap: "var(--space-2)",
               alignContent: "start",
             }}
@@ -1101,7 +1231,7 @@ export function ClientDetailPage() {
 
           <div
             style={{
-              display: "grid",
+              display: activeTab === "remote" ? "grid" : "none",
               gap: "var(--space-2)",
               alignContent: "start",
             }}
@@ -1174,11 +1304,7 @@ export function ClientDetailPage() {
                 variant="secondary"
                 size="md"
                 disabled={!isOnline || commandLoading}
-                onClick={() => {
-                  if (window.confirm(`Restart client ${c.hostname}?`)) {
-                    executeCommand("RESTART", { delay_seconds: 5 });
-                  }
-                }}
+                onClick={() => setPendingConfirmation({ kind: "restart" })}
               >
                 Restart
               </Button>
@@ -1187,11 +1313,7 @@ export function ClientDetailPage() {
                 variant="danger"
                 size="md"
                 disabled={!isOnline || commandLoading}
-                onClick={() => {
-                  if (window.confirm(`Shut down client ${c.hostname}?`)) {
-                    executeCommand("SHUTDOWN", { delay_seconds: 5 });
-                  }
-                }}
+                onClick={() => setPendingConfirmation({ kind: "shutdown" })}
               >
                 Shut Down
               </Button>
@@ -1200,7 +1322,7 @@ export function ClientDetailPage() {
 
           <div
             style={{
-              display: "grid",
+              display: activeTab === "security" ? "grid" : "none",
               gap: "var(--space-2)",
               alignContent: "start",
             }}
@@ -1237,7 +1359,7 @@ export function ClientDetailPage() {
                 variant="secondary"
                 size="md"
                 disabled={!isIsolated || commandLoading || quarantineLoading}
-                onClick={handleReleaseQuarantine}
+                onClick={() => setPendingConfirmation({ kind: "release" })}
               >
                 Release Quarantine
               </Button>
@@ -1294,10 +1416,17 @@ export function ClientDetailPage() {
           </div>
         )}
       </SectionCard>
+      </section>
 
+      <section
+        id="client-panel-remote-processes"
+        aria-label="Remote process results"
+        hidden={activeTab !== "remote"}
+        style={{ display: activeTab === "remote" ? "block" : "none" }}
+      >
       {/* Live Process Explorer & Manager */}
       {processList && (
-        <div style={{ marginTop: "var(--space-6)", order: 1 }}>
+        <div style={{ marginTop: "var(--space-6)" }}>
           <SectionCard
             title={`Command Result: Running Processes on ${c.hostname} (${filteredProcesses.length} / ${processList.length})`}
           >
@@ -1442,14 +1571,7 @@ export function ClientDetailPage() {
                             disabled={commandLoading}
                             onClick={() => {
                               const target = p.name || String(p.pid);
-                              if (
-                                window.confirm(
-                                  `Are you sure you want to kill '${target}' on ${c.hostname}?`,
-                                )
-                              ) {
-                                setKillingProcess(target);
-                                executeCommand("KILL_PROCESS", target);
-                              }
+                              setPendingConfirmation({ kind: "kill", target });
                             }}
                           >
                             {killingProcess === (p.name || String(p.pid)) &&
@@ -1467,6 +1589,14 @@ export function ClientDetailPage() {
           </SectionCard>
         </div>
       )}
+      </section>
+      <section
+        id="client-panel-network"
+        role="tabpanel"
+        aria-labelledby="client-tab-network"
+        hidden={activeTab !== "network"}
+        style={{ display: activeTab === "network" ? "block" : "none" }}
+      >
       {passiveNeighbourhood &&
         (() => {
           const protocols = [
@@ -1710,9 +1840,18 @@ export function ClientDetailPage() {
             </div>
           );
         })()}
+      </section>
+
+      <section
+        id="client-panel-history"
+        role="tabpanel"
+        aria-labelledby="client-tab-history"
+        hidden={activeTab !== "history"}
+        style={{ display: activeTab === "history" ? "block" : "none" }}
+      >
       <div
         id="screenshot-history"
-        style={{ marginTop: "var(--space-6)", order: 2 }}
+        style={{ marginTop: "var(--space-6)" }}
       >
         <SectionCard
           title="Screenshot History"
@@ -2143,6 +2282,7 @@ export function ClientDetailPage() {
           </SectionCard>
         )}
       </div>
+      </section>
     </div>
   );
 }

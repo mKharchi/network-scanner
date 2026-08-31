@@ -1,89 +1,106 @@
 /* ============================================================
-   Card component
+   Card Component — Deep Navy Intelligence Platform
    ============================================================ */
 
 .card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: var(--space-4);
-  box-shadow: var(--shadow-sm);
+  background: var(--deep-card-navy);
+  border: 1px solid var(--navy-border);
+  border-radius: var(--radius-card);
+  padding: var(--space-8);
+  box-shadow: var(--shadow-card);
+  color: var(--white);
+  transition: transform var(--transition), box-shadow var(--transition), border-color var(--transition);
 }
 
-/* ── Metric card ──────────────────────────────────────────── */
+.card:hover {
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+/* ── Metric Card ──────────────────────────────────────────── */
 .metric-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: var(--space-5) var(--space-6);
-  box-shadow: var(--shadow-sm);
+  background: var(--deep-card-navy);
+  border: 1px solid var(--navy-border);
+  border-radius: var(--radius-card);
+  padding: var(--space-6) var(--space-8);
+  box-shadow: var(--shadow-card);
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
-  transition: box-shadow var(--transition);
+  gap: var(--space-2);
+  color: var(--white);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
 }
 
 .metric-card:hover {
-  box-shadow: var(--shadow);
+  transform: translateY(-2px);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45);
+  border-color: rgba(37, 99, 235, 0.5);
 }
 
 .metric-card__label {
   font-size: var(--font-xs);
-  font-weight: 500;
-  color: var(--text-muted);
+  font-weight: 700;
+  color: var(--muted-text);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
 }
 
 .metric-card__value {
   font-size: var(--font-2xl);
-  font-weight: 600;
+  font-weight: 800;
   line-height: var(--lh-2xl);
-  color: var(--text);
+  color: var(--white);
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
 }
 
-.metric-card__value--success { color: var(--success); }
-.metric-card__value--warning { color: var(--warning); }
-.metric-card__value--danger  { color: var(--danger); }
-.metric-card__value--info    { color: var(--info); }
+.metric-card__value--success { color: #34D399; }
+.metric-card__value--warning { color: #FBBF24; }
+.metric-card__value--danger  { color: #F87171; }
+.metric-card__value--info    { color: #60A5FA; }
 
 .metric-card__context {
   font-size: var(--font-xs);
-  color: var(--text-muted);
+  color: var(--muted-text);
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--space-2);
+  margin-top: auto;
 }
 
-/* ── Section card ─────────────────────────────────────────── */
+/* ── Section Card ─────────────────────────────────────────── */
 .section-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
+  background: var(--deep-card-navy);
+  border: 1px solid var(--navy-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
   overflow: hidden;
+  color: var(--white);
 }
 
 .section-card__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-4) var(--space-5);
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
+  padding: var(--space-5) var(--space-8);
+  border-bottom: 1px solid var(--navy-border-subtle);
+  background: rgba(8, 19, 41, 0.4);
 }
 
 .section-card__title {
-  font-size: var(--font-base);
-  font-weight: 600;
-  color: var(--text);
+  font-size: var(--font-lg);
+  font-weight: 700;
+  color: var(--white);
+  letter-spacing: -0.01em;
 }
 
 .section-card__body {
-  padding: var(--space-5);
+  padding: var(--space-8);
 }
 
 .section-card__body--flush {
   padding: 0;
+}
+
+.section-card__body--floor {
+  padding: var(--space-2) ;
 }

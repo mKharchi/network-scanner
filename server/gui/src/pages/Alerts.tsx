@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, type Alert } from '../api/client';
 import { useFetch } from '../hooks/useFetch';
 import { SeverityBadge, StatusBadge, type AlertSeverity, type AlertStatus } from '../components/Badge';
@@ -7,11 +8,28 @@ import { DataTable, type Column } from '../components/DataTable';
 import { SectionCard } from '../components/Card';
 import { SkeletonTable, ErrorState, EmptyState, Notice } from '../components/States';
 import { formatDateTime, formatRelative } from '../utils/format';
+import { MetricCard } from '../components/Card';
+import '../styles/operations.css';
 
 export function AlertsPage() {
+  const navigate = useNavigate();
+  const { alertId } = useParams<{ alertId?: string }>();
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [severityFilter, setSeverityFilter] = useState<string>('');
-  const [selectedAlertId, setSelectedAlertId] = useState<number | null>(null);
+  const [selectedAlertId, setSelectedAlertId] = useState<number | null>(() => {
+    const parsed = Number(alertId);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+  });
+
+  useEffect(() => {
+    const parsed = Number(alertId);
+    setSelectedAlertId(Number.isInteger(parsed) && parsed > 0 ? parsed : null);
+  }, [alertId]);
+
+  const selectAlert = (id: number | null) => {
+    setSelectedAlertId(id);
+    navigate(id == null ? '/alerts' : `/alerts/${id}`, { replace: true });
+  };
 
   const { state: alertListState, refetch: refetchAlerts } = useFetch(
     () =>
@@ -20,7 +38,7 @@ export function AlertsPage() {
         severity: severityFilter || undefined,
       }),
     [statusFilter, severityFilter],
-    ['app:alert', 'alert'],
+    ['app:alert'],
   );
 
   const { state: alertDetailState, refetch: refetchDetail } = useFetch(
@@ -34,6 +52,10 @@ export function AlertsPage() {
       : alertListState.status === 'error' && alertListState.staleData
         ? alertListState.staleData.items
         : [];
+
+  const newCount = alerts.filter((alert) => alert.status === 'NEW').length;
+  const highCount = alerts.filter((alert) => alert.severity === 'HIGH' || alert.severity === 'CRITICAL').length;
+  const affectedClients = new Set(alerts.map((alert) => alert.client?.id).filter(Boolean)).size;
 
   const columns: Column<Alert>[] = [
     {
@@ -75,16 +97,19 @@ export function AlertsPage() {
 
   return (
     <div>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Security & System Alerts</h1>
-          <p className="page-description">
-            Operational anomalies, forbidden process executions, and connection incidents.
-          </p>
+      <div className="page-header operations-page-header">
+        <div className='client-page-header__copy'>
+          <span className="eyebrow eyebrow--accent">SECURITY / INCIDENT INTELLIGENCE</span>
+          <h1 className="page-title">Attention required</h1>
+          <p className="page-description">Investigate operational anomalies, client incidents, and security signals across the infrastructure.</p>
         </div>
-        <Button variant="quiet" size="sm" onClick={refetchAlerts}>
-          Refresh
-        </Button>
+      </div>
+
+      <div className="operations-metric-grid" aria-label="Alert overview">
+        <MetricCard label="Visible events" value={alerts.length} context="Matching the current filters" />
+        <MetricCard label="New" value={newCount} valueVariant={newCount > 0 ? 'danger' : 'success'} context="Awaiting operator review" />
+        <MetricCard label="High priority" value={highCount} valueVariant={highCount > 0 ? 'warning' : 'success'} context="High or critical severity" />
+        <MetricCard label="Affected clients" value={affectedClients} valueVariant="info" context="Distinct client targets" />
       </div>
 
       {alertListState.status === 'error' && (
@@ -94,14 +119,12 @@ export function AlertsPage() {
       )}
 
       {/* Filter Toolbar */}
-      <div
-        style={{
-          display: 'flex',
-          gap: 'var(--space-3)',
-          marginBottom: 'var(--space-5)',
-          flexWrap: 'wrap',
-        }}
-      >
+      <div className="operations-toolbar">
+        <div className="operations-toolbar__label">
+          <span className="eyebrow">INCIDENT QUEUE</span>
+          <strong>{newCount > 0 ? `${newCount} event${newCount === 1 ? '' : 's'} need review` : 'No new events need review'}</strong>
+        </div>
+        <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
         <select
           value={severityFilter}
           onChange={(e) => setSeverityFilter(e.target.value)}
@@ -144,6 +167,7 @@ export function AlertsPage() {
           <option value="ACKNOWLEDGED">Acknowledged</option>
           <option value="RESOLVED">Resolved</option>
         </select>
+        </div>
       </div>
 
       {/* Table */}
@@ -167,7 +191,7 @@ export function AlertsPage() {
             columns={columns}
             data={alerts}
             rowKey={(a) => String(a.id)}
-            onRowClick={(a) => setSelectedAlertId(a.id)}
+            onRowClick={(a) => selectAlert(a.id)}
             aria-label="Alerts table"
           />
         )}
@@ -178,7 +202,7 @@ export function AlertsPage() {
         <SectionCard
           title={`Alert Details (#${selectedAlertId})`}
           headerAction={
-            <Button variant="quiet" size="sm" onClick={() => setSelectedAlertId(null)}>
+            <Button variant="quiet" size="sm" onClick={() => selectAlert(null)}>
               Close
             </Button>
           }
@@ -212,13 +236,13 @@ export function AlertsPage() {
 
               {alertDetailState.data.alert.activity_log_id && (
                 <div style={{ marginTop: 'var(--space-2)' }}>
-                  <a
-                    href={`/activity/${alertDetailState.data.alert.activity_log_id}`}
+                  <Link
+                    to={`/activity/${alertDetailState.data.alert.activity_log_id}`}
                     className="btn btn--secondary btn--sm"
                     style={{ textDecoration: 'none' }}
                   >
                     View Related Activity Log →
-                  </a>
+                  </Link>
                 </div>
               )}
             </div>

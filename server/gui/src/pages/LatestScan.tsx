@@ -17,6 +17,8 @@ import {
   Notice,
 } from "../components/States";
 import { formatDateTime, formatRelative, normalizeMac } from "../utils/format";
+import { MetricCard } from "../components/Card";
+import "../styles/operations.css";
 
 export function LatestScanPage() {
   const navigate = useNavigate();
@@ -28,7 +30,7 @@ export function LatestScanPage() {
   const { state, refetch } = useFetch(
     () => api.getLatestScan(),
     [],
-    ["app:network_update", "network_update"]
+    ["app:network_update"]
   );
   const handleSort = (key: string) => {
     if (sortKey === key) {
@@ -147,8 +149,37 @@ export function LatestScanPage() {
 
   const { addToast } = useToast();
   const [isCollectingNeighbourhoods, setIsCollectingNeighbourhoods] = useState(false);
+  const [isFlushingNeighbourhoods, setIsFlushingNeighbourhoods] = useState(false);
   const [neighbourhoodCollection, setNeighbourhoodCollection] =
     useState<GlobalNeighbourhoodCollection | null>(null);
+
+  const handleFlushNeighbourhoodCaches = async () => {
+    if (
+      !window.confirm(
+        "Delete stored neighbourhood files on all online clients and clear server scan snapshots? This is intended for testing clean starts.",
+      )
+    ) {
+      return;
+    }
+    setIsFlushingNeighbourhoods(true);
+    try {
+      const result = await api.flushNeighbourhoodStorage();
+      addToast({
+        title: "Neighbourhood caches flushed",
+        message: `${result.clients_succeeded}/${result.clients_requested} client(s) cleared; ${result.server_scan_files_deleted} server scan file(s) deleted.`,
+        severity: result.clients_failed > 0 ? "INFO" : "SUCCESS",
+      });
+      refetch();
+    } catch (err: any) {
+      addToast({
+        title: "Flush failed",
+        message: err?.message || "Could not flush neighbourhood caches.",
+        severity: "CRITICAL",
+      });
+    } finally {
+      setIsFlushingNeighbourhoods(false);
+    }
+  };
 
   const handleCollectAllNeighbourhoods = async () => {
     setIsCollectingNeighbourhoods(true);
@@ -186,30 +217,46 @@ export function LatestScanPage() {
 
   return (
     <div>
-      <div className="page-header">
+      <div className="page-header operations-page-header">
         <div>
-          <h1 className="page-title">Latest Network Scan</h1>
+          <span className="eyebrow eyebrow--accent">NETWORK / LIVE DISCOVERY</span>
+          <h1 className="page-title">Latest network scan</h1>
           <p className="page-description">
             {scan
-              ? `Completed ${formatDateTime(scan.completed_at)} · Found ${scan.devices_found} device(s)`
-              : "Devices observed in the most recent network scan snapshot."}
+              ? `Completed ${formatDateTime(scan.completed_at)} · Showing ${scan.devices_found} active device(s) seen in the last ${Math.round(((scan as { active_window_seconds?: number }).active_window_seconds ?? 1800) / 60)} minutes`
+              : "Devices observed recently in the active network window."}
           </p>
         </div>
         <div style={{ display: "flex", gap: "var(--space-2)", alignItems: "center" }}>
           <Button
             variant="primary"
             size="md"
-            disabled={isCollectingNeighbourhoods}
+            disabled={isCollectingNeighbourhoods || isFlushingNeighbourhoods}
             onClick={handleCollectAllNeighbourhoods}
           >
             {isCollectingNeighbourhoods
               ? "Collecting Client Neighbourhoods…"
               : "Collect All Client Neighbourhoods"}
           </Button>
+          <Button
+            variant="danger"
+            size="md"
+            disabled={isCollectingNeighbourhoods || isFlushingNeighbourhoods}
+            onClick={handleFlushNeighbourhoodCaches}
+          >
+            {isFlushingNeighbourhoods ? "Flushing Caches…" : "Flush Neighbourhood Caches"}
+          </Button>
           <Button variant="quiet" size="sm" onClick={refetch}>
             Refresh
           </Button>
         </div>
+      </div>
+
+      <div className="operations-metric-grid">
+        <MetricCard label="Devices found" value={scan?.devices_found ?? 0} context="In the latest completed scan" />
+        <MetricCard label="Managed" value={rawDevices.filter((device) => device.is_managed).length} valueVariant="info" context="Linked to monitoring clients" />
+        <MetricCard label="Unmanaged" value={rawDevices.filter((device) => !device.is_managed).length} valueVariant="warning" context="Needs investigation" />
+        <MetricCard label="Showing" value={filteredDevices.length} context="Matching current filters" />
       </div>
 
       {neighbourhoodCollection && (
@@ -333,7 +380,9 @@ export function LatestScanPage() {
           data={sortedDevices}
           rowKey={(d) => d.mac_address}
           onRowClick={(d) =>
-            navigate(`/network/devices/${encodeURIComponent(d.mac_address)}`)
+            navigate(`/network/devices/${encodeURIComponent(d.mac_address)}`, {
+              state: { from: "/network/latest", label: "Latest Scan" },
+            })
           }
           aria-label="Latest scan devices"
           sortKey={sortKey}

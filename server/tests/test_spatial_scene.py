@@ -42,14 +42,15 @@ class SpatialDigitalTwinSceneTests(unittest.TestCase):
             ("sensor-1", "Room-1 Sensor", "managed_client", 1, 101, 10.0, 15.0, 2.5, '["arp", "dhcp", "rssi"]', "ONLINE", "Room-01", 1),
         ]
 
-        client_desc = [("id",), ("mac",), ("ip",), ("hostname",), ("os_name",), ("os_version",), ("status",), ("is_quarantined",), ("location_id",), ("agent_role",), ("loc_label",), ("loc_x",), ("loc_y",), ("loc_z",), ("loc_floor",), ("loc_restricted",)]
+        client_desc = [("id",), ("mac",), ("ip",), ("hostname",), ("os_name",), ("os_version",), ("status",), ("is_quarantined",), ("location_id",), ("agent_role",), ("loc_label",), ("loc_x",), ("loc_y",), ("loc_z",), ("loc_floor",), ("loc_restricted",), ("device_last_seen",)]
+        recent_seen = datetime.now(timezone.utc).replace(tzinfo=None)
         client_rows = [
-            (101, "AA:BB:CC:DD:EE:01", "192.168.1.101", "PC-WORKSTATION-01", "Windows", "11", "online", 0, 1, "agent", "Room-01", 10.0, 15.0, 0.8, 1, 0),
+            (101, "AA:BB:CC:DD:EE:01", "192.168.1.101", "PC-WORKSTATION-01", "Windows", "11", "online", 0, 1, "agent", "Room-01", 10.0, 15.0, 0.8, 1, 0, recent_seen),
         ]
 
         dev_desc = [("id",), ("mac_address",), ("ip_address",), ("hostname",), ("vendor",), ("first_seen",), ("last_seen",), ("location_id",), ("est_x",), ("est_y",), ("est_z",), ("est_conf",), ("est_method",), ("supporting_sensor_ids",), ("loc_label",), ("loc_floor",), ("loc_restricted",), ("rogue_score",), ("is_rogue",), ("rogue_class",), ("risk_level",), ("rogue_reasons",)]
         dev_rows = [
-            (201, "02:AA:BB:CC:DD:99", "192.168.1.200", "UNKNOWN-DEVICE", "Randomized MAC", datetime(2026, 8, 20, 10, 0, 0), datetime(2026, 8, 20, 10, 15, 0), 2, 5.2, 5.1, 0.8, 0.92, "RSSI_MULTILATERATION", '["sensor-1"]', "Server-Zone", 1, 1, 85, 1, "CONFIRMED_ROGUE", "CRITICAL", '["Restricted zone presence", "Randomized MAC"]'),
+            (201, "02:AA:BB:CC:DD:99", "192.168.1.200", "UNKNOWN-DEVICE", "Randomized MAC", datetime(2026, 8, 20, 10, 0, 0), datetime.now(timezone.utc).replace(tzinfo=None), 2, 5.2, 5.1, 0.8, 0.92, "RSSI_MULTILATERATION", '["sensor-1"]', "Server-Zone", 1, 1, 85, 1, "CONFIRMED_ROGUE", "CRITICAL", '["Restricted zone presence", "Randomized MAC"]'),
         ]
 
         obs_desc = [("device_id",), ("source_client_id",), ("rssi",), ("switch_port",), ("client_id",)]
@@ -68,17 +69,21 @@ class SpatialDigitalTwinSceneTests(unittest.TestCase):
             elif call_count == 3:
                 self.mock_cursor.description = client_desc
                 return client_rows
-            elif call_count == 4:
+            elif call_count == 5:
                 self.mock_cursor.description = dev_desc
                 return dev_rows
-            elif call_count == 5:
+            elif call_count == 6:
                 self.mock_cursor.description = obs_desc
                 return obs_rows
             return []
 
+        self.mock_cursor.fetchone.return_value = {"total": 1}
         self.mock_cursor.fetchall.side_effect = fetchall_side_effect
 
         scene = get_spatial_scene(conn=self.mock_conn)
+
+        self.assertTrue(scene["meta"]["active_filter"]["enabled"])
+        self.assertEqual(scene["meta"]["active_filter"]["max_age_seconds"], 300)
 
         sensor_query = self.mock_cursor.execute.call_args_list[1].args[0]
         self.assertIn("s.status", sensor_query)

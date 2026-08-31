@@ -1,19 +1,22 @@
 """Unified Passive Protocol Discovery Scanner for the Windows Client.
 
 Captures traffic passively visible on the selected interface across DHCP,
-mDNS, SSDP, LLMNR, and NBNS. Unifies observations into a single device
+mDNS, SSDP, LLMNR, NBNS, plain DNS (port 53), TLS (SNI / JA3 from TCP 443),
+and traffic flow telemetry. Unifies observations into a single device
 enrichment engine with evidence tracking, temporal metrics, and classification.
 """
 
 from __future__ import annotations
 
 import copy
+import hashlib
 import ipaddress
 import json
 import logging
 import re
 import struct
 import threading
+import time
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any, Callable
@@ -30,6 +33,7 @@ from fingerprinting import (
     apply_classification_to_device,
     classify_dhcp_evidence,
     classify_mdns_evidence,
+    classify_sni_evidence,
     classify_ssdp_evidence,
     evaluate_hostname_heuristics,
 )
@@ -37,21 +41,285 @@ from dhcp_listener import parse_dhcp_packet
 
 LOG = logging.getLogger("passive_protocol_listener")
 
-SUPPORTED_PROTOCOLS = frozenset({"dhcp", "mdns", "llmnr", "nbns", "ssdp"})
+SUPPORTED_PROTOCOLS = frozenset({"dhcp", "mdns", "llmnr", "nbns", "ssdp", "dns", "tls", "traffic"})
 PROTOCOL_LABELS = {
     "dhcp": "DHCP",
     "mdns": "mDNS",
     "llmnr": "LLMNR",
     "nbns": "NBNS",
     "ssdp": "SSDP",
+    "dns": "DNS",
+    "tls": "TLS/SNI",
+    "traffic": "Traffic",
 }
-PASSIVE_PROTOCOL_BPF_FILTER = "udp and (port 67 or port 68 or port 137 or port 1900 or port 5353 or port 5355)"
+PASSIVE_PROTOCOL_BPF_FILTER = (
+    "(udp and (port 53 or port 67 or port 68 or port 137 or port 1900 or port 5353 or port 5355))"
+    " or (tcp and (port 53 or port 443))"
+)
 MAX_OBSERVATIONS = 512
 MAX_RAW_FIELDS = 16
 MAX_RAW_FIELD_SIZE = 512
 MAX_RAW_SERIALIZED_SIZE = 4096
 MAX_TEXT_SIZE = 255
 MAC_ADDRESS_PATTERN = re.compile(r"^[0-9A-F]{2}(?::[0-9A-F]{2}){5}$")
+
+# GREASE values (RFC 8701) – must be excluded from JA3 computations
+_GREASE_VALUES = frozenset(
+    0x0A0A + (i << 8) + i for i in range(0, 16)
+) | frozenset(
+    0x0A0A + i * 0x1111 for i in range(0, 16)
+)
+# Simpler: the canonical set of GREASE single-byte values mapped to 2-byte
+_GREASE = frozenset(
+    v for v in range(0x0000, 0x10000)
+    if (v & 0x0F0F) == 0x0A0A and (v >> 8) == (v & 0xFF)
+)
+
+# Destination Cloud Provider CIDR Map (coarse – good enough for heuristics)
+# Format: (start_int, end_int, provider_label, description)
+_CLOUD_CIDR_MAP: list[tuple[int, int, str, str]] = [
+    # Apple
+    (0x11100000, 0x111FFFFF, "Apple", "Apple iCloud / Push"),   # 17.16.0.0/12
+    # Google
+    (0x23000000, 0x23FFFFFF, "Google", "Google Services"),      # 35.0.0.0/8
+    (0x22000000, 0x22FFFFFF, "Google", "Google Services"),      # 34.0.0.0/8
+    (0x8EFA0000, 0x8EFAFFFF, "Google", "Google DNS"),           # 142.250.0.0/15
+    (0xD83ACF00, 0xD83ACF00, "Google", "Google 8.8.8.8"),       # 8.8.8.8
+    # Microsoft
+    (0x34000000, 0x34FFFFFF, "Microsoft", "Azure Services"),    # 52.0.0.0/8
+    (0x35000000, 0x35FFFFFF, "Microsoft", "Azure Services"),    # 53.0.0.0/8
+    (0x28000000, 0x28FFFFFF, "Microsoft", "Azure Services"),    # 40.0.0.0/8
+    # Cloudflare
+    (0x68101000, 0x68101FFF, "Cloudflare", "Cloudflare CDN"),   # 104.16.0.0/20
+    (0x67D00000, 0x67DFFFFF, "Cloudflare", "Cloudflare CDN"),   # 103.208.0.0/20
+    # Akamai
+    (0x60000000, 0x600FFFFF, "Akamai", "Akamai CDN"),           # 96.0.0.0/12
+    # Amazon AWS
+    (0x36000000, 0x36FFFFFF, "AWS", "Amazon AWS"),              # 54.0.0.0/8
+    (0x33000000, 0x33FFFFFF, "AWS", "Amazon AWS"),              # 51.0.0.0/8
+    # Netflix
+    (0xCDEF0000, 0xCDEFFFFF, "Netflix", "Netflix CDN"),         # 205.239.0.0/16
+    # Meta / Facebook
+    (0x9DF00000, 0x9DF0FFFF, "Meta", "Meta/Facebook"),          # 157.240.0.0/16
+]
+
+
+def lookup_destination_vendor(dst_ip: str | None) -> dict[str, Any] | None:
+    """Return cloud provider / ASN info for a destination IPv4 address, or None."""
+    if not dst_ip:
+        return None
+    try:
+        addr_int = int(ipaddress.IPv4Address(dst_ip))
+    except (ValueError, ipaddress.AddressValueError):
+        return None
+    for start, end, provider, description in _CLOUD_CIDR_MAP:
+        if start <= addr_int <= end:
+            return {"provider": provider, "description": description, "destination_ip": dst_ip}
+    return None
+
+
+def parse_tls_client_hello(tcp_payload: bytes) -> dict[str, Any] | None:
+    """Parse a TLS ClientHello from raw TCP payload bytes.
+
+    Returns a dict with keys: sni (str|None), ja3_hash (str), ja3_string (str),
+    cipher_count (int), extension_count (int), tls_version (int).
+    Returns None if the data is not a valid/complete TLS ClientHello.
+    """
+    if len(tcp_payload) < 6:
+        return None
+    # TLS record: Content-Type=22 (Handshake), then 2-byte version, 2-byte length
+    if tcp_payload[0] != 0x16:  # not a TLS Handshake record
+        return None
+    tls_ver = struct.unpack_from("!H", tcp_payload, 1)[0]
+    record_len = struct.unpack_from("!H", tcp_payload, 3)[0]
+    if len(tcp_payload) < 5 + record_len:
+        return None  # incomplete record
+
+    # Handshake header: type=1 (ClientHello), then 3-byte length
+    if len(tcp_payload) < 6 or tcp_payload[5] != 0x01:  # not ClientHello
+        return None
+    if len(tcp_payload) < 9:
+        return None
+    handshake_len = struct.unpack_from("!I", b"\x00" + tcp_payload[6:9])[0]
+    pos = 9  # start of ClientHello body
+
+    if len(tcp_payload) < pos + 2:
+        return None
+    hello_ver = struct.unpack_from("!H", tcp_payload, pos)[0]
+    pos += 2 + 32  # skip version + random (32 bytes)
+
+    if len(tcp_payload) < pos + 1:
+        return None
+    session_id_len = tcp_payload[pos]
+    pos += 1 + session_id_len
+
+    if len(tcp_payload) < pos + 2:
+        return None
+    cipher_suite_len = struct.unpack_from("!H", tcp_payload, pos)[0]
+    pos += 2
+    if len(tcp_payload) < pos + cipher_suite_len:
+        return None
+
+    cipher_suites = []
+    for i in range(0, cipher_suite_len, 2):
+        cs = struct.unpack_from("!H", tcp_payload, pos + i)[0]
+        if cs not in _GREASE:
+            cipher_suites.append(cs)
+    pos += cipher_suite_len
+
+    if len(tcp_payload) < pos + 1:
+        return None
+    compression_len = tcp_payload[pos]
+    pos += 1 + compression_len
+
+    # Extensions
+    extension_types: list[int] = []
+    curves: list[int] = []
+    point_formats: list[int] = []
+    sni: str | None = None
+
+    if len(tcp_payload) >= pos + 2:
+        ext_total_len = struct.unpack_from("!H", tcp_payload, pos)[0]
+        pos += 2
+        ext_end = pos + ext_total_len
+        while pos + 4 <= ext_end and pos + 4 <= len(tcp_payload):
+            ext_type = struct.unpack_from("!H", tcp_payload, pos)[0]
+            ext_len = struct.unpack_from("!H", tcp_payload, pos + 2)[0]
+            ext_data_start = pos + 4
+            ext_data_end = ext_data_start + ext_len
+            pos = ext_data_end
+            if pos > len(tcp_payload):
+                break
+            if ext_type in _GREASE:
+                continue
+            extension_types.append(ext_type)
+            ext_data = tcp_payload[ext_data_start:ext_data_end]
+
+            # SNI (ext 0)
+            if ext_type == 0 and len(ext_data) >= 5:
+                sni_list_len = struct.unpack_from("!H", ext_data, 0)[0]
+                if len(ext_data) >= 3 and ext_data[2] == 0:  # host_name type
+                    name_len = struct.unpack_from("!H", ext_data, 3)[0]
+                    if len(ext_data) >= 5 + name_len:
+                        try:
+                            sni = ext_data[5:5 + name_len].decode("ascii", errors="replace").strip()
+                        except Exception:
+                            pass
+
+            # Supported Groups / Curves (ext 10)
+            elif ext_type == 10 and len(ext_data) >= 2:
+                groups_len = struct.unpack_from("!H", ext_data, 0)[0]
+                for i in range(0, groups_len, 2):
+                    if 2 + i + 2 > len(ext_data):
+                        break
+                    grp = struct.unpack_from("!H", ext_data, 2 + i)[0]
+                    if grp not in _GREASE:
+                        curves.append(grp)
+
+            # EC Point Formats (ext 11)
+            elif ext_type == 11 and len(ext_data) >= 1:
+                pf_len = ext_data[0]
+                for i in range(min(pf_len, len(ext_data) - 1)):
+                    point_formats.append(ext_data[1 + i])
+
+    # Assemble JA3 string: TLSVersion,Ciphers,Extensions,Curves,PointFormats
+    ja3_string = "{},{},{},{},{}".format(
+        hello_ver,
+        "-".join(str(c) for c in cipher_suites),
+        "-".join(str(e) for e in extension_types),
+        "-".join(str(g) for g in curves),
+        "-".join(str(p) for p in point_formats),
+    )
+    ja3_hash = hashlib.md5(ja3_string.encode("ascii"), usedforsecurity=False).hexdigest()  # noqa: S324
+
+    return {
+        "sni": sni,
+        "ja3_hash": ja3_hash,
+        "ja3_string": ja3_string,
+        "cipher_count": len(cipher_suites),
+        "extension_count": len(extension_types),
+        "tls_version": hello_ver,
+    }
+
+
+class TrafficFlowTracker:
+    """Thread-safe per-source-IP traffic flow metric tracker.
+
+    Accumulates byte counts, packet counts, inter-arrival times, and
+    classifies behavioral patterns as:
+      IDLE_BEACON, BURST_TELEMETRY, INTERACTIVE_BROWSING, HEAVY_STREAMING_TRANSFER.
+    """
+
+    WINDOW_SECONDS = 60.0
+    HEAVY_TRANSFER_BYTES = 500_000  # 500 KB/min
+    BURST_PACKET_THRESHOLD = 30
+    IDLE_PACKET_THRESHOLD = 5
+    INTERACTIVE_PACKET_THRESHOLD = 15
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        # ip -> {"bytes": int, "packets": int, "first_ts": float, "last_ts": float,
+        #         "intervals": list[float], "behavioral_pattern": str}
+        self._flows: dict[str, dict[str, Any]] = {}
+
+    def record_packet(self, src_ip: str, byte_count: int) -> None:
+        """Record one observed packet from src_ip."""
+        if not src_ip:
+            return
+        now = time.monotonic()
+        with self._lock:
+            if src_ip not in self._flows:
+                self._flows[src_ip] = {
+                    "bytes": 0, "packets": 0,
+                    "first_ts": now, "last_ts": now,
+                    "intervals": [], "behavioral_pattern": "IDLE_BEACON",
+                }
+            flow = self._flows[src_ip]
+            interval = now - flow["last_ts"]
+            if interval > 0.001:
+                intervals = flow["intervals"]
+                intervals.append(interval)
+                if len(intervals) > 50:
+                    intervals.pop(0)
+            flow["last_ts"] = now
+            flow["bytes"] += byte_count
+            flow["packets"] += 1
+            # Sliding window eviction
+            elapsed = now - flow["first_ts"]
+            if elapsed > self.WINDOW_SECONDS:
+                flow["bytes"] = byte_count
+                flow["packets"] = 1
+                flow["first_ts"] = now
+                flow["intervals"] = []
+
+            # Behavioral classification
+            pkts = flow["packets"]
+            byt = flow["bytes"]
+            avg_interval = (sum(flow["intervals"]) / len(flow["intervals"])) if flow["intervals"] else 9999
+            if byt >= self.HEAVY_TRANSFER_BYTES:
+                flow["behavioral_pattern"] = "HEAVY_STREAMING_TRANSFER"
+            elif pkts >= self.BURST_PACKET_THRESHOLD and avg_interval < 0.5:
+                flow["behavioral_pattern"] = "BURST_TELEMETRY"
+            elif pkts >= self.INTERACTIVE_PACKET_THRESHOLD:
+                flow["behavioral_pattern"] = "INTERACTIVE_BROWSING"
+            else:
+                flow["behavioral_pattern"] = "IDLE_BEACON"
+
+    def get_profile(self, src_ip: str) -> dict[str, Any] | None:
+        """Return the traffic profile for an IP, or None if untracked."""
+        with self._lock:
+            flow = self._flows.get(src_ip)
+            if flow is None:
+                return None
+            elapsed = max(0.001, time.monotonic() - flow["first_ts"])
+            avg_interval = (sum(flow["intervals"]) / len(flow["intervals"])) if flow["intervals"] else None
+            return {
+                "bytes_per_window": flow["bytes"],
+                "packets_per_window": flow["packets"],
+                "avg_interval_sec": round(avg_interval, 3) if avg_interval is not None else None,
+                "behavioral_pattern": flow["behavioral_pattern"],
+                "window_seconds": self.WINDOW_SECONDS,
+            }
 
 
 def _normalise_text(value: Any, *, limit: int = MAX_TEXT_SIZE) -> str | None:
@@ -540,7 +808,8 @@ def parse_ssdp_payload(payload: bytes, source: Mapping[str, Any]) -> list[dict[s
 
 
 class PassiveProtocolListener:
-    """Unified passive discovery scanner across DHCP, mDNS, SSDP, LLMNR, and NBNS."""
+    """Unified passive discovery scanner across DHCP, mDNS, SSDP, LLMNR, NBNS,
+    plain DNS (port 53), TLS/SNI/JA3 (port 443), and traffic flow telemetry."""
 
     def __init__(
         self,
@@ -560,6 +829,8 @@ class PassiveProtocolListener:
         self._status_lock = threading.RLock()
         self._protocol_status = {protocol: "UNAVAILABLE" for protocol in PROTOCOL_LABELS}
         self._capture_error: str | None = None
+        self._traffic_tracker = TrafficFlowTracker()
+
         self._vendors_db: Any = None
 
     @property
@@ -770,33 +1041,111 @@ class PassiveProtocolListener:
             for hint in ssdp_eval.get("software_hints", []):
                 device.add_software_hint(hint)
 
+        elif protocol == "tls":
+            sni = obs.get("sni")
+            ja3_hash = obs.get("ja3_hash")
+            ja3_string = obs.get("ja3_string")
+            dst_vendor = obs.get("destination_vendor")
+            if sni:
+                device.add_sni_domain(sni)
+                sni_eval = classify_sni_evidence(sni)
+                if sni_eval.get("os_hint"):
+                    device.os_classification.update_if_better(sni_eval["os_hint"], sni_eval["confidence"], f"sni.{sni}")
+                    device.os_hint = device.os_classification.value
+                if sni_eval.get("device_type"):
+                    device.device_type_classification.update_if_better(sni_eval["device_type"], sni_eval["confidence"], f"sni.{sni}")
+                    device.device_type = device.device_type_classification.value
+            if ja3_hash:
+                device.add_ja3_fingerprint(ja3_hash, ja3_string)
+            if dst_vendor:
+                device.add_destination_asn(dst_vendor)
+            # Traffic profile refresh
+            profile = self._traffic_tracker.get_profile(ip) if ip else None
+            if profile:
+                device.set_traffic_profile(profile)
+
+        elif protocol == "dns":
+            domain = obs.get("hostname")
+            if domain:
+                device.add_dns_query(domain)
+            dst_vendor = obs.get("destination_vendor")
+            if dst_vendor:
+                device.add_destination_asn(dst_vendor)
+
         # Apply multi-source synergistic classification
         apply_classification_to_device(device, self._vendors_db)
 
     def process_packet(self, packet: Any) -> int:
         """Parse one Scapy packet synchronously; intended for capture worker/tests."""
         try:
-            from scapy.layers.inet import IP, UDP  # type: ignore
+            from scapy.layers.inet import IP, TCP, UDP  # type: ignore
             from scapy.layers.inet6 import IPv6  # type: ignore
             from scapy.layers.l2 import Ether  # type: ignore
-
-            if not packet.haslayer(UDP):
-                return 0
-            udp = packet[UDP]
-            port = udp.sport if udp.sport in {67, 68, 137, 1900, 5353, 5355} else udp.dport
-            if port not in {67, 68, 137, 1900, 5353, 5355}:
-                return 0
 
             source: dict[str, Any] = {}
             if packet.haslayer(IP):
                 source["ip_address"] = packet[IP].src
+                source["dst_ip"] = packet[IP].dst
             elif packet.haslayer(IPv6):
                 source["ip_address"] = packet[IPv6].src
             if packet.haslayer(Ether):
                 source["mac_address"] = packet[Ether].src
-            payload = bytes(udp.payload)
+
+            # Track traffic volume for all packets
+            src_ip = source.get("ip_address")
+            if src_ip:
+                pkt_len = len(bytes(packet)) if hasattr(packet, "__len__") else 0
+                self._traffic_tracker.record_packet(src_ip, pkt_len)
 
             parsed: list[dict[str, Any]] = []
+
+            # ── TCP packets ──────────────────────────────────────────────────
+            if packet.haslayer(TCP):
+                tcp = packet[TCP]
+                sport, dport = tcp.sport, tcp.dport
+                payload = bytes(tcp.payload) if tcp.payload else b""
+
+                if dport == 443 or sport == 443:
+                    # Attempt TLS ClientHello parse (only outbound client hellos matter)
+                    if dport == 443 and payload:
+                        tls_result = parse_tls_client_hello(payload)
+                        if tls_result:
+                            dst_vendor = lookup_destination_vendor(source.get("dst_ip"))
+                            parsed = [{
+                                "protocol": "tls",
+                                "observation_kind": "client_hello",
+                                "ip_address": source.get("ip_address"),
+                                "mac_address": source.get("mac_address"),
+                                "sni": tls_result.get("sni"),
+                                "ja3_hash": tls_result.get("ja3_hash"),
+                                "ja3_string": tls_result.get("ja3_string"),
+                                "tls_version": tls_result.get("tls_version"),
+                                "destination_vendor": dst_vendor,
+                            }]
+
+                elif dport == 53 or sport == 53:
+                    # TCP DNS (large responses)
+                    if len(payload) > 2:
+                        dns_payload = payload[2:]  # skip 2-byte length prefix
+                        parsed = _dns_observations("dns", dns_payload, source)
+
+                added_count = 0
+                for item in parsed:
+                    if self.observations.add(item):
+                        added_count += 1
+                    self._correlate_observation(item)
+                return added_count
+
+            # ── UDP packets ──────────────────────────────────────────────────
+            if not packet.haslayer(UDP):
+                return 0
+            udp = packet[UDP]
+            sport, dport = udp.sport, udp.dport
+            port = sport if sport in {53, 67, 68, 137, 1900, 5353, 5355} else dport
+            if port not in {53, 67, 68, 137, 1900, 5353, 5355}:
+                return 0
+
+            payload = bytes(udp.payload)
 
             if port in {67, 68}:
                 dhcp_parsed = parse_dhcp_packet(payload)
@@ -807,6 +1156,8 @@ class PassiveProtocolListener:
                             self._dhcp_callback(dhcp_parsed)
                         except Exception:
                             LOG.exception("[PASSIVE LISTENER] DHCP callback failed")
+            elif port == 53:
+                parsed = _dns_observations("dns", payload, source)
             elif port == 5353:
                 parsed = _dns_observations("mdns", payload, source)
             elif port == 5355:
@@ -834,14 +1185,20 @@ class PassiveProtocolListener:
     @staticmethod
     def _is_supported_packet(packet: Any) -> bool:
         try:
-            from scapy.layers.inet import UDP  # type: ignore
+            from scapy.layers.inet import TCP, UDP  # type: ignore
 
+            if packet.haslayer(TCP):
+                return (
+                    packet[TCP].sport in {53, 443}
+                    or packet[TCP].dport in {53, 443}
+                )
             return packet.haslayer(UDP) and (
-                packet[UDP].sport in {67, 68, 137, 1900, 5353, 5355}
-                or packet[UDP].dport in {67, 68, 137, 1900, 5353, 5355}
+                packet[UDP].sport in {53, 67, 68, 137, 1900, 5353, 5355}
+                or packet[UDP].dport in {53, 67, 68, 137, 1900, 5353, 5355}
             )
         except Exception:
             return False
+
 
     def _capture_with_scapy(self) -> bool:
         try:

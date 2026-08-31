@@ -3,6 +3,7 @@ import { useToast } from "../hooks/useToast";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, type ManagedClientSummary } from "../api/client";
 import { useFetch } from "../hooks/useFetch";
+import { useDebouncedValue } from "../hooks/useDebouncedValue";
 import { ClientStatusBadge } from "../components/Badge";
 import { Button } from "../components/Button";
 import { DataTable, type Column } from "../components/DataTable";
@@ -13,6 +14,8 @@ import {
   Notice,
 } from "../components/States";
 import { formatRelative } from "../utils/format";
+import { MetricCard } from "../components/Card";
+import "../styles/operations.css";
 
 // ── Filter bar ────────────────────────────────────────────────────
 interface FilterBarProps {
@@ -243,6 +246,7 @@ export function ClientsPage() {
   const [stateFilter, setStateFilter] = useState("");
   const [locationFilter, setLocationFilter] = useState(searchParams.get("location") || "");
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search);
   const [sortKey, setSortKey] = useState("hostname");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [autoLocatingClientId, setAutoLocatingClientId] = useState<string | null>(null);
@@ -251,11 +255,11 @@ export function ClientsPage() {
     () =>
       api.getClients({
         state: stateFilter || undefined,
-        search: search || undefined,
+        search: debouncedSearch || undefined,
         location: locationFilter || undefined,
       }),
-    [stateFilter, search, locationFilter],
-    ['app:client_status', 'client_status'],
+    [stateFilter, debouncedSearch, locationFilter],
+    ['app:client_status'],
   );
 
   const handleSort = (key: string) => {
@@ -325,18 +329,26 @@ export function ClientsPage() {
     autoLocatingClientId,
   );
 
+  const onlineCount = rawItems.filter((client) => client.connection.state === "ONLINE").length;
+  const isolatedCount = rawItems.filter((client) => client.connection.state === "ISOLATED").length;
+  const assignedCount = rawItems.filter((client) => client.location !== null).length;
+
   return (
     <div>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Clients</h1>
-          <p className="page-description">
-            Registered monitoring agents and their current status.
-          </p>
+      <div className="page-header operations-page-header">
+        <div className="client-page-header__copy">
+          <span className="eyebrow eyebrow--accent">NETWORK INTELLIGENCE / CLIENTS</span>
+          <h1 className="page-title">Monitoring agents</h1>
+          <p className="page-description">Manage the agents that collect network evidence, health signals, and diagnostics across your infrastructure.</p>
         </div>
-        <Button variant="quiet" size="sm" onClick={refetch}>
-          Refresh
-        </Button>
+        
+      </div>
+
+      <div className="operations-metric-grid" aria-label="Client fleet overview">
+        <MetricCard label="Registered agents" value={rawItems.length} context="Known monitoring clients" />
+        <MetricCard label="Online" value={onlineCount} valueVariant="success" context="Currently connected" />
+        <MetricCard label="Isolated" value={isolatedCount} valueVariant="danger" context="Network access restricted" />
+        <MetricCard label="Located" value={assignedCount} valueVariant="info" context="Assigned to a physical position" />
       </div>
 
       {state.status === "error" && (

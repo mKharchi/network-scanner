@@ -1,0 +1,47 @@
+/* Shared operations surfaces for UI/UX Stages 5–8 */
+.operations-page-header { align-items: flex-end; gap: var(--space-6); }
+.operations-page-header__actions { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
+.operations-metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); margin-bottom: var(--space-6); }
+.operations-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: var(--space-4) var(--space-5); margin-bottom: var(--space-5); border: 1px solid var(--navy-border); border-radius: var(--radius-card); background: rgba(17, 34, 77, .72); }
+.operations-toolbar__label { display: flex; flex-direction: column; gap: var(--space-1); }
+.operations-toolbar__label strong { color: var(--white); }
+.operations-control { min-height: 40px; padding: 0 var(--space-4); border: 1px solid var(--navy-border); border-radius: var(--radius-pill); background: rgba(8, 19, 41, .72); color: var(--white); font: inherit; outline: none; }
+.operations-control:focus { border-color: var(--accent-blue); box-shadow: var(--focus-ring); }
+.operations-incident-list { display: grid; gap: var(--space-3); }
+.operations-incident { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: var(--space-4) var(--space-5); border: 1px solid var(--navy-border); border-left: 3px solid var(--danger); border-radius: var(--radius-lg); background: rgba(17, 34, 77, .68); }
+.operations-incident__main { min-width: 0; display: grid; gap: var(--space-1); }
+.operations-incident__title { color: var(--white); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.operations-incident__meta { color: var(--muted-text); font-size: var(--font-xs); }
+.client-page-hero, .alert-page-hero { padding: var(--space-8); margin-bottom: var(--space-6); border: 1px solid var(--navy-border); border-radius: var(--radius-card); background: linear-gradient(135deg, var(--deep-card-navy), var(--dark-surface-elevated)); box-shadow: var(--shadow-card); }
+.client-detail-hero { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-6); padding: var(--space-8); margin-bottom: var(--space-5); border: 1px solid var(--navy-border); border-radius: var(--radius-card); background: linear-gradient(135deg, var(--deep-card-navy), var(--dark-surface-elevated)); }
+.client-detail-identity { display: flex; gap: var(--space-5); align-items: flex-start; min-width: 0; }
+.client-detail-icon { display: grid; width: 64px; height: 64px; flex: 0 0 auto; place-items: center; border-radius: 20px; border: 1px solid rgba(96,165,250,.45); background: var(--accent-blue-subtle); color: #93C5FD; font-size: 30px; }
+.client-detail-title { margin: var(--space-2) 0 var(--space-1); color: var(--white); font-size: clamp(1.75rem, 4vw, 2.5rem); line-height: 1.05; overflow-wrap: anywhere; }
+.client-detail-subtitle { color: var(--muted-text); }
+.client-detail-badges { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4); }
+.client-detail-alerts { display: grid; grid-template-columns: repeat(2, minmax(100px, 1fr)); gap: var(--space-3); min-width: 220px; }
+.client-detail-alerts .metric-card { padding: var(--space-4); }
+.spatial-page-header { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-5); }
+.spatial-page-header__copy {
+   min-width: 0; 
+  display: flex; flex-direction: column; gap: var(--space-2); 
+}
+.client-page-header__copy {
+   min-width: 0; 
+  display: flex; flex-direction: column; gap: var(--space-2); 
+}
+.spatial-page-header__copy p { max-width: 60rem; }
+
+@media (max-width: 900px) {
+  .operations-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .operations-toolbar, .client-detail-hero { align-items: stretch; flex-direction: column; }
+  .client-detail-alerts { min-width: 0; }
+}
+@media (max-width: 560px) {
+  .operations-metric-grid { grid-template-columns: 1fr; }
+  .operations-toolbar { padding: var(--space-4); }
+  .operations-incident { align-items: stretch; flex-direction: column; }
+  .client-detail-identity { gap: var(--space-3); }
+  .client-detail-icon { width: 48px; height: 48px; border-radius: 14px; font-size: 24px; }
+  .client-detail-alerts { grid-template-columns: 1fr 1fr; }
+}

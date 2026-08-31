@@ -456,184 +456,21 @@ def assign_client_location(
     evidence: Any = None,
     last_calculated_at: Optional[Any] = None,
 ) -> Dict[str, Any]:
-    """Assign a client to a PC position and record hybrid assignment metadata.
+    """Assign a client to a PC position and record hybrid assignment metadata."""
+    from server_components.location_repository import submit_client_location_assignment
 
-    Existing operator PATCH/PUT callers remain MANUAL + ASSIGNED. Automatic
-    localization (Phase 3) passes method=AUTO with confidence/evidence.
-    """
-    assignment_method = normalize_assignment_method(method)
-    assignment_status = normalize_assignment_status(status)
-    if verified is None:
-        verified = assignment_method == ASSIGNMENT_METHOD_MANUAL
-    if source is None:
-        source = (
-            SOURCE_ADMINISTRATOR
-            if assignment_method == ASSIGNMENT_METHOD_MANUAL
-            else "localization_engine"
-        )
-    evidence_json = serialize_evidence(evidence)
-
-    conn = get_connection()
-    if not conn:
-        raise ValueError("Database unavailable.")
-    try:
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute(
-            """SELECT id, client_id, location_id,
-                      location_assignment_method, location_assignment_status
-               FROM clients WHERE client_id = %s""",
-            (client_id,),
-        )
-        client = cursor.fetchone()
-        if not client:
-            raise ValueError(f"Client '{client_id}' not found.")
-        cursor.execute("SELECT * FROM locations WHERE id = %s", (location_id,))
-        location = cursor.fetchone()
-        if not location:
-            raise ValueError(f"Location '{location_id}' not found.")
-        if (location.get("location_type") or LOCATION_TYPE_PC_POSITION) not in ASSIGNABLE_LOCATION_TYPES:
-            raise ValueError(
-                f"Location '{location.get('label') or location_id}' is not an assignable PC position."
-            )
-        cursor.execute(
-            "SELECT client_id, hostname FROM clients WHERE location_id = %s AND client_id <> %s",
-            (location_id, client_id),
-        )
-        occupant = cursor.fetchone()
-        if occupant:
-            occupant_name = occupant.get("hostname") or occupant["client_id"]
-            raise ValueError(f"This physical position is already assigned to {occupant_name}.")
-
-        location_changed = client["location_id"] != location_id
-        if location_changed:
-            cursor.execute(
-                "UPDATE client_location_history SET unassigned_at = CURRENT_TIMESTAMP WHERE client_id = %s AND unassigned_at IS NULL",
-                (client["id"],),
-            )
-            cursor.execute(
-                """UPDATE clients
-                   SET location_id = %s,
-                       location_assignment_method = %s,
-                       location_assignment_status = %s,
-                       location_confidence = %s,
-                       location_verified = %s,
-                       location_assigned_at = CURRENT_TIMESTAMP,
-                       location_assigned_by = %s,
-                       location_last_calculated_at = %s,
-                       location_source = %s,
-                       location_evidence = %s,
-                       location_failure_reason = NULL
-                   WHERE id = %s""",
-                (
-                    location_id,
-                    assignment_method,
-                    assignment_status,
-                    confidence,
-                    bool(verified),
-                    assigned_by,
-                    last_calculated_at,
-                    source,
-                    evidence_json,
-                    client["id"],
-                ),
-            )
-            cursor.execute(
-                """INSERT INTO client_location_history (
-                       client_id, location_id, assigned_by,
-                       assignment_method, assignment_status, confidence,
-                       verified, source, evidence
-                   ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                (
-                    client["id"],
-                    location_id,
-                    assigned_by,
-                    assignment_method,
-                    assignment_status,
-                    confidence,
-                    bool(verified),
-                    source,
-                    evidence_json,
-                ),
-            )
-        else:
-            # Same seat: refresh assignment metadata (e.g. confirm / recalculate accept).
-            cursor.execute(
-                """UPDATE clients
-                   SET location_assignment_method = %s,
-                       location_assignment_status = %s,
-                       location_confidence = %s,
-                       location_verified = %s,
-                       location_assigned_at = COALESCE(location_assigned_at, CURRENT_TIMESTAMP),
-                       location_assigned_by = COALESCE(%s, location_assigned_by),
-                       location_last_calculated_at = COALESCE(%s, location_last_calculated_at),
-                       location_source = %s,
-                       location_evidence = %s,
-                       location_failure_reason = NULL
-                   WHERE id = %s""",
-                (
-                    assignment_method,
-                    assignment_status,
-                    confidence,
-                    bool(verified),
-                    assigned_by,
-                    last_calculated_at,
-                    source,
-                    evidence_json,
-                    client["id"],
-                ),
-            )
-        conn.commit()
-        try:
-            from server_components import event_broadcaster
-
-            event_broadcaster.broadcast_client_location_updated(
-                client_id=client_id,
-                location=_location_from_row({
-                    **location,
-                    "client_id": client_id,
-                    "location_assignment_method": assignment_method,
-                    "location_assignment_status": assignment_status,
-                    "location_confidence": confidence,
-                    "location_verified": bool(verified),
-                    "location_assigned_at": datetime.now(timezone.utc),
-                    "location_assigned_by": assigned_by,
-                    "location_last_calculated_at": last_calculated_at,
-                    "location_source": source,
-                    "location_evidence": evidence_json,
-                }),
-                assignment=assignment_payload(
-                    method=assignment_method,
-                    status=assignment_status,
-                    confidence=confidence,
-                    verified=bool(verified),
-                    assigned_at=datetime.now(timezone.utc).isoformat(),
-                    assigned_by=assigned_by,
-                    last_calculated_at=_iso_utc(last_calculated_at),
-                    source=source,
-                    evidence=evidence_json,
-                ),
-                previous_location_id=client["location_id"] if location_changed else location_id,
-                change="moved" if location_changed and client["location_id"] is not None else "assigned",
-            )
-        except Exception:
-            # Database assignment remains authoritative if SSE delivery fails.
-            pass
-        assigned = _location_from_row({
-            **location,
-            "client_id": client_id,
-            "location_assignment_method": assignment_method,
-            "location_assignment_status": assignment_status,
-            "location_confidence": confidence,
-            "location_verified": bool(verified),
-            "location_assigned_at": datetime.now(timezone.utc),
-            "location_assigned_by": assigned_by,
-            "location_last_calculated_at": last_calculated_at,
-            "location_source": source,
-            "location_evidence": evidence_json,
-        }) or {}
-        return assigned
-    finally:
-        conn.close()
+    return submit_client_location_assignment(
+        client_id=client_id,
+        location_id=location_id,
+        assigned_by=assigned_by,
+        method=method,
+        status=status,
+        confidence=confidence,
+        verified=verified,
+        source=source,
+        evidence=evidence,
+        last_calculated_at=last_calculated_at,
+    )
 
 
 def confirm_client_location(
@@ -1498,6 +1335,13 @@ def get_latest_scan() -> Optional[Dict[str, Any]]:
     return None
 
 
+def flush_neighbourhood_storage() -> Dict[str, Any]:
+    """Delete client neighbourhood caches and server scan JSON snapshots."""
+    from server_components.network_discovery import run_global_neighbourhood_storage_flush
+
+    return run_global_neighbourhood_storage_flush()
+
+
 def list_scans(from_date: Optional[str] = None, to_date: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
     """List historical completed scans, with at most one new file per day."""
     scan_dir = NETWORK_SCAN_STORAGE_DIR
@@ -1625,6 +1469,10 @@ def _parse_scan_file(file_path: Path) -> Optional[Dict[str, Any]]:
                 "sources": d.get("sources", ["SERVER_SCAN"]),
             })
 
+        from server_components.device_recency import filter_active_devices
+        total_in_snapshot = len(formatted_devices)
+        active_devices, active_cutoff_at, active_window = filter_active_devices(formatted_devices)
+
         net_ctx = data.get("network")
         if isinstance(net_ctx, str):
             net_obj = {"interface": "default", "local_ip": None, "network": net_ctx, "gateway": None}
@@ -1638,8 +1486,11 @@ def _parse_scan_file(file_path: Path) -> Optional[Dict[str, Any]]:
                 "id": file_path.stem,
                 "completed_at": data.get("completed_at", ""),
                 "network": net_obj,
-                "devices_found": data.get("devices_found", len(formatted_devices)),
-                "devices": formatted_devices,
+                "devices_found": len(active_devices),
+                "devices_total_in_snapshot": total_in_snapshot,
+                "active_window_seconds": active_window,
+                "active_cutoff": active_cutoff_at.isoformat(),
+                "devices": active_devices,
             }
         }
     except Exception:
@@ -1652,9 +1503,14 @@ def list_network_devices(
     offset: int = 0,
 ) -> Dict[str, Any]:
     """Return a paginated list of all known network devices from the database."""
+    from server_components.device_recency import active_cutoff, get_device_active_max_age_seconds, is_timestamp_active
+
     conn = get_connection()
     if not conn:
-        return {"devices": [], "total": 0}
+        return {"devices": [], "total": 0, "active_window_seconds": get_device_active_max_age_seconds()}
+
+    active_window = get_device_active_max_age_seconds()
+    cutoff = active_cutoff(max_age_seconds=active_window)
 
     try:
         cursor = conn.cursor(dictionary=True)
@@ -1703,9 +1559,16 @@ def list_network_devices(
                 "managed_client_id": row["managed_client_id"],
                 "first_seen": _iso_utc(row["first_seen"]),
                 "last_seen": _iso_utc(row["last_seen"]),
+                "is_active": is_timestamp_active(row["last_seen"], cutoff=cutoff),
             })
 
-        return {"devices": devices, "total": total, "limit": limit, "offset": offset}
+        return {
+            "devices": devices,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "active_window_seconds": active_window,
+        }
     finally:
         conn.close()
 
@@ -2308,10 +2171,19 @@ def get_device_spatial_history(device_identifier: Any, limit: int = 50) -> List[
     return spatial_engine.get_device_location_history(device_identifier, limit=limit)
 
 
-def list_rogue_devices(min_score: int = 35) -> List[Dict[str, Any]]:
+def list_rogue_devices(
+    min_score: int = 35,
+    *,
+    active_only: bool = False,
+    max_age_seconds: Optional[int] = None,
+) -> List[Dict[str, Any]]:
     """List rogue device candidates and unmanaged endpoints sorted by threat score."""
     from server_components import spatial_engine
-    return spatial_engine.list_rogue_devices(min_score=min_score)
+    return spatial_engine.list_rogue_devices(
+        min_score=min_score,
+        active_only=active_only,
+        max_age_seconds=max_age_seconds,
+    )
 
 
 def get_rogue_device_detail(device_identifier: Any) -> Optional[Dict[str, Any]]:
@@ -2339,10 +2211,154 @@ def trigger_spatial_scan_evaluation() -> List[Dict[str, Any]]:
     return spatial_engine.evaluate_all_devices()
 
 
-def get_spatial_scene(floor: Optional[int] = None) -> Dict[str, Any]:
-    """Retrieve full 3D digital twin scene graph for physical/AR rendering."""
+def get_spatial_scene(
+    floor: Optional[int] = None,
+    *,
+    active_only: bool = True,
+    max_age_seconds: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Retrieve the legacy 3D-compatible scene graph."""
     from server_components import spatial_engine
-    return spatial_engine.get_spatial_scene(floor=floor)
+    return spatial_engine.get_spatial_scene(
+        floor=floor,
+        active_only=active_only,
+        max_age_seconds=max_age_seconds,
+    )
+
+
+def get_floor1_spatial_map() -> Dict[str, Any]:
+    """Return active, elevation-qualified Floor 1 positions in 2D world coordinates."""
+    return get_floor_spatial_map(1)
+
+
+def get_floor_spatial_map(floor_id: int = 1) -> Dict[str, Any]:
+    """Return active, elevation-qualified floor positions in 2D world coordinates.
+
+    A recent DHCP observation can extend the visibility of an existing qualified
+    estimate; it never creates a location estimate on its own.
+    """
+    from datetime import timedelta
+    from server_components.device_recency import (
+        active_cutoff,
+        get_device_active_max_age_seconds,
+        get_dhcp_position_retention_grace_seconds,
+    )
+    from server_components.floor1_spatial import (
+        FLOOR_0,
+        FLOOR_1,
+        FLOOR_2,
+        FLOOR1_ELEVATION_METERS,
+        FLOOR1_ELEVATION_TOLERANCE_METERS,
+        FLOOR_ELEVATIONS,
+        FLOOR_ELEVATION_TOLERANCES,
+        FLOOR_GEOMETRIES,
+        FLOOR1_GEOMETRY,
+        device_position_payload,
+        reference_payload,
+    )
+
+    floor = int(floor_id) if floor_id in (FLOOR_0, FLOOR_1, FLOOR_2) else FLOOR_1
+    floor_elevation = FLOOR_ELEVATIONS.get(floor, FLOOR1_ELEVATION_METERS)
+    elevation_tolerance = FLOOR_ELEVATION_TOLERANCES.get(floor, FLOOR1_ELEVATION_TOLERANCE_METERS)
+    geometry = FLOOR_GEOMETRIES.get(floor, FLOOR1_GEOMETRY)
+
+    active_window = get_device_active_max_age_seconds()
+    dhcp_grace_seconds = get_dhcp_position_retention_grace_seconds()
+    active_cutoff_at = active_cutoff(max_age_seconds=active_window)
+    db_cutoff = active_cutoff_at.replace(tzinfo=None)
+    dhcp_cutoff = (active_cutoff_at - timedelta(seconds=dhcp_grace_seconds)).replace(tzinfo=None)
+
+    references: List[Dict[str, Any]] = []
+    if floor == FLOOR_1:
+        locations = [location for location in list_locations() if location and location.get("floor") == FLOOR_1]
+        references = [payload for location in locations if (payload := reference_payload(location)) is not None]
+
+    devices: List[Dict[str, Any]] = []
+    conn = get_connection()
+    if conn:
+        try:
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute(
+                """
+                SELECT d.id AS device_id, d.mac_address, d.ip_address, d.hostname, d.vendor,
+                       d.last_seen, e.location_id, e.confidence, e.method, e.z AS estimate_z,
+                       e.x AS estimate_x, e.y AS estimate_y,
+                       ABS(e.z - %s) AS elevation_delta_meters,
+                       l.floor, l.aisle, l.table_no AS table_no, l.row_no AS row_no,
+                       l.position, r.rogue_score, r.is_rogue, r.risk_level,
+                       (
+                           SELECT MAX(GREATEST(o.observed_at, o.received_at))
+                           FROM network_device_observations o
+                           WHERE o.device_id = d.id
+                             AND o.source_type = 'CLIENT_DHCP'
+                       ) AS last_dhcp_observed_at,
+                       CASE
+                           WHEN d.last_seen >= %s THEN 'network_scan'
+                           ELSE 'dhcp'
+                       END AS activity_source
+                FROM network_devices d
+                INNER JOIN device_location_estimates e ON e.device_id = d.id
+                LEFT JOIN locations l ON l.id = e.location_id
+                LEFT JOIN rogue_device_assessments r ON r.device_id = d.id
+                WHERE (l.floor = %s OR (l.floor IS NULL AND e.z IS NOT NULL AND ABS(e.z - %s) <= %s))
+                  AND e.z IS NOT NULL
+                  AND ABS(e.z - %s) <= %s
+                  AND (
+                      d.last_seen >= %s
+                      OR EXISTS (
+                          SELECT 1
+                          FROM network_device_observations o
+                          WHERE o.device_id = d.id
+                            AND o.source_type = 'CLIENT_DHCP'
+                            AND GREATEST(o.observed_at, o.received_at) >= %s
+                      )
+                  )
+                ORDER BY GREATEST(
+                    d.last_seen,
+                    COALESCE((
+                        SELECT MAX(GREATEST(o.observed_at, o.received_at))
+                        FROM network_device_observations o
+                        WHERE o.device_id = d.id
+                          AND o.source_type = 'CLIENT_DHCP'
+                    ), d.last_seen)
+                ) DESC
+                """,
+                (
+                    floor_elevation,
+                    db_cutoff,
+                    floor,
+                    floor_elevation,
+                    elevation_tolerance,
+                    floor_elevation,
+                    elevation_tolerance,
+                    db_cutoff,
+                    dhcp_cutoff,
+                ),
+            )
+            devices = [payload for row in cursor.fetchall() if (payload := device_position_payload(row, floor=floor)) is not None]
+        finally:
+            conn.close()
+
+    return {
+        "floor": floor,
+        "geometry": geometry,
+        "references": references,
+        "devices": devices,
+        "meta": {
+            "reference_count": len(references),
+            "device_count": len(devices),
+            "positioning": "assigned-floor1-slot" if floor == FLOOR_1 else f"floor{floor}-spatial",
+            "active_filter": True,
+            "active_window_seconds": active_window,
+            "active_cutoff": active_cutoff_at.isoformat(),
+            "dhcp_activity_retains_existing_position": True,
+            "dhcp_retention_grace_seconds": dhcp_grace_seconds,
+            "elevation_gate": {
+                "floor_elevation_meters": floor_elevation,
+                "tolerance_meters": elevation_tolerance,
+            },
+        },
+    }
 
 
 def get_spatial_topology() -> Dict[str, Any]:
@@ -2369,5 +2385,91 @@ def get_spatial_replay(
         to_time=to_time,
         interval_seconds=interval_seconds,
     )
+
+
+# ============================================================================
+# DEVICE INTELLIGENCE & CLASSIFICATION API SERVICE FUNCTIONS
+# ============================================================================
+
+def _resolve_device_db_id(device_identifier: Any) -> Optional[int]:
+    """Resolve device DB integer ID from either numeric ID or MAC address string."""
+    conn = get_connection()
+    if not conn:
+        return None
+    try:
+        cursor = conn.cursor(dictionary=True)
+        if isinstance(device_identifier, int) or (isinstance(device_identifier, str) and device_identifier.isdigit()):
+            cursor.execute("SELECT id FROM network_devices WHERE id = %s", (int(device_identifier),))
+        else:
+            norm_mac = _format_mac(str(device_identifier))
+            cursor.execute("SELECT id FROM network_devices WHERE mac_address = %s", (norm_mac,))
+        row = cursor.fetchone()
+        return row["id"] if row else None
+    except Exception:
+        return None
+    finally:
+        conn.close()
+
+
+def get_device_classification_by_identifier(device_identifier: Any) -> Optional[Dict[str, Any]]:
+    """Retrieve ML/Rule classification, confidence, probabilities, and evidence for a device."""
+    dev_id = _resolve_device_db_id(device_identifier)
+    if not dev_id:
+        return None
+    from server_components.device_intelligence import get_device_intelligence_service
+    service = get_device_intelligence_service()
+    return service.classify_device(dev_id, force=False)
+
+
+def classify_device_by_identifier(device_identifier: Any, force: bool = True) -> Optional[Dict[str, Any]]:
+    """Trigger on-demand ML/Rule classification for a device."""
+    dev_id = _resolve_device_db_id(device_identifier)
+    if not dev_id:
+        return None
+    from server_components.device_intelligence import get_device_intelligence_service
+    service = get_device_intelligence_service()
+    return service.classify_device(dev_id, force=force)
+
+
+def record_device_human_label_by_identifier(
+    device_identifier: Any,
+    label: str,
+    confirmed_by: Optional[str] = "admin",
+    notes: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Record verified ground-truth label from human administrator."""
+    dev_id = _resolve_device_db_id(device_identifier)
+    if not dev_id:
+        return None
+    from server_components.device_intelligence import get_device_intelligence_service
+    service = get_device_intelligence_service()
+    return service.verify_device_label(
+        device_id=dev_id,
+        label=label,
+        confirmed_by=confirmed_by,
+        notes=notes,
+    )
+
+
+def get_classification_review_queue(limit: int = 50) -> List[Dict[str, Any]]:
+    """Retrieve devices needing classification review."""
+    from server_components.device_intelligence import get_device_intelligence_service
+    service = get_device_intelligence_service()
+    return service.get_review_queue(limit=limit)
+
+
+def get_classification_stats() -> Dict[str, Any]:
+    """Retrieve aggregate classification stats, confidence tiers, and model distribution."""
+    from server_components.device_intelligence import get_device_intelligence_service
+    service = get_device_intelligence_service()
+    return service.get_statistics()
+
+
+def retrain_classification_model() -> Dict[str, Any]:
+    """Trigger model validation and retraining checkpoint."""
+    from server_components.device_intelligence import get_device_intelligence_service
+    service = get_device_intelligence_service()
+    return service.retrain_model_pipeline()
+
 
 

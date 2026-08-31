@@ -12,7 +12,9 @@ import {
 } from '../api/client';
 import { Card, MetricCard } from '../components/Card';
 import { Badge } from '../components/Badge';
+import { Notice } from '../components/States';
 import { Button } from '../components/Button';
+import '../styles/operations.css';
 import {
   TbEye,
   TbRadar,
@@ -39,6 +41,92 @@ type ViewMode = 'physical' | 'topology' | 'threat' | 'traffic' | 'ar';
 type ZoneFilter = 'all' | 'threats' | 'datacenter' | 'workstations' | 'perimeter' | 'sensors';
 type CameraPreset = 'iso' | 'top' | 'front' | 'threats';
 
+function normaliseIdentity(value: unknown): string {
+  return String(value ?? '').trim().replace(/[-_]/g, ':').toLowerCase();
+}
+
+function identityVariants(value: unknown): string[] {
+  const normalized = normaliseIdentity(value);
+  if (!normalized) return [];
+  const withoutSensorPrefix = normalized.replace(/^(sensor|probe)(?::|\\s)+/, '');
+  return Array.from(new Set([normalized, withoutSensorPrefix].filter(Boolean)));
+}
+
+function nodeIdentityKeys(node: SpatialSceneNode): Set<string> {
+  const metadata = node.metadata ?? {};
+  const values = [
+    node.mac,
+    node.ip,
+    node.name,
+    node.label,
+    metadata.sensor_id,
+    metadata.client_id,
+    metadata.client_hostname,
+  ];
+  return new Set(values.flatMap(identityVariants));
+}
+
+function nodeSpatialKey(node: SpatialSceneNode): string | null {
+  const { x, y, z } = node.position;
+  if (![x, y, z].every((value) => Number.isFinite(value))) return null;
+  return `${x.toFixed(2)}:${y.toFixed(2)}:${z.toFixed(2)}:${normaliseIdentity(node.location_label)}`;
+}
+
+function isThreatLikeNode(node: SpatialSceneNode): boolean {
+  return node.is_rogue || node.status === 'rogue' || node.status === 'suspicious' ||
+    node.risk === 'high' || node.risk === 'critical';
+}
+
+function isNearSensorNode(candidate: SpatialSceneNode, sensor: SpatialSceneNode): boolean {
+  if (normaliseIdentity(candidate.location_label) !== normaliseIdentity(sensor.location_label)) return false;
+  const dx = candidate.position.x - sensor.position.x;
+  const dy = candidate.position.y - sensor.position.y;
+  const dz = candidate.position.z - sensor.position.z;
+  return Math.sqrt(dx * dx + dy * dy + dz * dz) <= 1.25;
+}
+
+/**
+ * The API can briefly return one endpoint in both the sensor and network-device
+ * collections while sensor synchronization is catching up. Keep the sensor
+ * representation (it has the authoritative spatial role) and remove only the
+ * matching non-sensor node and its threat marker/edges.
+ */
+function dedupeSensorNodes(scene: SpatialSceneResponse): SpatialSceneResponse {
+  const sensorNodes = scene.nodes.filter((node) => node.is_sensor || node.type === 'sensor');
+  if (sensorNodes.length === 0) return scene;
+
+  const sensorKeys = new Set(sensorNodes.flatMap((node) => Array.from(nodeIdentityKeys(node))));
+  const sensorSpatialKeys = new Set(sensorNodes.map(nodeSpatialKey).filter(Boolean));
+  const duplicateIds = new Set<string>();
+
+  scene.nodes.forEach((node) => {
+    if (node.is_sensor || node.type === 'sensor') return;
+    const sharesIdentity = Array.from(nodeIdentityKeys(node)).some((key) => sensorKeys.has(key));
+    const sharesPosition = nodeSpatialKey(node) !== null && sensorSpatialKeys.has(nodeSpatialKey(node));
+    const isNearbySensorDuplicate = isThreatLikeNode(node) && sensorNodes.some((sensor) => isNearSensorNode(node, sensor));
+    if (sharesIdentity || sharesPosition || isNearbySensorDuplicate) duplicateIds.add(node.id);
+  });
+
+  if (duplicateIds.size === 0) return scene;
+
+  const nodes = scene.nodes.filter((node) => !duplicateIds.has(node.id));
+  const threats = scene.threats.filter((threat) => !duplicateIds.has(threat.node_id));
+  const edges = scene.edges.filter((edge) => !duplicateIds.has(edge.source) && !duplicateIds.has(edge.target));
+
+  return {
+    ...scene,
+    nodes,
+    threats,
+    edges,
+    meta: {
+      ...scene.meta,
+      total_nodes: nodes.length,
+      total_edges: edges.length,
+      total_threats: threats.length,
+    },
+  };
+}
+
 export function DigitalTwinPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -50,6 +138,7 @@ export function DigitalTwinPage() {
   const [sensorsList, setSensorsList] = useState<SpatialSensor[]>([]);
   const [eventsList, setEventsList] = useState<SpatialLocationEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sceneLoadError, setSceneLoadError] = useState<string | null>(null);
 
   // View & Filter states
   const [viewMode, setViewMode] = useState<ViewMode>('physical');
@@ -125,10 +214,16 @@ export function DigitalTwinPage() {
   const loadSceneData = async () => {
     try {
       setLoading(true);
+      setSceneLoadError(null);
       const [spatialData, replayData, rogueData, sensorData, eventData] = await Promise.all([
-        api.getSpatialScene(selectedFloor !== 'all' ? { floor: selectedFloor } : undefined).catch(() => null),
+        // Keep the 3D twin focused on devices seen during the last five minutes.
+        api.getSpatialScene(
+          selectedFloor !== 'all'
+            ? { floor: selectedFloor, active_only: true, max_age_seconds: 300 }
+            : { active_only: true, max_age_seconds: 300 },
+        ).catch(() => null),
         api.getSpatialReplay().catch(() => null),
-        api.listRogueDevices({ min_score: 20 }).catch(() => ({ items: [], total: 0 })),
+        api.listRogueDevices({ min_score: 20, active_only: true, max_age_seconds: 300 }).catch(() => ({ items: [], total: 0 })), 
         api.listSensors().catch(() => ({ items: [] })),
         api.listSpatialEvents(50).catch(() => ({ items: [] })),
       ]);
@@ -145,12 +240,22 @@ export function DigitalTwinPage() {
       // Prefer the backend's real scene. The previous implementation fetched it
       // but discarded it, making the fallback scene (floor 1 only) the only view.
       if (spatialData && spatialData.locations?.length > 0) {
-        setScene(spatialData);
+        const normalizedScene = dedupeSensorNodes(spatialData);
+        setScene(normalizedScene);
         setSelectedNodeId((current) =>
-          current && spatialData.nodes.some((node) => node.id === current) ? current : null,
+          current && normalizedScene.nodes.some((node) => node.id === current) ? current : null,
         );
         return;
       }
+
+      setScene(null);
+      setSelectedNodeId(null);
+      setSceneLoadError(
+        spatialData
+          ? 'The server returned no spatial locations for this view.'
+          : 'The spatial scene could not be loaded from the server.',
+      );
+      return;
 
       // Ground floor 0 is the entrance/common level; floors 1 and 2 are the
       // two training levels shown in the Locations page.
@@ -577,12 +682,39 @@ export function DigitalTwinPage() {
   }, [scene, selectedFloor, nodeFloor, zoneFilter, searchQuery]);
 
   const displayedThreats = useMemo(() => {
-    if (!scene) return [];
+    // Rogue Device Manager is the canonical assessment list. The scene can
+    // intentionally omit duplicate or unlocalized nodes, so using only
+    // scene.threats made this panel disagree with the manager.
+    const sceneThreatsByDevice = new Map((scene?.threats ?? []).map((threat) => [threat.device_id, threat]));
+    const threats = rogueList.map((rogue) => {
+      const sceneThreat = sceneThreatsByDevice.get(rogue.device_id);
+      if (sceneThreat) return sceneThreat;
+
+      const location = rogue.location;
+      return {
+        id: `threat-${rogue.device_id}`,
+        device_id: rogue.device_id,
+        node_id: `dev-${rogue.device_id}`,
+        name: rogue.hostname || rogue.mac_address,
+        severity: rogue.risk_level.toLowerCase() as 'low' | 'medium' | 'high' | 'critical',
+        score: rogue.rogue_score,
+        position: {
+          x: Number(location?.x ?? 0),
+          y: Number(location?.y ?? 0),
+          z: Number(location?.z ?? 0.8),
+        },
+        confidence: Number(location?.confidence ?? 0),
+        reasons: rogue.reasons,
+        detected_at: rogue.first_seen || new Date().toISOString(),
+        is_restricted_zone: Boolean(location?.is_restricted),
+      };
+    });
+
     if (zoneFilter === 'datacenter') {
-      return scene.threats.filter((t) => t.is_restricted_zone);
+      return threats.filter((threat) => threat.is_restricted_zone);
     }
-    return scene.threats;
-  }, [scene, zoneFilter]);
+    return threats;
+  }, [scene, rogueList, zoneFilter]);
 
   const selectedNode = useMemo(() => {
     if (!scene || !selectedNodeId) return null;
@@ -1103,18 +1235,16 @@ export function DigitalTwinPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', height: '100%' }}>
-      {/* Top Header & Mode Switcher */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--space-4)' }}>
-        <div >
-          <h1 className="page-title">3D Digital Twin</h1>
-          <p
-            style={{ color: "var(--text-muted)", marginTop: "var(--space-1)" }}
-          >    Drag to rotate · Shift-drag or right-drag to pan · Scroll to zoom · Click any device to select and focus it.
-          </p>
+      {/* Spatial command header */}
+      <div className="page-header spatial-page-header">
+        <div className="spatial-page-header__copy">
+          <span className="eyebrow eyebrow--accent">SPATIAL INTELLIGENCE / NETWORK TWIN</span>
+          <h1 className="page-title">Your infrastructure, mapped in space</h1>
+          <p style={{ color: "var(--text-muted)", marginTop: "var(--space-1)" }}>Inspect devices, sensors, threats, and connectivity in the spatial scene. Active device and threat data is limited to endpoints seen in the last 5 minutes.</p>
         </div>
 
         {/* View Mode Switcher */}
-        <div style={{ display: 'flex', background: 'var(--color-bg-secondary)', padding: '3px', borderRadius: '8px', gap: '2px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', background: 'var(--color-bg-secondary)', padding: '3px', borderRadius: '8px', gap: '5px' }}>
           <Button
             variant={viewMode === 'physical' ? 'primary' : 'quiet'}
             size="sm"
@@ -1139,6 +1269,7 @@ export function DigitalTwinPage() {
             <TbRadar size={14} style={{ marginRight: '4px' }} />
             Threat Radar
           </Button>
+          <div style={{gridColumn: 'span 3' , width: '100%' ,   justifyContent: "center", display: 'flex', gap: '2px'}}>
           <Button
             variant={viewMode === 'traffic' ? 'primary' : 'quiet'}
             size="sm"
@@ -1154,9 +1285,19 @@ export function DigitalTwinPage() {
           >
             <TbCamera size={14} style={{ marginRight: '4px' }} />
             AR Mode
-          </Button>
+          </Button></div>
         </div>
       </div>
+
+      {sceneLoadError && (
+        <Notice
+          variant="warning"
+          title="Spatial scene unavailable"
+          action={<Button variant="secondary" size="sm" onClick={loadSceneData}>Retry</Button>}
+        >
+          {sceneLoadError} No devices, sensors, or network links are shown until the server supplies real scene data.
+        </Notice>
+      )}
 
       {/* Top 4 Spatial Metrics Bar */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 'var(--space-3)' }}>
@@ -1168,7 +1309,7 @@ export function DigitalTwinPage() {
         />
         <MetricCard
           label="HIGH / CRITICAL THREATS"
-          value={criticalThreatsCount || scene?.threats.length || 0}
+          value={criticalThreatsCount}
           context="Restricted zone or randomized MAC"
           valueVariant={criticalThreatsCount > 0 ? 'danger' : 'success'}
         />

@@ -211,3 +211,21 @@ def load_latest_network_scan():
         except (OSError, json.JSONDecodeError):
             continue
     return None
+
+
+def flush_network_scan_storage():
+    """Delete all server-side merged network scan JSON snapshots."""
+    storage_dir = get_network_scan_storage_dir()
+    deleted_files = []
+    if storage_dir.is_dir():
+        for file_path in sorted(storage_dir.glob("*.json")):
+            try:
+                file_path.unlink()
+                deleted_files.append(file_path.name)
+            except OSError:
+                continue
+    return {
+        "deleted_files": deleted_files,
+        "deleted_count": len(deleted_files),
+        "storage_dir": str(storage_dir),
+    }

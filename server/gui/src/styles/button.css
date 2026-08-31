@@ -1,5 +1,5 @@
 /* ============================================================
-   Button component
+   Button Component — Deep Navy Intelligence Platform
    ============================================================ */
 
 .btn {
@@ -7,29 +7,38 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  min-height: 36px;
-  padding: var(--space-2) var(--space-6);
+  min-height: 40px;
+  padding: 0 var(--space-6);
   font-family: var(--font-sans);
-  font-size: 15px;
-  font-weight: 400;
+  font-size: var(--font-sm);
+  font-weight: 600;
   line-height: 1;
   white-space: nowrap;
   border: 1px solid transparent;
-  border-radius: var(--radius);
+  border-radius: var(--radius-pill);
   cursor: pointer;
   transition:
     background-color var(--transition-fast),
     border-color var(--transition-fast),
     color var(--transition-fast),
+    transform var(--transition-fast),
     box-shadow var(--transition-fast);
   text-decoration: none;
   user-select: none;
   position: relative;
 }
 
+.btn:hover {
+  transform: translateY(-1px);
+}
+
+.btn:active {
+  transform: translateY(0);
+}
+
 .btn:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .btn:disabled,
@@ -37,74 +46,89 @@
   opacity: 0.45;
   cursor: not-allowed;
   pointer-events: none;
+  transform: none;
 }
 
-/* Primary */
+/* Primary Accent */
 .btn--primary {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: #fff;
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+  color: var(--white);
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
 }
 .btn--primary:hover {
-  background: var(--primary-hover);
-  border-color: var(--primary-hover);
+  background: var(--accent-blue-hover);
+  border-color: var(--accent-blue-hover);
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.5);
 }
 
-/* Secondary */
+/* Secondary Navy */
 .btn--secondary {
-  background: var(--surface);
-  border-color: var(--border);
-  color: var(--text);
+  background: var(--badge-solid);
+  border-color: var(--navy-border);
+  color: var(--white);
 }
 .btn--secondary:hover {
-  background: var(--surface-muted);
-  border-color: #94A3B8;
+  background: #3B5490;
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
-/* Quiet */
+/* Quiet / Ghost */
 .btn--quiet {
   background: transparent;
   border-color: transparent;
-  color: var(--text-muted);
+  color: var(--muted-text);
 }
 .btn--quiet:hover {
-  background: var(--surface-muted);
-  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--white);
+}
+
+/* Outline Pill */
+.btn--outline {
+  background: transparent;
+  border-color: var(--navy-border);
+  color: var(--white);
+}
+.btn--outline:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
 /* Danger */
 .btn--danger {
   background: var(--danger-bg);
-  border-color: #FECACA;
-  color: var(--danger);
+  border-color: var(--danger-border);
+  color: #F87171;
 }
 .btn--danger:hover {
-  background: #FEE2E2;
-  border-color: #FCA5A5;
+  background: rgba(239, 68, 68, 0.28);
+  border-color: #EF4444;
+  color: #FFFFFF;
 }
 
 /* Sizes */
 .btn--sm {
-  min-height: 28px;
-  padding: 0 var(--space-3);
+  min-height: 32px;
+  padding: 0 var(--space-4);
   font-size: var(--font-xs);
-  border-radius: var(--radius-sm);
 }
 
 .btn--lg {
-  min-height: 20px;
-  padding: 2px var(--space-4);
+  min-height: 48px;
+  padding: 0 var(--space-8);
   font-size: var(--font-base);
+  font-weight: 700;
 }
 
 /* Icon-only variant */
 .btn--icon {
   padding: 0;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius);
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-pill);
 }
 .btn--icon.btn--sm {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
 }

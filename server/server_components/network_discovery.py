@@ -646,6 +646,73 @@ def merge_discovery_sources(
 
 
 
+def _persist_scan_devices_to_database(devices):
+    """Upsert scan-discovered devices into ``network_devices`` and observations.
+
+    Scan results used to be persisted only to daily JSON files
+    (``store_network_scan``), which left DB-backed features blind to them:
+    ``GET /api/v1/network/devices/{mac}`` returned 404 and auto-localization
+    reported "not discovered as a network device".  Devices that are already
+    present in ``network_devices`` are skipped so repeated merges do not append
+    duplicate immutable observation rows.
+    """
+    try:
+        from database import get_connection
+    except ImportError:
+        from ..database import get_connection
+    from server_components.network_device_storage import store_server_scan_observations
+
+    macs = [
+        device.get("mac_address")
+        for device in devices
+        if isinstance(device, dict) and device.get("mac_address")
+    ]
+    if not macs:
+        return 0
+
+    connection = None
+    cursor = None
+    try:
+        connection = get_connection()
+        cursor = connection.cursor()
+        placeholders = ", ".join(["%s"] * len(macs))
+        cursor.execute(
+            f"SELECT mac_address FROM network_devices WHERE mac_address IN ({placeholders})",
+            macs,
+        )
+        known_macs = {row[0].upper() for row in cursor.fetchall()}
+    except Exception as error:
+        LOGGER.warning("Could not query known network devices: %s", error)
+        return 0
+    finally:
+        if cursor:
+            cursor.close()
+        if connection and connection.is_connected():
+            connection.close()
+
+    fresh_devices = [
+        device
+        for device in devices
+        if isinstance(device, dict)
+        and device.get("mac_address")
+        and device["mac_address"].upper() not in known_macs
+    ]
+    if not fresh_devices:
+        return 0
+
+    try:
+        stored = store_server_scan_observations(fresh_devices)
+        LOGGER.info(
+            "Persisted %d new scan device(s) to the database (%d already known).",
+            stored,
+            len(devices) - len(fresh_devices),
+        )
+        return stored
+    except Exception as error:
+        LOGGER.warning("Could not persist scan devices to the database: %s", error)
+        return 0
+
+
 def merge_and_persist_client_neighbourhood(*, context_overrides=None):
     """Merge fresh client neighbourhood reports by MAC and persist one snapshot.
 
@@ -691,6 +758,7 @@ def merge_and_persist_client_neighbourhood(*, context_overrides=None):
     LOGGER.info("Network aggregation completed: %d devices discovered", len(devices))
     result_path = store_network_scan(context, devices)
     LOGGER.info("Network scan result saved to %s", result_path)
+    _persist_scan_devices_to_database(devices)
     return context, devices, result_path
 
 
@@ -759,6 +827,7 @@ def run_active_scan():
         len(classified_devices),
         result_path,
     )
+    _persist_scan_devices_to_database(classified_devices)
     return context, classified_devices, result_path
 
 
@@ -797,3 +866,46 @@ def run_global_neighbourhood_collection():
     with server_lib.clients_lock:
         online_clients = list(server_lib.clients.values())
     return global_neighbourhood_collection_manager.start(online_clients)
+
+
+def run_global_neighbourhood_storage_flush():
+    """Ask every online client to delete local neighbourhood files and clear server scan JSON."""
+    from server_components import server_lib
+    from server_components.network_scan_storage import flush_network_scan_storage
+
+    with server_lib.clients_lock:
+        online_clients = list(server_lib.clients.values())
+
+    client_results = []
+    for client in online_clients:
+        client_id = client.get("client_id")
+        if not client_id:
+            continue
+        response = server_lib.execute_client_command(
+            client_id,
+            "FLUSH_NEIGHBOURHOOD_STORAGE",
+            timeout=12.0,
+            process_network_scan=False,
+        )
+        data = response.get("data") if isinstance(response.get("data"), dict) else {}
+        status = "ok" if response.get("status") == "ok" and data.get("status") == "ok" else "error"
+        client_results.append({
+            "client_id": client_id,
+            "hostname": client.get("hostname"),
+            "mac": client.get("mac"),
+            "status": status,
+            "deleted_count": data.get("deleted_count"),
+            "message": response.get("message"),
+        })
+
+    server_flush = flush_network_scan_storage()
+    succeeded = sum(1 for item in client_results if item.get("status") == "ok")
+    return {
+        "status": "completed",
+        "clients_requested": len(client_results),
+        "clients_succeeded": succeeded,
+        "clients_failed": len(client_results) - succeeded,
+        "client_results": client_results,
+        "server_scan_files_deleted": server_flush.get("deleted_count", 0),
+        "server_scan_files": server_flush.get("deleted_files", []),
+    }

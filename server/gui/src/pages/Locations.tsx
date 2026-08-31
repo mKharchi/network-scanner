@@ -13,6 +13,7 @@ import {
 import { useFetch } from "../hooks/useFetch";
 import { useToast } from "../hooks/useToast";
 import { Button } from "../components/Button";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { SectionCard } from "../components/Card";
 import { EmptyState, ErrorState, Skeleton } from "../components/States";
 import {
@@ -29,6 +30,7 @@ import {
   stationAssignmentTitle,
 } from "../utils/stationAssignment";
 import "../styles/floor-visualization.css";
+import "../styles/operations.css";
 
 const NEIGHBOR_RELATIONSHIP_LABELS: Record<
   PhysicalNeighbor["relationship"],
@@ -117,6 +119,10 @@ export function LocationsPage() {
   );
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
   const [actionLoading, setActionLoading] = useState(false);
+  const [pendingBulkAction, setPendingBulkAction] = useState<{
+    actionType: string;
+    parameters: Record<string, unknown>;
+  } | null>(null);
   const [assignLoading, setAssignLoading] = useState(false);
   const [autoLocatingClientId, setAutoLocatingClientId] = useState<string | null>(null);
   const assigningClientId = searchParams.get("assign");
@@ -207,6 +213,19 @@ export function LocationsPage() {
     parameters: Record<string, unknown> = {},
   ) => {
     if (!selectedClientIds.length) return;
+    if (actionType === "RESTART" || actionType === "SHUTDOWN") {
+      setPendingBulkAction({ actionType, parameters });
+      return;
+    }
+    await executeBulkAction(actionType, parameters);
+  };
+
+  const executeBulkAction = async (
+    actionType: string,
+    parameters: Record<string, unknown> = {},
+  ) => {
+    if (!selectedClientIds.length) return;
+    setPendingBulkAction(null);
     setActionLoading(true);
     try {
       const action = await api.createAction({
@@ -322,18 +341,47 @@ export function LocationsPage() {
     setAutoLocatingClientId(queueItem.id);
     try {
       const outcome = await api.autoAssignClientLocation(queueItem.id);
-      const location = outcome.location as { label?: string } | undefined;
+      const location = (outcome.proposed_location || outcome.location) as
+        | { id?: number; label?: string; floor?: number }
+        | undefined;
       if (outcome.assigned === true && location?.label) {
         addToast({
           title: "Automatic location assigned",
           message: `${queueItem.hostname || queueItem.id} was placed at ${location.label}. Select that seat and confirm it after physical verification.`,
           severity: "SUCCESS",
         });
+      } else if (
+        outcome.reason === "low_confidence" &&
+        location?.id != null &&
+        location.label
+      ) {
+        const confidence =
+          typeof outcome.confidence === "number"
+            ? `${Math.round(outcome.confidence * 100)}% confidence`
+            : "low confidence";
+        const accepted = window.confirm(
+          `${queueItem.hostname || queueItem.id} is proposed at ${location.label} (${confidence}).\\n\\nIs this the correct location?`,
+        );
+        if (accepted) {
+          await api.assignClientLocation(queueItem.id, location.id);
+          addToast({
+            title: "Proposed location accepted",
+            message: `${queueItem.hostname || queueItem.id} was assigned to ${location.label}. Confirm it after physical verification.`,
+            severity: "SUCCESS",
+          });
+        } else {
+          startAssignMode(queueItem.id);
+          addToast({
+            title: "Choose the correct location",
+            message: `The proposed location was ${location.label}. Select the correct empty seat on the floor plan.`,
+            severity: "INFO",
+          });
+        }
       } else {
         const reason = automaticLocationFailureMessage(outcome);
         addToast({
-          title: "Automatic location not assigned",
-          message: `${queueItem.hostname || queueItem.id}: ${reason} Choose Assign manually to place it now.`, 
+          title: "No location proposal available",
+          message: `${queueItem.hostname || queueItem.id}: ${reason} Collect more neighbourhood observations or assign manually.`,
           severity: "HIGH",
         });
       }
@@ -484,9 +532,23 @@ export function LocationsPage() {
   const selectedConfidence = formatAssignmentConfidence(
     selectedAssignment?.confidence ?? null,
   );
+  const pendingActionLabel = pendingBulkAction?.actionType === "SHUTDOWN" ? "shut down" : "restart";
 
   return (
     <div>
+      <ConfirmDialog
+        open={pendingBulkAction !== null}
+        title={`${pendingActionLabel} selected clients?`}
+        description={`This will ${pendingActionLabel} ${selectedClientIds.length} selected client${selectedClientIds.length === 1 ? "" : "s"}. This action affects the selected machines remotely.`}
+        confirmLabel={pendingActionLabel === "shut down" ? "Shut down" : "Restart"}
+        danger={pendingActionLabel === "shut down"}
+        onCancel={() => setPendingBulkAction(null)}
+        onConfirm={() => {
+          if (pendingBulkAction) {
+            void executeBulkAction(pendingBulkAction.actionType, pendingBulkAction.parameters);
+          }
+        }}
+      />
       <div
         style={{
           display: "flex",
@@ -497,7 +559,8 @@ export function LocationsPage() {
           flexWrap: "wrap",
         }}
       >
-        <div>
+        <div className="client-page-header__copy">
+          <span className="eyebrow eyebrow--accent">SPATIAL INTELLIGENCE / LOCATIONS</span>
           <h1 className="page-title">Center layout</h1>
           <p
             style={{ color: "var(--text-muted)", marginTop: "var(--space-1)" }}

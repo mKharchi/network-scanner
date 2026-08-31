@@ -13,6 +13,8 @@ import queue
 import re
 import threading
 import urllib.parse
+from datetime import date, datetime
+from decimal import Decimal
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -31,6 +33,20 @@ from server_components.action_framework import ActionState, ActionType, get_supp
 
 API_HOST = os.getenv("API_HOST", "0.0.0.0")
 API_PORT = int(os.getenv("API_PORT", "8080"))
+
+
+class DecimalJSONEncoder(json.JSONEncoder):
+    """Serialize Decimal and date-like values for REST/SSE JSON payloads."""
+
+    def default(self, obj: Any) -> Any:
+        if isinstance(obj, Decimal):
+            try:
+                return int(obj) if obj == obj.to_integral_value() else float(obj)
+            except (ValueError, OverflowError, ArithmeticError):
+                return float(obj)
+        if isinstance(obj, (datetime, date)):
+            return obj.isoformat()
+        return super().default(obj)
 
 
 class ApiRequestHandler(BaseHTTPRequestHandler):
@@ -52,7 +68,7 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def _send_json(self, status_code: int, payload: Dict[str, Any]) -> None:
-        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        body = json.dumps(payload, ensure_ascii=False, cls=DecimalJSONEncoder).encode("utf-8")
         self.send_response(status_code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
@@ -126,7 +142,7 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     while True:
                         try:
                             event_type, data = q.get(timeout=15.0)
-                            payload = json.dumps(data, ensure_ascii=False)
+                            payload = json.dumps(data, ensure_ascii=False, cls=DecimalJSONEncoder)
                             msg = f"event: {event_type}\ndata: {payload}\n\n"
                             self.wfile.write(msg.encode("utf-8"))
                             self.wfile.flush()
@@ -413,6 +429,27 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 self.send_data(device_data)
                 return
 
+            # 6c. Device Classification & Review Endpoints
+            if path in {"/api/v1/classification/stats", "/api/classification/stats"}:
+                self.send_data(api_service.get_classification_stats())
+                return
+
+            if path in {"/api/v1/classification/review", "/api/v1/devices/classification-review"}:
+                limit = get_int_param("limit", 50)
+                items = api_service.get_classification_review_queue(limit=limit)
+                self.send_data({"items": items, "total": len(items)})
+                return
+
+            m = re.match(r"^/api/v1/(?:network/)?devices/([^/]+)/classification$", path)
+            if m:
+                device_id = urllib.parse.unquote(m.group(1))
+                classification = api_service.get_device_classification_by_identifier(device_id)
+                if not classification:
+                    self.send_error_response(404, "NOT_FOUND", f"Device '{device_id}' classification not found.")
+                    return
+                self.send_data(classification)
+                return
+
             # 7. DHCP Activity
             if path == "/api/v1/network/dhcp":
                 date_param = get_param("date")
@@ -507,7 +544,14 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
 
             if path == "/api/v1/rogue-devices" or path == "/api/rogue-devices":
                 min_score = get_int_param("min_score", 35)
-                items = api_service.list_rogue_devices(min_score=min_score)
+                active_only = query_params.get("active_only", ["false"])[0].lower() in {"1", "true", "yes"}
+                max_age_raw = query_params.get("max_age_seconds", [None])[0]
+                max_age_val = int(max_age_raw) if max_age_raw and str(max_age_raw).isdigit() else None
+                items = api_service.list_rogue_devices(
+                    min_score=min_score,
+                    active_only=active_only,
+                    max_age_seconds=max_age_val,
+                )
                 self.send_data({"items": items, "total": len(items)})
                 return
 
@@ -544,10 +588,23 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 self.send_data({"items": api_service.list_spatial_events(limit=limit)})
                 return
 
+            if path.startswith("/api/v1/spatial/floor/") or path.startswith("/api/spatial/floor/"):
+                floor_str = path.rstrip("/").rsplit("/", 1)[-1]
+                floor_num = int(floor_str) if floor_str.isdigit() else 1
+                self.send_data(api_service.get_floor_spatial_map(floor_num))
+                return
+
             if path == "/api/v1/spatial/scene" or path == "/api/spatial/scene":
                 floor_str = query_params.get("floor", [None])[0]
                 floor_val = int(floor_str) if floor_str and floor_str.isdigit() else None
-                scene = api_service.get_spatial_scene(floor=floor_val)
+                active_only = query_params.get("active_only", ["true"])[0].lower() not in {"0", "false", "no"}
+                max_age_raw = query_params.get("max_age_seconds", [None])[0]
+                max_age_val = int(max_age_raw) if max_age_raw and str(max_age_raw).isdigit() else None
+                scene = api_service.get_spatial_scene(
+                    floor=floor_val,
+                    active_only=active_only,
+                    max_age_seconds=max_age_val,
+                )
                 self.send_data(scene)
                 return
 
@@ -887,6 +944,15 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 )
                 return
 
+            if path == "/api/v1/network/neighbourhood/flush":
+                from server_components.network_discovery import (
+                    run_global_neighbourhood_storage_flush,
+                )
+
+                result = run_global_neighbourhood_storage_flush()
+                self.send_data(result, status_code=200)
+                return
+
             if path == "/api/v1/network/neighbourhood/collections":
                 from server_components.network_discovery import (
                     run_global_neighbourhood_collection,
@@ -898,6 +964,7 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     "status": "started" if created else "already_running",
                 }
                 self.send_data(response, status_code=202 if created else 200)
+                return
             if path == "/api/v1/sensors" or path == "/api/sensors":
                 payload = self._read_json_payload()
                 if payload is None:
@@ -913,6 +980,47 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
             if path == "/api/v1/spatial/evaluate" or path == "/api/spatial/evaluate":
                 eval_res = api_service.trigger_spatial_scan_evaluation()
                 self.send_data({"status": "ok", "evaluated_devices": len(eval_res), "items": eval_res})
+                return
+
+            # Device Classification POST endpoints
+            if path in {"/api/v1/classification/retrain", "/api/classification/retrain"}:
+                res = api_service.retrain_classification_model()
+                self.send_data(res, status_code=200)
+                return
+
+            m = re.match(r"^/api/v1/(?:network/)?devices/([^/]+)/classify$", path)
+            if m:
+                device_id = urllib.parse.unquote(m.group(1))
+                res = api_service.classify_device_by_identifier(device_id, force=True)
+                if not res:
+                    self.send_error_response(404, "NOT_FOUND", f"Device '{device_id}' not found.")
+                    return
+                self.send_data(res, status_code=200)
+                return
+
+            m = re.match(r"^/api/v1/(?:network/)?devices/([^/]+)/label$", path)
+            if m:
+                device_id = urllib.parse.unquote(m.group(1))
+                payload = self._read_json_payload() or {}
+                label = payload.get("label")
+                if not label or not isinstance(label, str):
+                    self.send_error_response(400, "MISSING_LABEL", "Field 'label' is required.")
+                    return
+                confirmed_by = payload.get("confirmed_by") or self.headers.get("X-Operator-Id") or "admin"
+                notes = payload.get("notes")
+                try:
+                    res = api_service.record_device_human_label_by_identifier(
+                        device_identifier=device_id,
+                        label=label,
+                        confirmed_by=confirmed_by,
+                        notes=notes,
+                    )
+                    if not res:
+                        self.send_error_response(404, "NOT_FOUND", f"Device '{device_id}' not found.")
+                        return
+                    self.send_data(res, status_code=201)
+                except ValueError as err:
+                    self.send_error_response(400, "INVALID_LABEL", str(err))
                 return
 
             # Fallback 404

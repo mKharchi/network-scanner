@@ -319,6 +319,85 @@ export interface SpatialLocationEstimate {
   calculated_at?: string | null;
 }
 
+export interface FloorMapGeometry {
+  floor: number;
+  units: "meters";
+  width: number;
+  height: number;
+  separation_meters: number;
+  rooms: Array<{ id: string; x: number; y: number; width: number; height: number; label?: string }>;
+  stairs: { id: string; x: number; y: number; width: number; height: number; label?: string } | null;
+  tables: Array<{
+    id: string;
+    aisle: number;
+    table: number;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    orientation: string;
+  }>;
+}
+
+export interface FloorReference {
+  floor: number;
+  client_id: string;
+  hostname?: string | null;
+  location_id?: number | null;
+  label?: string | null;
+  x: number;
+  y: number;
+  confidence: number | null;
+  verified: boolean;
+}
+
+export interface FloorDevice {
+  floor: number;
+  device_id: number;
+  mac_address?: string | null;
+  ip_address?: string | null;
+  hostname?: string | null;
+  vendor?: string | null;
+  x: number;
+  y: number;
+  confidence: number;
+  method: string;
+  rogue_score: number;
+  is_rogue: boolean;
+  risk_level: string;
+  last_seen?: string | null;
+  last_dhcp_observed_at?: string | null;
+  activity_source?: "network_scan" | "dhcp";
+  estimate_z?: number | null;
+  elevation_delta_meters?: number | null;
+}
+
+export interface FloorSpatialMapResponse {
+  floor: number;
+  geometry: FloorMapGeometry;
+  references: FloorReference[];
+  devices: FloorDevice[];
+  meta: {
+    reference_count: number;
+    device_count: number;
+    positioning: string;
+    active_filter: boolean;
+    active_window_seconds: number;
+    active_cutoff: string;
+    dhcp_activity_retains_existing_position: boolean;
+    dhcp_retention_grace_seconds: number;
+    elevation_gate: {
+      floor_elevation_meters: number;
+      tolerance_meters: number;
+    };
+  };
+}
+
+export type Floor1MapGeometry = FloorMapGeometry;
+export type Floor1Reference = FloorReference;
+export type Floor1Device = FloorDevice;
+export type Floor1SpatialMapResponse = FloorSpatialMapResponse;
+
 export interface RogueDeviceSummary {
   device_id: number;
   mac_address: string;
@@ -443,6 +522,13 @@ export interface SpatialSceneMeta {
   total_nodes: number;
   total_edges: number;
   total_threats: number;
+  active_filter?: {
+    enabled: boolean;
+    max_age_seconds: number;
+    cutoff: string | null;
+    total_before_filter: number;
+    total_after_filter: number;
+  };
   bounds: {
     min_x: number;
     max_x: number;
@@ -616,6 +702,17 @@ export interface NetworkDevice {
   managed_client_id: string | null;
   last_observed_at: string | null;
   sources: string[];
+  sni_domains: string[];
+  dns_queries: string[];
+  ja3_hashes: string[];
+  destination_asns: Array<{ provider: string; description: string; destination_ip?: string; count: number }>;
+  traffic_profile?: {
+    behavioral_pattern?: string | null;
+    bytes_per_window?: number | null;
+    packets_per_window?: number | null;
+    avg_interval_sec?: number | null;
+    [key: string]: unknown;
+  };
 }
 
 /** Lightweight row returned by GET /api/v1/network/devices (list all) */
@@ -628,6 +725,7 @@ export interface NetworkDeviceSummary {
   managed_client_id: string | null;
   first_seen: string | null;
   last_seen: string | null;
+  is_active?: boolean;
 }
 
 export interface NetworkDeviceListResponse {
@@ -635,6 +733,7 @@ export interface NetworkDeviceListResponse {
   total: number;
   limit: number;
   offset: number;
+  active_window_seconds?: number;
 }
 
 export interface GlobalNetworkScan {
@@ -1163,6 +1262,37 @@ export const api = {
       return (await resp.json()).data as GlobalNeighbourhoodCollection;
     })(),
 
+  flushNeighbourhoodStorage: () =>
+    (async () => {
+      const baseWithApi = API_ORIGIN.replace(/\/+$/, "") + BASE;
+      const resp = await fetch(baseWithApi + "/network/neighbourhood/flush", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+      });
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => null);
+        throw new ApiError(
+          body?.error?.code ?? "UNKNOWN_ERROR",
+          body?.error?.message ?? `HTTP ${resp.status}`,
+          resp.status,
+        );
+      }
+      return (await resp.json()).data as {
+        status: string;
+        clients_requested: number;
+        clients_succeeded: number;
+        clients_failed: number;
+        server_scan_files_deleted: number;
+        client_results: Array<{
+          client_id: string;
+          hostname?: string;
+          status: string;
+          deleted_count?: number;
+          message?: string;
+        }>;
+      };
+    })(),
+
   getGlobalNeighbourhoodCollection: (collectionId: string) =>
     get<GlobalNeighbourhoodCollection>(
       `/network/neighbourhood/collections/${encodeURIComponent(collectionId)}`,
@@ -1244,9 +1374,11 @@ export const api = {
   createSensor: (payload: Partial<SpatialSensor>) =>
     post<SpatialSensor>("/sensors", payload),
 
-  listRogueDevices: (params?: { min_score?: number }) =>
+  listRogueDevices: (params?: { min_score?: number; active_only?: boolean; max_age_seconds?: number }) =>
     get<{ items: RogueDeviceSummary[]; total: number }>("/rogue-devices", {
       ...(params?.min_score != null ? { min_score: String(params.min_score) } : {}),
+      ...(params?.active_only ? { active_only: "true" } : {}),
+      ...(params?.max_age_seconds != null ? { max_age_seconds: String(params.max_age_seconds) } : {}),
     }),
 
   getRogueDeviceDetail: (deviceId: string | number) =>
@@ -1272,10 +1404,19 @@ export const api = {
   triggerSpatialEvaluation: () =>
     post<{ status: string; evaluated_devices: number; items: any[] }>("/spatial/evaluate"),
 
-  // ── 3D Digital Twin & AR Scene Visualization ────────────────────
-  getSpatialScene: (params?: { floor?: number }) =>
+  // ── Multi-Floor Spatial Visualization ──────────────────────────
+  getFloorSpatialMap: (floor: number = 1) =>
+    get<FloorSpatialMapResponse>(`/spatial/floor/${floor}`),
+
+  getFloor1SpatialMap: () =>
+    get<FloorSpatialMapResponse>("/spatial/floor/1"),
+
+  // ── Legacy 3D-compatible scene / AR data ─────────────────────────
+  getSpatialScene: (params?: { floor?: number; active_only?: boolean; max_age_seconds?: number }) =>
     get<SpatialSceneResponse>("/spatial/scene", {
       ...(params?.floor != null ? { floor: String(params.floor) } : {}),
+      ...(params?.active_only === false ? { active_only: "false" } : {}),
+      ...(params?.max_age_seconds != null ? { max_age_seconds: String(params.max_age_seconds) } : {}),
     }),
 
   getSpatialTopology: () =>
@@ -1290,7 +1431,58 @@ export const api = {
       ...(params?.to ? { to: params.to } : {}),
       ...(params?.interval ? { interval: String(params.interval) } : {}),
     }),
+
+  // ── Device Intelligence & Classification ────────────────────────
+  getDeviceClassification: (deviceId: string | number) =>
+    get<DeviceClassification>(`/devices/${encodeURIComponent(String(deviceId))}/classification`),
+
+  classifyDevice: (deviceId: string | number) =>
+    post<DeviceClassification>(`/devices/${encodeURIComponent(String(deviceId))}/classify`),
+
+  setDeviceHumanLabel: (deviceId: string | number, label: string, notes?: string, confirmedBy?: string) =>
+    post<DeviceClassification>(`/devices/${encodeURIComponent(String(deviceId))}/label`, {
+      label,
+      notes,
+      confirmed_by: confirmedBy,
+    }),
+
+  getClassificationReviewQueue: (limit?: number) =>
+    get<{ items: any[]; total: number }>("/classification/review", limit ? { limit: String(limit) } : undefined),
+
+  getClassificationStats: () =>
+    get<ClassificationStats>("/classification/stats"),
+
+  retrainClassificationModel: () =>
+    post<any>("/classification/retrain"),
 };
+
+export interface DeviceClassification {
+  device_id: number;
+  predicted_class: string;
+  confidence: number;
+  source: 'ML' | 'RULE' | 'HUMAN' | 'HYBRID';
+  model_version: string;
+  status: 'ACTIVE' | 'NEEDS_REVIEW';
+  probabilities?: Record<string, number>;
+  evidence?: string[];
+  rule_prediction?: string;
+  ml_prediction?: string;
+  classified_at?: string;
+  updated_at?: string;
+}
+
+export interface ClassificationStats {
+  total_devices: number;
+  total_classified: number;
+  class_distribution: Record<string, number>;
+  high_confidence_count: number;
+  medium_confidence_count: number;
+  low_confidence_count: number;
+  needs_review_count: number;
+  average_confidence: number;
+  human_labels_count: number;
+  model_version: string;
+}
 
 export const apiClient = api;
 

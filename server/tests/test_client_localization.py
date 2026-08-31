@@ -60,7 +60,7 @@ class AutomaticClientLocalizationTests(unittest.TestCase):
         self.assertEqual(result["reason"], "insufficient_evidence")
         self.assertEqual(result["confidence"], 0.0)
 
-    @patch("server_components.api_service.assign_client_location")
+    @patch("server_components.location_repository.submit_client_location_assignment")
     @patch("server_components.client_localization.calculate_client_location")
     @patch("server_components.client_localization._client_assignment_guard")
     def test_auto_assigns_when_confidence_meets_threshold(
@@ -94,6 +94,7 @@ class AutomaticClientLocalizationTests(unittest.TestCase):
         calculate.return_value = {
             "success": True,
             "location_id": 4,
+            "location": {"id": 4, "label": "F1-A1-T1-R1-P1", "floor": 1},
             "confidence": 0.55,
             "evidence": {"triangulation_method": "NEAREST_SENSOR"},
             "calculated_at": "2026-08-27T10:00:00+00:00",
@@ -106,6 +107,8 @@ class AutomaticClientLocalizationTests(unittest.TestCase):
 
         self.assertFalse(outcome["assigned"])
         self.assertEqual(outcome["reason"], "low_confidence")
+        self.assertEqual(outcome["proposed_location"]["label"], "F1-A1-T1-R1-P1")
+        self.assertEqual(outcome["location_id"], 4)
         record_failure.assert_called_once()
         self.assertEqual(record_failure.call_args.kwargs["reason"], "low_confidence")
 
