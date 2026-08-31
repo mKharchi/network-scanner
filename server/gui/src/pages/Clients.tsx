@@ -15,6 +15,7 @@ import {
 } from "../components/States";
 import { formatRelative } from "../utils/format";
 import { MetricCard } from "../components/Card";
+import { DeployPackagePanel } from "../components/DeployPackagePanel";
 import "../styles/operations.css";
 
 // ── Filter bar ────────────────────────────────────────────────────
@@ -148,8 +149,23 @@ function buildClientColumns(
   onAssign: (clientId: string) => void,
   onAutoLocate: (client: ManagedClientSummary) => void,
   autoLocatingClientId: string | null,
+  selectedIds: Set<string>,
+  onToggleSelect: (clientId: string, checked: boolean) => void,
 ): Column<ManagedClientSummary>[] {
   return [
+  {
+    key: "select",
+    label: "Select",
+    render: (c) => (
+      <input
+        type="checkbox"
+        checked={selectedIds.has(c.id)}
+        aria-label={`Select ${c.hostname || c.id}`}
+        onClick={(event) => event.stopPropagation()}
+        onChange={(event) => onToggleSelect(c.id, event.target.checked)}
+      />
+    ),
+  },
   {
     key: "hostname",
     label: "Hostname",
@@ -250,6 +266,8 @@ export function ClientsPage() {
   const [sortKey, setSortKey] = useState("hostname");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [autoLocatingClientId, setAutoLocatingClientId] = useState<string | null>(null);
+  const [selectedClientIds, setSelectedClientIds] = useState<Set<string>>(new Set());
+  const [showBulkDeploy, setShowBulkDeploy] = useState(false);
 
   const { state, refetch } = useFetch(
     () =>
@@ -327,7 +345,20 @@ export function ClientsPage() {
     startManualAssignment,
     tryAutomaticLocation,
     autoLocatingClientId,
+    selectedClientIds,
+    (clientId, checked) => {
+      setSelectedClientIds((current) => {
+        const next = new Set(current);
+        if (checked) next.add(clientId);
+        else next.delete(clientId);
+        return next;
+      });
+    },
   );
+
+  const selectedOnlineTargets = items
+    .filter((client) => selectedClientIds.has(client.id) && client.connection.state === "ONLINE")
+    .map((client) => client.id);
 
   const onlineCount = rawItems.filter((client) => client.connection.state === "ONLINE").length;
   const isolatedCount = rawItems.filter((client) => client.connection.state === "ISOLATED").length;
@@ -380,6 +411,69 @@ export function ClientsPage() {
         search={search}
         onSearch={setSearch}
       />
+
+      {selectedClientIds.size > 0 && (
+        <div
+          style={{
+            display: "flex",
+            gap: "var(--space-3)",
+            alignItems: "center",
+            marginBottom: "var(--space-4)",
+            flexWrap: "wrap",
+          }}
+        >
+          <span style={{ fontSize: "var(--font-sm)", color: "var(--text-muted)" }}>
+            {selectedClientIds.size} selected · {selectedOnlineTargets.length} online
+          </span>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() =>
+              setSelectedClientIds(new Set(items.map((client) => client.id)))
+            }
+          >
+            Select visible
+          </Button>
+          <Button variant="quiet" size="sm" onClick={() => setSelectedClientIds(new Set())}>
+            Clear
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={selectedOnlineTargets.length === 0}
+            onClick={() => setShowBulkDeploy((open) => !open)}
+          >
+            {showBulkDeploy ? "Hide deploy panel" : "Deploy package…"}
+          </Button>
+        </div>
+      )}
+
+      {showBulkDeploy && selectedOnlineTargets.length > 0 && (
+        <div style={{ marginBottom: "var(--space-5)" }}>
+          <DeployPackagePanel
+            targets={selectedOnlineTargets}
+            title="Bulk package deployment"
+            description="Deploy the same zip archive to every selected online client. Progress is tracked per client."
+            onCompleted={(action) => {
+              addToast({
+                title:
+                  action.status === "SUCCESS"
+                    ? "Bulk deployment complete"
+                    : action.status === "PARTIAL_SUCCESS"
+                      ? "Bulk deployment partially complete"
+                      : "Bulk deployment failed",
+                message: `Action ${action.action_id} finished with status ${action.status}.`,
+                severity:
+                  action.status === "SUCCESS"
+                    ? "SUCCESS"
+                    : action.status === "PARTIAL_SUCCESS"
+                      ? "HIGH"
+                      : "CRITICAL",
+              });
+            }}
+          />
+        </div>
+      )}
 
       {state.status === "idle" || state.status === "loading" ? (
         <SkeletonTable rows={6} columns={6} />

@@ -130,6 +130,16 @@ export function useRealTimeEvents() {
           }
         });
 
+        // 6. Action progress updates (e.g. DEPLOY_PACKAGE)
+        es.addEventListener('action_update', (e: MessageEvent) => {
+          try {
+            const data = JSON.parse(e.data);
+            window.dispatchEvent(new CustomEvent('app:action_update', { detail: data }));
+          } catch (err) {
+            console.error('Error handling SSE action_update event:', err);
+          }
+        });
+
         es.onerror = () => {
           console.warn('[SSE] Connection lost. Reconnecting in 5s...');
           es?.close();
