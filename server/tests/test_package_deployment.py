@@ -164,6 +164,140 @@ class ServerPackageDeploymentTests(unittest.TestCase):
         ]
         self.assertTrue(len(running_update_calls) >= 1)
 
+    def test_deploy_package_max_concurrent_constant(self):
+        self.assertGreaterEqual(action_service.DEPLOY_PACKAGE_MAX_CONCURRENT, 1)
+        self.assertLessEqual(action_service.DEPLOY_PACKAGE_MAX_CONCURRENT, 20)
+
+    @patch("server_components.action_service.get_connection")
+    @patch("server_components.action_service.deploy_package_to_client")
+    def test_multi_client_deploy_concurrent_fan_out(self, mock_deploy, mock_get_conn):
+        """All clients are dispatched concurrently; total wallclock ≈ single transfer time."""
+        mock_get_conn.return_value = _connection()
+
+        call_order = []
+        call_lock = threading.Lock()
+
+        def _slow_deploy(client_id, action_id, params):
+            # Each "transfer" sleeps 0.05s — if sequential, 5 would take 0.25s
+            time.sleep(0.05)
+            with call_lock:
+                call_order.append(client_id)
+            return {"status": "ok", "package_id": "pkg-multi", "sha256": "abc", "file_path": "/tmp/pkg.zip"}
+
+        mock_deploy.side_effect = _slow_deploy
+
+        targets = ["client-1", "client-2", "client-3", "client-4", "client-5"]
+        action = {
+            "action_id": "act-multi",
+            "action_type": ActionType.DEPLOY_PACKAGE.value,
+            "targets": targets,
+            "parameters": {"package_bytes": b"fakebytes", "package_id": "pkg-multi"},
+        }
+
+        start = time.monotonic()
+        res = action_service.execute_action(action)
+        elapsed = time.monotonic() - start
+
+        # Concurrently: expect well under 5 × 0.05 = 0.25s sequential time
+        self.assertLess(elapsed, 0.20, f"Fan-out too slow ({elapsed:.3f}s) — likely running sequentially")
+        self.assertEqual(res["status"], ActionState.SUCCESS.value)
+        self.assertEqual(len(res["result"]["targets"]), 5)
+        self.assertEqual(sorted(t["client_id"] for t in res["result"]["targets"]), sorted(targets))
+        self.assertEqual(mock_deploy.call_count, 5)
+
+    @patch("server_components.action_service.get_connection")
+    @patch("server_components.action_service.deploy_package_to_client")
+    def test_multi_client_deploy_one_fails_others_succeed(self, mock_deploy, mock_get_conn):
+        """One failing client doesn't prevent others from deploying; final status is PARTIAL_SUCCESS."""
+        mock_get_conn.return_value = _connection()
+
+        def _selective_deploy(client_id, action_id, params):
+            if client_id == "client-bad":
+                return {"status": "error", "message": "Disk full on client-bad"}
+            return {"status": "ok", "package_id": "pkg-x", "sha256": "abc"}
+
+        mock_deploy.side_effect = _selective_deploy
+
+        action = {
+            "action_id": "act-partial",
+            "action_type": ActionType.DEPLOY_PACKAGE.value,
+            "targets": ["client-good-1", "client-bad", "client-good-2"],
+            "parameters": {"package_bytes": b"data", "package_id": "pkg-x"},
+        }
+
+        res = action_service.execute_action(action)
+
+        self.assertEqual(res["status"], ActionState.PARTIAL_SUCCESS.value)
+        statuses = {t["client_id"]: t["status"] for t in res["result"]["targets"]}
+        self.assertEqual(statuses["client-good-1"], ActionState.SUCCESS.value)
+        self.assertEqual(statuses["client-bad"], ActionState.FAILED.value)
+        self.assertEqual(statuses["client-good-2"], ActionState.SUCCESS.value)
+
+    @patch("server_components.action_service.get_connection")
+    @patch("server_components.action_service.deploy_package_to_client")
+    def test_throttle_cap_limits_concurrent_workers(self, mock_deploy, mock_get_conn):
+        """Even with 10 targets, at most DEPLOY_PACKAGE_MAX_CONCURRENT run simultaneously."""
+        mock_get_conn.return_value = _connection()
+
+        concurrent_high_water = [0]
+        current_running = [0]
+        hwm_lock = threading.Lock()
+
+        def _counting_deploy(client_id, action_id, params):
+            with hwm_lock:
+                current_running[0] += 1
+                if current_running[0] > concurrent_high_water[0]:
+                    concurrent_high_water[0] = current_running[0]
+            time.sleep(0.02)
+            with hwm_lock:
+                current_running[0] -= 1
+            return {"status": "ok", "package_id": "pkg-throttle", "sha256": "abc"}
+
+        mock_deploy.side_effect = _counting_deploy
+
+        targets = [f"client-{i}" for i in range(10)]
+        action = {
+            "action_id": "act-throttle",
+            "action_type": ActionType.DEPLOY_PACKAGE.value,
+            "targets": targets,
+            "parameters": {"package_bytes": b"data", "package_id": "pkg-throttle"},
+        }
+
+        action_service.execute_action(action)
+
+        self.assertLessEqual(
+            concurrent_high_water[0],
+            action_service.DEPLOY_PACKAGE_MAX_CONCURRENT,
+            f"High-water mark {concurrent_high_water[0]} exceeded cap of {action_service.DEPLOY_PACKAGE_MAX_CONCURRENT}",
+        )
+        self.assertGreater(concurrent_high_water[0], 1, "Expected concurrent execution but ran sequentially")
+
+    @patch("server_components.action_service.get_connection")
+    @patch("server_components.action_service.server_lib.execute_client_command")
+    def test_non_deploy_actions_unchanged_sequential_behavior(self, mock_exec_cmd, mock_get_conn):
+        """GET_PROCESSES still dispatches sequentially and returns full results synchronously."""
+        mock_get_conn.return_value = _connection()
+        dispatch_order = []
+
+        def _ordered_dispatch(client_id, *args, **kwargs):
+            dispatch_order.append(client_id)
+            return {"status": "ok", "processes": []}
+
+        mock_exec_cmd.side_effect = _ordered_dispatch
+
+        action = {
+            "action_id": "act-get-procs",
+            "action_type": ActionType.GET_PROCESSES.value,
+            "targets": ["client-a", "client-b", "client-c"],
+            "parameters": {},
+        }
+
+        res = action_service.execute_action(action)
+
+        # Sequential: exactly in-order
+        self.assertEqual(dispatch_order, ["client-a", "client-b", "client-c"])
+        self.assertEqual(res["status"], ActionState.SUCCESS.value)
+
 
 if __name__ == "__main__":
     unittest.main()

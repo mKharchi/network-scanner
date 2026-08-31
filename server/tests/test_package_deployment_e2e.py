@@ -48,13 +48,24 @@ def _create_test_zip(content_bytes: bytes, inner_filename: str = "test.txt") -> 
 class PackageDeploymentE2ETests(unittest.TestCase):
     def setUp(self):
         self.test_dir = Path(tempfile.mkdtemp(prefix="pkg_e2e_"))
-        self.client_staging_dir = self.test_dir / "client_updates" / "incoming"
-        self.orig_client_dir = client_lib.PACKAGE_INCOMING_DIR
-        client_lib.PACKAGE_INCOMING_DIR = self.client_staging_dir
+        self.client_incoming_dir = self.test_dir / "client_updates" / "incoming"
+        self.client_staging_dir = self.test_dir / "client_updates" / "staging"
+        self.client_current_dir = self.test_dir / "client_updates" / "current"
+
+        self.orig_incoming_dir = client_lib.PACKAGE_INCOMING_DIR
+        self.orig_staging_dir = client_lib.PACKAGE_STAGING_DIR
+        self.orig_current_dir = client_lib.PACKAGE_CURRENT_DIR
+
+        client_lib.PACKAGE_INCOMING_DIR = self.client_incoming_dir
+        client_lib.PACKAGE_STAGING_DIR = self.client_staging_dir
+        client_lib.PACKAGE_CURRENT_DIR = self.client_current_dir
         client_lib.ACTIVE_PACKAGE_SESSIONS.clear()
 
     def tearDown(self):
-        client_lib.PACKAGE_INCOMING_DIR = self.orig_client_dir
+        client_lib.PACKAGE_INCOMING_DIR = self.orig_incoming_dir
+        client_lib.PACKAGE_STAGING_DIR = self.orig_staging_dir
+        client_lib.PACKAGE_CURRENT_DIR = self.orig_current_dir
+
         for session in list(client_lib.ACTIVE_PACKAGE_SESSIONS.values()):
             if session.get("file_handle") and not session["file_handle"].closed:
                 session["file_handle"].close()
@@ -171,14 +182,14 @@ class PackageDeploymentE2ETests(unittest.TestCase):
             self.assertEqual(res["status"], ActionState.SUCCESS.value)
 
             # Independently check client received file on disk
-            received_zip = self.client_staging_dir / "pkg-small-v1.zip"
+            received_zip = self.client_incoming_dir / "pkg-small-v1.zip"
             self.assertTrue(received_zip.exists())
             self.assertEqual(received_zip.read_bytes(), zip_bytes)
             self.assertEqual(hashlib.sha256(received_zip.read_bytes()).hexdigest(), expected_hash)
 
-            # Check zip extraction independently
-            with zipfile.ZipFile(received_zip, "r") as zf:
-                self.assertEqual(zf.read("test.txt"), test_content)
+            # Confirm files landed in current deployed directory
+            self.assertTrue((self.client_current_dir / "test.txt").exists())
+            self.assertEqual((self.client_current_dir / "test.txt").read_bytes(), test_content)
         finally:
             self._cleanup_pair(env)
 
@@ -207,10 +218,11 @@ class PackageDeploymentE2ETests(unittest.TestCase):
             res = action_service.execute_action(action)
             self.assertEqual(res["status"], ActionState.SUCCESS.value)
 
-            received_zip = self.client_staging_dir / "pkg-large-v1.zip"
+            received_zip = self.client_incoming_dir / "pkg-large-v1.zip"
             self.assertTrue(received_zip.exists())
             self.assertEqual(received_zip.stat().st_size, len(zip_bytes))
             self.assertEqual(hashlib.sha256(received_zip.read_bytes()).hexdigest(), expected_hash)
+            self.assertTrue((self.client_current_dir / "large_data.bin").exists())
         finally:
             self._cleanup_pair(env)
 
@@ -242,12 +254,298 @@ class PackageDeploymentE2ETests(unittest.TestCase):
                 res = action_service.execute_action(action)
                 self.assertEqual(res["status"], ActionState.FAILED.value)
 
-            # Confirm no valid .zip was written to client staging
-            final_zip = self.client_staging_dir / "pkg-interrupted.zip"
+            # Confirm no valid .zip was written to client incoming
+            final_zip = self.client_incoming_dir / "pkg-interrupted.zip"
             self.assertFalse(final_zip.exists())
         finally:
             self._cleanup_pair(env)
 
+    @patch("server_components.action_service.get_connection")
+    def test_e2e_zip_slip_rejected_cleanly(self, mock_get_conn):
+        mock_get_conn.return_value = MagicMock()
+        env = self._setup_connected_pair()
+        try:
+            zip_bytes = _create_test_zip(b"evil content", inner_filename="../../evil.txt")
+            action = {
+                "action_id": "act-e2e-zipslip",
+                "action_type": ActionType.DEPLOY_PACKAGE.value,
+                "targets": [env["client_id"]],
+                "parameters": {
+                    "package_id": "pkg-evil",
+                    "package_bytes": zip_bytes,
+                    "chunk_size": 64,
+                    "timeout": 5.0,
+                },
+            }
+            res = action_service.execute_action(action)
+            self.assertEqual(res["status"], ActionState.FAILED.value)
+            self.assertIn("unsafe path in archive", str(res["result"]["targets"][0]["result"]).lower())
+            self.assertFalse((self.test_dir / "evil.txt").exists())
+            self.assertFalse(self.client_current_dir.exists())
+        finally:
+            self._cleanup_pair(env)
+
+    @patch("server_components.action_service.get_connection")
+    def test_e2e_multi_client_three_targets_independent_tracking(self, mock_get_conn):
+        """Deploy to 3 clients simultaneously; each tracked independently."""
+        mock_get_conn.return_value = MagicMock()
+
+        # Set up 3 real socket pairs with separate staging dirs per client
+        envs = []
+        client_dirs = []
+        macs_used = []
+        try:
+            for i in range(3):
+                # Each client gets its own isolated PACKAGE_CURRENT_DIR
+                client_dir = self.test_dir / f"client_{i}"
+                client_dirs.append(client_dir)
+
+                listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                listener.bind(("127.0.0.1", 0))
+                listener.listen(1)
+
+                client_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                client_sock.connect(("127.0.0.1", listener.getsockname()[1]))
+                server_conn, _ = listener.accept()
+                listener.close()
+
+                mac = f"BB:CC:DD:EE:FF:{i:02X}"
+                client_id = f"multi-client-{i}"
+                stop_event = threading.Event()
+                client_send_lock = threading.Lock()
+                macs_used.append(mac)
+
+                server_client = {
+                    "client_id": client_id,
+                    "mac": mac,
+                    "hostname": f"host-{i}",
+                    "connection": server_conn,
+                    "send_lock": threading.Lock(),
+                    "responses": queue.Queue(),
+                    "registered_at": time.time(),
+                }
+                with server_lib.clients_lock:
+                    server_lib.clients[mac] = server_client
+
+                # Per-client dedicated staging dirs patched inline via closure
+                incoming = client_dir / "incoming"
+                staging = client_dir / "staging"
+                current = client_dir / "current"
+
+                def _make_reader(sock, stop_ev, send_lock, incoming_dir, staging_dir, current_dir):
+                    def _client_reader():
+                        orig_in = client_lib.PACKAGE_INCOMING_DIR
+                        orig_st = client_lib.PACKAGE_STAGING_DIR
+                        orig_cu = client_lib.PACKAGE_CURRENT_DIR
+                        client_lib.PACKAGE_INCOMING_DIR = incoming_dir
+                        client_lib.PACKAGE_STAGING_DIR = staging_dir
+                        client_lib.PACKAGE_CURRENT_DIR = current_dir
+                        try:
+                            while not stop_ev.is_set():
+                                try:
+                                    msg = client_lib.receive_message(sock, stop_event=stop_ev, poll_interval=0.05)
+                                    if msg is None:
+                                        break
+                                    mtype = msg.get("type")
+                                    if mtype == "COMMAND":
+                                        cmd = msg.get("command")
+                                        result = client_lib.handle_command(msg)
+                                        with send_lock:
+                                            client_lib.send_message(sock, {"type": "RESPONSE", "command": cmd, "data": result})
+                                    elif mtype == "PACKAGE_CHUNK":
+                                        chunk_res = client_lib.process_package_chunk(msg)
+                                        if chunk_res:
+                                            with send_lock:
+                                                client_lib.send_message(sock, chunk_res)
+                                except Exception:
+                                    break
+                        finally:
+                            client_lib.PACKAGE_INCOMING_DIR = orig_in
+                            client_lib.PACKAGE_STAGING_DIR = orig_st
+                            client_lib.PACKAGE_CURRENT_DIR = orig_cu
+                    return _client_reader
+
+                client_thread = threading.Thread(
+                    target=_make_reader(client_sock, stop_event, client_send_lock, incoming, staging, current),
+                    daemon=True,
+                )
+                server_thread = threading.Thread(
+                    target=server_lib.receive_client_messages,
+                    args=(mac, server_conn),
+                    daemon=True,
+                )
+                client_thread.start()
+                server_thread.start()
+
+                envs.append({
+                    "client_id": client_id,
+                    "mac": mac,
+                    "client_sock": client_sock,
+                    "server_conn": server_conn,
+                    "stop_event": stop_event,
+                    "client_thread": client_thread,
+                    "server_thread": server_thread,
+                    "current_dir": current,
+                })
+
+            # One shared zip for all clients
+            test_content = b"Multi-client deployment payload"
+            zip_bytes = _create_test_zip(test_content, inner_filename="multi.txt")
+            expected_hash = hashlib.sha256(zip_bytes).hexdigest()
+
+            action = {
+                "action_id": "act-multi-e2e",
+                "action_type": ActionType.DEPLOY_PACKAGE.value,
+                "targets": [e["client_id"] for e in envs],
+                "parameters": {
+                    "package_id": "pkg-multi-e2e",
+                    "package_bytes": zip_bytes,
+                    "chunk_size": 256,
+                    "timeout": 15.0,
+                },
+            }
+
+            res = action_service.execute_action(action)
+
+            # All 3 clients should succeed
+            self.assertEqual(res["status"], ActionState.SUCCESS.value)
+            self.assertEqual(len(res["result"]["targets"]), 3)
+            for target in res["result"]["targets"]:
+                self.assertEqual(target["status"], ActionState.SUCCESS.value, f"{target['client_id']} failed: {target['result']}")
+
+            # Each client received the file independently
+            for env in envs:
+                current = env["current_dir"]
+                self.assertTrue((current / "multi.txt").exists(), f"{current} missing multi.txt")
+                self.assertEqual((current / "multi.txt").read_bytes(), test_content)
+
+        finally:
+            for env in envs:
+                env["stop_event"].set()
+                try:
+                    env["client_sock"].close()
+                except Exception:
+                    pass
+                try:
+                    env["server_conn"].close()
+                except Exception:
+                    pass
+            for mac in macs_used:
+                with server_lib.clients_lock:
+                    server_lib.clients.pop(mac, None)
+
+    @patch("server_components.action_service.get_connection")
+    def test_e2e_multi_client_one_fails_others_succeed(self, mock_get_conn):
+        """When one client drops mid-transfer, the others still succeed (PARTIAL_SUCCESS)."""
+        mock_get_conn.return_value = MagicMock()
+        envs = []
+        macs_used = []
+        try:
+            zip_bytes = _create_test_zip(b"Partial failure test payload", inner_filename="data.txt")
+
+            for i in range(3):
+                client_dir = self.test_dir / f"partial_{i}"
+                listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                listener.bind(("127.0.0.1", 0))
+                listener.listen(1)
+                client_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                client_sock.connect(("127.0.0.1", listener.getsockname()[1]))
+                server_conn, _ = listener.accept()
+                listener.close()
+
+                mac = f"CC:DD:EE:FF:00:{i:02X}"
+                client_id = f"partial-client-{i}"
+                macs_used.append(mac)
+                stop_event = threading.Event()
+                client_send_lock = threading.Lock()
+
+                with server_lib.clients_lock:
+                    server_lib.clients[mac] = {
+                        "client_id": client_id, "mac": mac, "hostname": f"host-p{i}",
+                        "connection": server_conn, "send_lock": threading.Lock(),
+                        "responses": queue.Queue(), "registered_at": time.time(),
+                    }
+
+                incoming = client_dir / "incoming"
+                staging = client_dir / "staging"
+                current = client_dir / "current"
+
+                # Client 1 (i==1): abort the connection immediately on first chunk
+                should_drop = (i == 1)
+
+                def _make_reader(sock, stop_ev, send_lock, inc, stg, cur, drop):
+                    def _client_reader():
+                        orig_in, orig_st, orig_cu = client_lib.PACKAGE_INCOMING_DIR, client_lib.PACKAGE_STAGING_DIR, client_lib.PACKAGE_CURRENT_DIR
+                        client_lib.PACKAGE_INCOMING_DIR, client_lib.PACKAGE_STAGING_DIR, client_lib.PACKAGE_CURRENT_DIR = inc, stg, cur
+                        first_chunk_seen = [False]
+                        try:
+                            while not stop_ev.is_set():
+                                try:
+                                    msg = client_lib.receive_message(sock, stop_event=stop_ev, poll_interval=0.05)
+                                    if msg is None:
+                                        break
+                                    mtype = msg.get("type")
+                                    if mtype == "COMMAND":
+                                        cmd = msg.get("command")
+                                        result = client_lib.handle_command(msg)
+                                        with send_lock:
+                                            client_lib.send_message(sock, {"type": "RESPONSE", "command": cmd, "data": result})
+                                    elif mtype == "PACKAGE_CHUNK":
+                                        if drop and not first_chunk_seen[0]:
+                                            first_chunk_seen[0] = True
+                                            sock.close()
+                                            break
+                                        chunk_res = client_lib.process_package_chunk(msg)
+                                        if chunk_res:
+                                            with send_lock:
+                                                client_lib.send_message(sock, chunk_res)
+                                except Exception:
+                                    break
+                        finally:
+                            client_lib.PACKAGE_INCOMING_DIR, client_lib.PACKAGE_STAGING_DIR, client_lib.PACKAGE_CURRENT_DIR = orig_in, orig_st, orig_cu
+                    return _client_reader
+
+                client_thread = threading.Thread(target=_make_reader(client_sock, stop_event, client_send_lock, incoming, staging, current, should_drop), daemon=True)
+                server_thread = threading.Thread(target=server_lib.receive_client_messages, args=(mac, server_conn), daemon=True)
+                client_thread.start()
+                server_thread.start()
+
+                envs.append({"client_id": client_id, "mac": mac, "client_sock": client_sock, "server_conn": server_conn, "stop_event": stop_event, "current_dir": current, "should_fail": should_drop})
+
+            action = {
+                "action_id": "act-partial-e2e",
+                "action_type": ActionType.DEPLOY_PACKAGE.value,
+                "targets": [e["client_id"] for e in envs],
+                "parameters": {"package_id": "pkg-partial", "package_bytes": zip_bytes, "chunk_size": 128, "timeout": 5.0},
+            }
+
+            res = action_service.execute_action(action)
+
+            self.assertEqual(res["status"], ActionState.PARTIAL_SUCCESS.value)
+            statuses = {t["client_id"]: t["status"] for t in res["result"]["targets"]}
+            for env in envs:
+                if env["should_fail"]:
+                    self.assertEqual(statuses[env["client_id"]], ActionState.FAILED.value)
+                else:
+                    self.assertEqual(statuses[env["client_id"]], ActionState.SUCCESS.value)
+                    self.assertTrue((env["current_dir"] / "data.txt").exists())
+
+        finally:
+            for env in envs:
+                env["stop_event"].set()
+                try:
+                    env["client_sock"].close()
+                except Exception:
+                    pass
+                try:
+                    env["server_conn"].close()
+                except Exception:
+                    pass
+            for mac in macs_used:
+                with server_lib.clients_lock:
+                    server_lib.clients.pop(mac, None)
+
 
 if __name__ == "__main__":
     unittest.main()
+
