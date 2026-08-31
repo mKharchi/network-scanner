@@ -797,18 +797,22 @@ _PACKAGE_RESULT_LOCK = threading.Lock()
 _PACKAGE_RESULT_NOTIFIERS = {}
 
 
-def register_package_result_waiter(action_id):
-    """Register an in-memory queue to receive the asynchronous PACKAGE_RESULT for action_id."""
+def _package_result_waiter_key(action_id: str, mac: str) -> tuple:
+    return (str(action_id), str(mac).upper().replace("-", ":"))
+
+
+def register_package_result_waiter(action_id, mac):
+    """Register a queue to receive PACKAGE_RESULT for one action/MAC pair."""
     q = queue.Queue(maxsize=1)
     with _PACKAGE_RESULT_LOCK:
-        _PACKAGE_RESULT_NOTIFIERS[action_id] = q
+        _PACKAGE_RESULT_NOTIFIERS[_package_result_waiter_key(action_id, mac)] = q
     return q
 
 
-def unregister_package_result_waiter(action_id):
-    """Unregister the package result waiter."""
+def unregister_package_result_waiter(action_id, mac):
+    """Unregister the package result waiter for one action/MAC pair."""
     with _PACKAGE_RESULT_LOCK:
-        _PACKAGE_RESULT_NOTIFIERS.pop(action_id, None)
+        _PACKAGE_RESULT_NOTIFIERS.pop(_package_result_waiter_key(action_id, mac), None)
 
 
 def handle_package_result(mac, message):
@@ -821,7 +825,8 @@ def handle_package_result(mac, message):
     if not action_id:
         return False
 
-    client_id = _client_id_for_mac(mac)
+    client = get_client_by_mac(mac)
+    client_id = client.get("client_id") if client else _client_id_for_mac(mac)
     target_status = "SUCCESS" if status == "SUCCESS" else "FAILED"
 
     # Persist to database
@@ -861,22 +866,46 @@ def handle_package_result(mac, message):
     # Broadcast update to connected GUI clients via SSE
     try:
         from server_components import event_broadcaster
+        from server_components.action_framework import summarize_action_progress_from_statuses
 
-        event_broadcaster.broadcast(
-            "action_update",
-            {
-                "action_id": action_id,
-                "client_id": client_id,
-                "status": target_status,
-                "data": message,
-            },
-        )
+        progress = None
+        progress_conn = get_connection()
+        progress_cursor = None
+        try:
+            if progress_conn:
+                progress_cursor = progress_conn.cursor()
+                progress_cursor.execute(
+                    """SELECT at.status FROM action_targets at
+                       JOIN actions a ON a.id = at.action_id
+                       WHERE a.action_id = %s
+                       ORDER BY at.target_order""",
+                    (action_id,),
+                )
+                progress = summarize_action_progress_from_statuses(
+                    [row[0] for row in progress_cursor.fetchall()]
+                )
+        finally:
+            if progress_cursor:
+                progress_cursor.close()
+            if progress_conn and progress_conn.is_connected():
+                progress_conn.close()
+
+        payload = {
+            "action_id": action_id,
+            "client_id": client_id,
+            "status": target_status,
+            "data": message,
+        }
+        if progress is not None:
+            payload["progress"] = progress
+
+        event_broadcaster.broadcast("action_update", payload)
     except Exception as err:
         print(f"Error broadcasting action_update for {action_id}: {err}")
 
-    # Wake up any waiting execution thread
+    # Wake up the deploy thread waiting for this specific client connection
     with _PACKAGE_RESULT_LOCK:
-        waiter = _PACKAGE_RESULT_NOTIFIERS.get(action_id)
+        waiter = _PACKAGE_RESULT_NOTIFIERS.get(_package_result_waiter_key(action_id, mac))
         if waiter:
             try:
                 waiter.put_nowait(message)

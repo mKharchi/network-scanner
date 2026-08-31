@@ -56,20 +56,15 @@ class PackageDeploymentE2ETests(unittest.TestCase):
         self.orig_staging_dir = client_lib.PACKAGE_STAGING_DIR
         self.orig_current_dir = client_lib.PACKAGE_CURRENT_DIR
 
-        client_lib.PACKAGE_INCOMING_DIR = self.client_incoming_dir
-        client_lib.PACKAGE_STAGING_DIR = self.client_staging_dir
-        client_lib.PACKAGE_CURRENT_DIR = self.client_current_dir
-        client_lib.ACTIVE_PACKAGE_SESSIONS.clear()
+        client_lib.configure_package_paths(
+            incoming=self.client_incoming_dir,
+            staging=self.client_staging_dir,
+            current=self.client_current_dir,
+        )
 
     def tearDown(self):
-        client_lib.PACKAGE_INCOMING_DIR = self.orig_incoming_dir
-        client_lib.PACKAGE_STAGING_DIR = self.orig_staging_dir
-        client_lib.PACKAGE_CURRENT_DIR = self.orig_current_dir
+        client_lib.reset_all_package_states()
 
-        for session in list(client_lib.ACTIVE_PACKAGE_SESSIONS.values()):
-            if session.get("file_handle") and not session["file_handle"].closed:
-                session["file_handle"].close()
-        client_lib.ACTIVE_PACKAGE_SESSIONS.clear()
         shutil.rmtree(self.test_dir, ignore_errors=True)
 
     def _setup_connected_pair(self):
@@ -106,6 +101,11 @@ class PackageDeploymentE2ETests(unittest.TestCase):
 
         # Client receive worker
         def client_reader():
+            client_lib.configure_package_paths(
+                incoming=self.client_incoming_dir,
+                staging=self.client_staging_dir,
+                current=self.client_current_dir,
+            )
             while not stop_event.is_set():
                 try:
                     msg = client_lib.receive_message(client_sock, stop_event=stop_event, poll_interval=0.1)
@@ -156,6 +156,86 @@ class PackageDeploymentE2ETests(unittest.TestCase):
             pass
         with server_lib.clients_lock:
             server_lib.clients.pop(env["mac"], None)
+
+    def _spawn_client_with_dirs(self, label: str):
+        """Create an isolated connected client with its own package staging directories."""
+        client_dir = self.test_dir / label
+        incoming = client_dir / "incoming"
+        staging = client_dir / "staging"
+        current = client_dir / "current"
+
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)
+
+        client_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client_sock.connect(("127.0.0.1", listener.getsockname()[1]))
+        server_conn, _ = listener.accept()
+        listener.close()
+
+        client_id = f"{label}-{int(time.time() * 1000)}"
+        if not hasattr(self, "_client_spawn_counter"):
+            self._client_spawn_counter = 0
+        self._client_spawn_counter += 1
+        mac = f"DD:EE:FF:00:00:{self._client_spawn_counter:02X}"
+        stop_event = threading.Event()
+        client_send_lock = threading.Lock()
+
+        with server_lib.clients_lock:
+            server_lib.clients[mac] = {
+                "client_id": client_id,
+                "mac": mac,
+                "hostname": label,
+                "connection": server_conn,
+                "send_lock": threading.Lock(),
+                "responses": queue.Queue(),
+                "registered_at": time.time(),
+            }
+
+        def client_reader():
+            client_lib.configure_package_paths(incoming=incoming, staging=staging, current=current)
+            try:
+                while not stop_event.is_set():
+                    try:
+                        msg = client_lib.receive_message(client_sock, stop_event=stop_event, poll_interval=0.05)
+                        if msg is None:
+                            break
+                        mtype = msg.get("type")
+                        if mtype == "COMMAND":
+                            cmd = msg.get("command")
+                            result = client_lib.handle_command(msg)
+                            with client_send_lock:
+                                client_lib.send_message(
+                                    client_sock,
+                                    {"type": "RESPONSE", "command": cmd, "data": result},
+                                )
+                        elif mtype == "PACKAGE_CHUNK":
+                            chunk_res = client_lib.process_package_chunk(msg)
+                            if chunk_res:
+                                with client_send_lock:
+                                    client_lib.send_message(client_sock, chunk_res)
+                    except Exception:
+                        break
+            finally:
+                pass
+
+        client_thread = threading.Thread(target=client_reader, daemon=True)
+        server_thread = threading.Thread(
+            target=server_lib.receive_client_messages,
+            args=(mac, server_conn),
+            daemon=True,
+        )
+        client_thread.start()
+        server_thread.start()
+
+        return {
+            "client_id": client_id,
+            "mac": mac,
+            "client_sock": client_sock,
+            "server_conn": server_conn,
+            "stop_event": stop_event,
+            "current_dir": current,
+        }
 
     @patch("server_components.action_service.get_connection")
     def test_e2e_small_package_deployment(self, mock_get_conn):
@@ -334,12 +414,11 @@ class PackageDeploymentE2ETests(unittest.TestCase):
 
                 def _make_reader(sock, stop_ev, send_lock, incoming_dir, staging_dir, current_dir):
                     def _client_reader():
-                        orig_in = client_lib.PACKAGE_INCOMING_DIR
-                        orig_st = client_lib.PACKAGE_STAGING_DIR
-                        orig_cu = client_lib.PACKAGE_CURRENT_DIR
-                        client_lib.PACKAGE_INCOMING_DIR = incoming_dir
-                        client_lib.PACKAGE_STAGING_DIR = staging_dir
-                        client_lib.PACKAGE_CURRENT_DIR = current_dir
+                        client_lib.configure_package_paths(
+                            incoming=incoming_dir,
+                            staging=staging_dir,
+                            current=current_dir,
+                        )
                         try:
                             while not stop_ev.is_set():
                                 try:
@@ -360,9 +439,7 @@ class PackageDeploymentE2ETests(unittest.TestCase):
                                 except Exception:
                                     break
                         finally:
-                            client_lib.PACKAGE_INCOMING_DIR = orig_in
-                            client_lib.PACKAGE_STAGING_DIR = orig_st
-                            client_lib.PACKAGE_CURRENT_DIR = orig_cu
+                            pass
                     return _client_reader
 
                 client_thread = threading.Thread(
@@ -475,8 +552,7 @@ class PackageDeploymentE2ETests(unittest.TestCase):
 
                 def _make_reader(sock, stop_ev, send_lock, inc, stg, cur, drop):
                     def _client_reader():
-                        orig_in, orig_st, orig_cu = client_lib.PACKAGE_INCOMING_DIR, client_lib.PACKAGE_STAGING_DIR, client_lib.PACKAGE_CURRENT_DIR
-                        client_lib.PACKAGE_INCOMING_DIR, client_lib.PACKAGE_STAGING_DIR, client_lib.PACKAGE_CURRENT_DIR = inc, stg, cur
+                        client_lib.configure_package_paths(incoming=inc, staging=stg, current=cur)
                         first_chunk_seen = [False]
                         try:
                             while not stop_ev.is_set():
@@ -502,7 +578,7 @@ class PackageDeploymentE2ETests(unittest.TestCase):
                                 except Exception:
                                     break
                         finally:
-                            client_lib.PACKAGE_INCOMING_DIR, client_lib.PACKAGE_STAGING_DIR, client_lib.PACKAGE_CURRENT_DIR = orig_in, orig_st, orig_cu
+                            pass
                     return _client_reader
 
                 client_thread = threading.Thread(target=_make_reader(client_sock, stop_event, client_send_lock, incoming, staging, current, should_drop), daemon=True)
@@ -544,6 +620,67 @@ class PackageDeploymentE2ETests(unittest.TestCase):
             for mac in macs_used:
                 with server_lib.clients_lock:
                     server_lib.clients.pop(mac, None)
+
+    @patch("server_components.action_service.get_connection")
+    def test_e2e_unrelated_client_stays_responsive_during_bulk_deploy(self, mock_get_conn):
+        """Bulk deploy must not block command handling for clients not in the action."""
+        mock_get_conn.return_value = MagicMock()
+        deploy_envs = []
+        control_env = None
+        try:
+            control_env = self._spawn_client_with_dirs("control")
+            zip_bytes = _create_test_zip(b"x" * 65536, inner_filename="bulk.txt")
+
+            for index in range(3):
+                deploy_envs.append(self._spawn_client_with_dirs(f"deploy-{index}"))
+
+            deploy_result = [None]
+            deploy_done = threading.Event()
+
+            def _run_deploy():
+                deploy_result[0] = action_service.execute_action(
+                    {
+                        "action_id": "act-bulk-heartbeat",
+                        "action_type": ActionType.DEPLOY_PACKAGE.value,
+                        "targets": [env["client_id"] for env in deploy_envs],
+                        "parameters": {
+                            "package_id": "pkg-bulk",
+                            "package_bytes": zip_bytes,
+                            "chunk_size": 512,
+                            "timeout": 30.0,
+                        },
+                    }
+                )
+                deploy_done.set()
+
+            deploy_thread = threading.Thread(target=_run_deploy, daemon=True)
+            deploy_thread.start()
+            time.sleep(0.1)
+
+            start = time.monotonic()
+            ping_res = server_lib.execute_client_command(
+                control_env["client_id"],
+                "PING",
+                {"command_id": "ping-during-deploy"},
+                timeout=2.0,
+            )
+            ping_elapsed = time.monotonic() - start
+
+            self.assertLess(
+                ping_elapsed,
+                1.5,
+                f"Unrelated client PING took {ping_elapsed:.3f}s during bulk deploy",
+            )
+            self.assertEqual(ping_res.get("status"), "ok")
+
+            deploy_done.wait(timeout=30)
+            self.assertTrue(deploy_done.is_set(), "Bulk deploy did not finish in time")
+            self.assertEqual(deploy_result[0]["status"], ActionState.SUCCESS.value)
+            for env in deploy_envs:
+                self.assertTrue((env["current_dir"] / "bulk.txt").exists())
+        finally:
+            for env in deploy_envs + ([control_env] if control_env else []):
+                self._cleanup_pair(env)
 
 
 if __name__ == "__main__":

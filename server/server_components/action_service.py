@@ -26,6 +26,7 @@ from server_components.action_framework import (
     ActionType,
     LEGACY_SCREENSHOT_COMMAND,
     normalize_action_name,
+    summarize_action_progress,
 )
 from server_components.client_health import record_client_health
 
@@ -173,6 +174,7 @@ def deploy_package_to_client(
     if not client:
         return {"status": "error", "message": f"Client '{client_id}' is not connected."}
     conn = client["connection"]
+    mac = client.get("mac") or ""
 
     # Step 1: Send DEPLOY_PACKAGE_INIT command
     init_args = {
@@ -225,7 +227,7 @@ def deploy_package_to_client(
         pass
 
     # Step 2: Stream PACKAGE_CHUNK frames
-    result_queue = server_lib.register_package_result_waiter(action_id)
+    result_queue = server_lib.register_package_result_waiter(action_id, mac)
     try:
         for seq in range(1, total_chunks + 1):
             start_idx = (seq - 1) * chunk_size
@@ -274,7 +276,7 @@ def deploy_package_to_client(
     except (ConnectionResetError, BrokenPipeError, OSError) as exc:
         return {"status": "error", "message": f"Client connection lost during transfer: {exc}"}
     finally:
-        server_lib.unregister_package_result_waiter(action_id)
+        server_lib.unregister_package_result_waiter(action_id, mac)
 
 
 def execute_action(action: Dict[str, Any]) -> Dict[str, Any]:
@@ -443,6 +445,7 @@ def get_action(action_id: str) -> Optional[Dict[str, Any]]:
             (action_id,),
         )
         action["targets"] = [_row_to_target(item) for item in cursor.fetchall()]
+        action["progress"] = summarize_action_progress(action["targets"])
         return action
     finally:
         cursor.close()

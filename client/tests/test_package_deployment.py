@@ -30,24 +30,18 @@ def _make_zip(files_dict: dict) -> bytes:
 class ClientPackageDeploymentTests(unittest.TestCase):
     def setUp(self):
         self.test_dir = Path(tempfile.mkdtemp(prefix="test_client_pkg_"))
-        self.orig_incoming_dir = client_lib.PACKAGE_INCOMING_DIR
-        self.orig_staging_dir = client_lib.PACKAGE_STAGING_DIR
-        self.orig_current_dir = client_lib.PACKAGE_CURRENT_DIR
+        self.incoming_dir = self.test_dir / "updates" / "incoming"
+        self.staging_dir = self.test_dir / "updates" / "staging"
+        self.current_dir = self.test_dir / "updates" / "current"
 
-        client_lib.PACKAGE_INCOMING_DIR = self.test_dir / "updates" / "incoming"
-        client_lib.PACKAGE_STAGING_DIR = self.test_dir / "updates" / "staging"
-        client_lib.PACKAGE_CURRENT_DIR = self.test_dir / "updates" / "current"
-        client_lib.ACTIVE_PACKAGE_SESSIONS.clear()
+        client_lib.configure_package_paths(
+            incoming=self.incoming_dir,
+            staging=self.staging_dir,
+            current=self.current_dir,
+        )
 
     def tearDown(self):
-        client_lib.PACKAGE_INCOMING_DIR = self.orig_incoming_dir
-        client_lib.PACKAGE_STAGING_DIR = self.orig_staging_dir
-        client_lib.PACKAGE_CURRENT_DIR = self.orig_current_dir
-
-        for session in list(client_lib.ACTIVE_PACKAGE_SESSIONS.values()):
-            if session.get("file_handle") and not session["file_handle"].closed:
-                session["file_handle"].close()
-        client_lib.ACTIVE_PACKAGE_SESSIONS.clear()
+        client_lib.reset_all_package_states()
         shutil.rmtree(self.test_dir, ignore_errors=True)
 
     def test_deploy_package_init_creates_staging_dir_and_part_file(self):
@@ -68,7 +62,7 @@ class ClientPackageDeploymentTests(unittest.TestCase):
         self.assertEqual(res.get("package_id"), "pkg-v1")
         self.assertIn("act-101", client_lib.ACTIVE_PACKAGE_SESSIONS)
 
-        part_file = client_lib.PACKAGE_INCOMING_DIR / "pkg-v1.zip.part"
+        part_file = self.incoming_dir / "pkg-v1.zip.part"
         self.assertTrue(part_file.exists())
 
     def test_chunk_streaming_sha256_match_and_safe_extraction_success(self):
@@ -113,14 +107,14 @@ class ClientPackageDeploymentTests(unittest.TestCase):
                 self.assertEqual(res.get("sha256"), expected_hash)
 
         # Confirm incoming zip landed
-        final_zip = client_lib.PACKAGE_INCOMING_DIR / "pkg-success.zip"
-        part_file = client_lib.PACKAGE_INCOMING_DIR / "pkg-success.zip.part"
+        final_zip = self.incoming_dir / "pkg-success.zip"
+        part_file = self.incoming_dir / "pkg-success.zip.part"
         self.assertTrue(final_zip.exists())
         self.assertFalse(part_file.exists())
         self.assertEqual(final_zip.read_bytes(), payload)
 
         # Confirm files landed in current deployed directory via atomic swap
-        current_dir = client_lib.PACKAGE_CURRENT_DIR
+        current_dir = self.current_dir
         self.assertTrue(current_dir.exists())
         self.assertTrue((current_dir / "app.py").exists())
         self.assertEqual((current_dir / "app.py").read_text(), "print('Hello from deployed package!')")
@@ -164,7 +158,7 @@ class ClientPackageDeploymentTests(unittest.TestCase):
         # Verify nothing escaped and no evil.txt was created anywhere
         self.assertFalse((self.test_dir / "evil.txt").exists())
         self.assertFalse((self.test_dir.parent / "evil.txt").exists())
-        self.assertFalse(client_lib.PACKAGE_CURRENT_DIR.exists())
+        self.assertFalse(self.current_dir.exists())
 
     def test_safe_extract_rejects_uncompressed_size_zip_bomb(self):
         # Create a small archive claiming 200MB uncompressed, test against 10MB limit
@@ -208,7 +202,7 @@ class ClientPackageDeploymentTests(unittest.TestCase):
             "data": base64.b64encode(good_payload).decode("ascii"),
         })
         self.assertEqual(res_good.get("status"), "SUCCESS")
-        self.assertEqual((client_lib.PACKAGE_CURRENT_DIR / "version.txt").read_text(), "version 1.0")
+        self.assertEqual((self.current_dir / "version.txt").read_text(), "version 1.0")
 
         # Now deploy bad package v2 with zip slip
         bad_payload = _make_zip({
@@ -239,9 +233,9 @@ class ClientPackageDeploymentTests(unittest.TestCase):
         self.assertEqual(res_bad.get("status"), "FAILED")
 
         # Confirm the previous good deployment v1 is completely UNTOUCHED
-        self.assertTrue(client_lib.PACKAGE_CURRENT_DIR.exists())
-        self.assertEqual((client_lib.PACKAGE_CURRENT_DIR / "version.txt").read_text(), "version 1.0")
-        self.assertFalse((client_lib.PACKAGE_CURRENT_DIR / "escape.txt").exists())
+        self.assertTrue(self.current_dir.exists())
+        self.assertEqual((self.current_dir / "version.txt").read_text(), "version 1.0")
+        self.assertFalse((self.current_dir / "escape.txt").exists())
 
     def test_atomic_swap_directory_replaces_old_directory(self):
         target_dir = self.test_dir / "target_app"
