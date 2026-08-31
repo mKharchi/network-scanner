@@ -33,6 +33,7 @@ from server_components.action_framework import ActionState, ActionType, get_supp
 
 API_HOST = os.getenv("API_HOST", "0.0.0.0")
 API_PORT = int(os.getenv("API_PORT", "8080"))
+LONG_RUNNING_ACTION_TYPES = {ActionType.DEPLOY_PACKAGE.value}
 
 
 class DecimalJSONEncoder(json.JSONEncoder):
@@ -723,7 +724,16 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     )
                     # Replaying an existing action is idempotent and must not dispatch it again.
                     if action.get("status") == ActionState.PENDING.value:
-                        action = action_service.execute_action(action)
+                        normalized_type = action.get("action_type")
+                        if normalized_type in LONG_RUNNING_ACTION_TYPES:
+                            threading.Thread(
+                                target=action_service.execute_action,
+                                args=(action,),
+                                daemon=True,
+                                name=f"action-{action.get('action_id')}",
+                            ).start()
+                        else:
+                            action = action_service.execute_action(action)
                 except ValueError as exc:
                     self.send_error_response(400, "INVALID_ACTION", str(exc))
                     return
