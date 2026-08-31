@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
-import json
-import uuid
+import base64
 from datetime import datetime, timezone
+import hashlib
+import json
+import math
+from pathlib import Path
+import queue
 from typing import Any, Dict, List, Optional
+import uuid
 
 from database import get_connection
 from server_components import server_lib
@@ -121,12 +126,171 @@ def _transport_command(action_type: str) -> str:
     return action_type
 
 
+def deploy_package_to_client(
+    client_id: str,
+    action_id: str,
+    parameters: Any = None,
+) -> Dict[str, Any]:
+    """Stream a deployment package zip to a target client in chunks and verify."""
+    params = parameters if isinstance(parameters, dict) else {}
+
+    raw_bytes = None
+    if "package_bytes" in params and isinstance(params["package_bytes"], (bytes, bytearray)):
+        raw_bytes = bytes(params["package_bytes"])
+    elif "package_data_base64" in params and isinstance(params["package_data_base64"], str):
+        try:
+            raw_bytes = base64.b64decode(params["package_data_base64"], validate=True)
+        except Exception as exc:
+            return {"status": "error", "message": f"Invalid base64 package data: {exc}"}
+    elif "package_path" in params and isinstance(params["package_path"], str):
+        pkg_path = Path(params["package_path"])
+        if not pkg_path.is_file():
+            return {"status": "error", "message": f"Package file not found: {pkg_path}"}
+        try:
+            raw_bytes = pkg_path.read_bytes()
+        except OSError as exc:
+            return {"status": "error", "message": f"Could not read package file: {exc}"}
+    else:
+        return {
+            "status": "error",
+            "message": "No package payload provided (must supply package_path, package_data_base64, or package_bytes).",
+        }
+
+    sha256 = hashlib.sha256(raw_bytes).hexdigest().lower()
+    total_size = len(raw_bytes)
+    chunk_size = max(1, int(params.get("chunk_size", 131072)))
+    total_chunks = max(1, math.ceil(total_size / chunk_size)) if total_size > 0 else 1
+    package_id = str(params.get("package_id") or action_id or "update-package").strip()
+
+    client = server_lib.get_client(client_id)
+    if not client:
+        return {"status": "error", "message": f"Client '{client_id}' is not connected."}
+    conn = client["connection"]
+
+    # Step 1: Send DEPLOY_PACKAGE_INIT command
+    init_args = {
+        "action_id": action_id,
+        "package_id": package_id,
+        "sha256": sha256,
+        "total_size": total_size,
+        "chunk_size": chunk_size,
+        "total_chunks": total_chunks,
+    }
+    init_res = server_lib.execute_client_command(
+        client_id,
+        "DEPLOY_PACKAGE_INIT",
+        init_args,
+        timeout=15.0,
+    )
+    if init_res.get("status") != "ok":
+        return {
+            "status": "error",
+            "message": f"Client init failed: {init_res.get('message')}",
+        }
+
+    init_data = init_res.get("data")
+    if not isinstance(init_data, dict) or init_data.get("status") != "ready":
+        err_msg = (
+            init_data.get("message")
+            if isinstance(init_data, dict)
+            else "Client returned invalid init response."
+        )
+        return {"status": "error", "message": f"Client not ready: {err_msg}"}
+
+    # Mark target as RUNNING in database
+    try:
+        db_conn = get_connection()
+        if db_conn:
+            db_cur = db_conn.cursor()
+            db_cur.execute(
+                """UPDATE action_targets at
+                   JOIN actions a ON a.id = at.action_id
+                   JOIN clients c ON c.id = at.client_id
+                   SET at.status = %s, at.started_at = %s
+                   WHERE a.action_id = %s AND c.client_id = %s""",
+                (ActionState.RUNNING.value, _now(), action_id, client_id),
+            )
+            db_conn.commit()
+            db_cur.close()
+            if db_conn.is_connected():
+                db_conn.close()
+    except Exception:
+        pass
+
+    # Step 2: Stream PACKAGE_CHUNK frames
+    result_queue = server_lib.register_package_result_waiter(action_id)
+    try:
+        for seq in range(1, total_chunks + 1):
+            start_idx = (seq - 1) * chunk_size
+            end_idx = min(total_size, seq * chunk_size)
+            chunk_raw = raw_bytes[start_idx:end_idx]
+            chunk_b64 = base64.b64encode(chunk_raw).decode("ascii")
+
+            frame = {
+                "type": "PACKAGE_CHUNK",
+                "action_id": action_id,
+                "package_id": package_id,
+                "seq": seq,
+                "total_chunks": total_chunks,
+                "data": chunk_b64,
+            }
+
+            with client["send_lock"]:
+                server_lib.send_message(conn, frame)
+
+        # Step 3: Wait for PACKAGE_RESULT with watchdog timeout
+        timeout = float(params.get("timeout", 60.0))
+        try:
+            result_msg = result_queue.get(timeout=timeout)
+        except queue.Empty:
+            return {
+                "status": "error",
+                "message": f"Package deployment timed out after {timeout}s waiting for verification result.",
+            }
+
+        if result_msg.get("status") == "SUCCESS":
+            return {
+                "status": "ok",
+                "package_id": package_id,
+                "sha256": result_msg.get("sha256"),
+                "file_path": result_msg.get("file_path"),
+                "total_bytes": result_msg.get("total_bytes", total_size),
+                "message": "Package deployed and verified successfully.",
+            }
+        else:
+            return {
+                "status": "error",
+                "package_id": package_id,
+                "sha256": result_msg.get("sha256"),
+                "message": result_msg.get("error", "Package deployment failed on client."),
+            }
+    except (ConnectionResetError, BrokenPipeError, OSError) as exc:
+        return {"status": "error", "message": f"Client connection lost during transfer: {exc}"}
+    finally:
+        server_lib.unregister_package_result_waiter(action_id)
+
+
 def execute_action(action: Dict[str, Any]) -> Dict[str, Any]:
     action_id = action["action_id"]
     action_type = action["action_type"]
     parameters = action.get("parameters") or {}
     targets = action.get("targets") or []
     target_results = []
+
+    # Step B.1.1: Set RUNNING at the start of execute_action before dispatching to any target
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "UPDATE actions SET status = %s, started_at = %s WHERE action_id = %s",
+            (ActionState.RUNNING.value, _now(), action_id),
+        )
+        conn.commit()
+    finally:
+        cursor.close()
+        conn.close()
+    action["status"] = ActionState.RUNNING.value
+    action["started_at"] = _now().isoformat()
 
     for client_id in targets:
         if action_type == ActionType.SCREENSHOT.value:
@@ -144,6 +308,9 @@ def execute_action(action: Dict[str, Any]) -> Dict[str, Any]:
                 client_id,
                 reason=reason or "Administrator requested device isolation",
             )
+            ok = result.get("status") == "ok"
+        elif action_type == ActionType.DEPLOY_PACKAGE.value:
+            result = deploy_package_to_client(client_id, action_id, parameters)
             ok = result.get("status") == "ok"
         elif action_type in {
             ActionType.SHUTDOWN.value,
@@ -197,8 +364,8 @@ def execute_action(action: Dict[str, Any]) -> Dict[str, Any]:
     cursor = conn.cursor()
     try:
         cursor.execute(
-            "UPDATE actions SET status = %s, started_at = %s, completed_at = %s, result = %s WHERE action_id = %s",
-            (status, _now(), _now(), _json({"targets": target_results}), action_id),
+            "UPDATE actions SET status = %s, completed_at = %s, result = %s WHERE action_id = %s",
+            (status, _now(), _json({"targets": target_results}), action_id),
         )
         for item in target_results:
             cursor.execute(

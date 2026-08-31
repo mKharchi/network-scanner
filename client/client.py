@@ -8,6 +8,7 @@ from pathlib import Path
 from client_lib import (
     create_registration_message,
     handle_command,
+    process_package_chunk,
     receive_message,
     send_message,
     get_activity_log,
@@ -953,6 +954,13 @@ def start_client(stop_event=None, *, agent_role="service"):
                             print(
                                 f"[PASSIVE LISTENER] Could not start listener: {error}"
                             )
+                        continue
+
+                    if msg_type == "PACKAGE_CHUNK":
+                        chunk_result = process_package_chunk(message)
+                        if chunk_result:
+                            with socket_lock:
+                                send_message(client, chunk_result)
                         continue
 
                     if msg_type != "COMMAND":

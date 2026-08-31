@@ -723,6 +723,37 @@ class ApiEndpointsTestCase(unittest.TestCase):
         create_action.assert_called_once()
         execute_action.assert_called_once()
 
+    @patch("server_components.action_service.get_action", return_value=None)
+    @patch("server_components.action_service.create_action")
+    @patch("server_components.action_service.execute_action")
+    def test_post_deploy_package_action_is_asynchronous(self, execute_action, create_action, get_action):
+        create_action.return_value = {
+            "action_id": "pkg-action-1",
+            "action_type": "DEPLOY_PACKAGE",
+            "status": "PENDING",
+            "targets": ["client-a"],
+            "parameters": {"package_id": "v1"},
+        }
+        payload = json.dumps({
+            "action_type": "DEPLOY_PACKAGE",
+            "targets": ["client-a"],
+            "action_id": "pkg-action-1",
+            "parameters": {"package_id": "v1"},
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            f"{self.base_url}/api/actions",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req) as resp:
+            self.assertEqual(resp.status, 201)
+            body = json.loads(resp.read().decode("utf-8"))
+        # Immediately returns HTTP 201 with status PENDING
+        self.assertEqual(body["data"]["status"], "PENDING")
+        self.assertEqual(body["data"]["action_type"], "DEPLOY_PACKAGE")
+        create_action.assert_called_once()
+
     @patch("server_components.action_service.get_action")
     def test_replaying_unified_action_is_idempotent(self, get_action):
         get_action.return_value = {

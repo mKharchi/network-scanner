@@ -41,6 +41,7 @@ class ActionType(str, Enum):
     SCAN_NETWORK = "SCAN_NETWORK"
     TRIGGER_ARP_SCAN = "TRIGGER_ARP_SCAN"
     FLUSH_NEIGHBOURHOOD_STORAGE = "FLUSH_NEIGHBOURHOOD_STORAGE"
+    DEPLOY_PACKAGE = "DEPLOY_PACKAGE"
 
 
 class ActionState(str, Enum):
@@ -81,6 +82,7 @@ _SUPPORTED_COMMANDS = (
     {"command": ActionType.GET_PASSIVE_NEIGHBOURHOOD.value, "label": "Passive neighbourhood"},
     {"command": ActionType.ISOLATE_DEVICE.value, "label": "Isolate device"},
     {"command": ActionType.DISCONNECT.value, "label": "Disconnect client"},
+    {"command": ActionType.DEPLOY_PACKAGE.value, "label": "Deploy package"},
 )
 
 
