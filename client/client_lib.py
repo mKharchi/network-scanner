@@ -14,6 +14,7 @@ import subprocess
 import tempfile
 import threading
 import uuid
+import zipfile
 from datetime import datetime, timedelta
 
 import psutil
@@ -1031,8 +1032,61 @@ def _handle_flush_neighbourhood_storage(_message, **_context):
 
 
 PACKAGE_INCOMING_DIR = Path(__file__).resolve().parent / "updates" / "incoming"
+PACKAGE_STAGING_DIR = Path(__file__).resolve().parent / "updates" / "staging"
+PACKAGE_CURRENT_DIR = Path(__file__).resolve().parent / "updates" / "current"
+DEFAULT_MAX_UNCOMPRESSED_BYTES = 500 * 1024 * 1024  # 500 MB
 ACTIVE_PACKAGE_SESSIONS = {}
 _PACKAGE_SESSION_LOCK = threading.Lock()
+
+
+def safe_extract(
+    zip_path: Path | str,
+    dest_dir: Path | str,
+    max_uncompressed_bytes: int = DEFAULT_MAX_UNCOMPRESSED_BYTES,
+) -> None:
+    """Safely extract a zip archive after validating size limits and zip-slip path traversals."""
+    dest_dir_str = os.path.realpath(str(dest_dir))
+    with zipfile.ZipFile(str(zip_path), "r") as zf:
+        total_uncompressed = sum(info.file_size for info in zf.infolist())
+        if total_uncompressed > max_uncompressed_bytes:
+            raise ValueError(
+                f"archive too large: {total_uncompressed} bytes uncompressed exceeds limit of {max_uncompressed_bytes} bytes"
+            )
+        for info in zf.infolist():
+            target_path = os.path.realpath(os.path.join(dest_dir_str, info.filename))
+            if not (
+                target_path == dest_dir_str
+                or target_path.startswith(dest_dir_str + os.sep)
+            ):
+                raise ValueError(f"unsafe path in archive: {info.filename}")
+        # Every entry validated -- now actually extract
+        os.makedirs(dest_dir_str, exist_ok=True)
+        zf.extractall(dest_dir_str)
+
+
+def atomic_swap_directory(source_dir: Path | str, target_dir: Path | str) -> None:
+    """Atomically swap source_dir into target_dir on the same filesystem."""
+    src = Path(source_dir).resolve()
+    dst = Path(target_dir).resolve()
+    dst.parent.mkdir(parents=True, exist_ok=True)
+
+    if not dst.exists():
+        os.replace(str(src), str(dst))
+        return
+
+    # If destination exists, move it aside, replace with new source, then clean up old
+    backup = dst.with_name(f"{dst.name}_old_{uuid.uuid4().hex[:8]}")
+    os.replace(str(dst), str(backup))
+    try:
+        os.replace(str(src), str(dst))
+        shutil.rmtree(str(backup), ignore_errors=True)
+    except Exception:
+        # Rollback if replacing with new directory failed
+        try:
+            os.replace(str(backup), str(dst))
+        except Exception:
+            pass
+        raise
 
 
 def _handle_deploy_package_init(message, **_context):
@@ -1104,7 +1158,7 @@ def _handle_deploy_package_init(message, **_context):
 
 
 def process_package_chunk(message):
-    """Process an incoming PACKAGE_CHUNK frame and write directly to disk."""
+    """Process an incoming PACKAGE_CHUNK frame, write directly to disk, and extract safely."""
     if not isinstance(message, dict):
         return {"type": "PACKAGE_RESULT", "status": "FAILED", "error": "Invalid message format"}
 
@@ -1142,16 +1196,36 @@ def process_package_chunk(message):
 
                 computed_hash = session["hasher"].hexdigest().lower()
                 if computed_hash == expected_hash:
+                    # 1. Atomic rename .part -> .zip
                     os.replace(part_path, final_path)
-                    return {
-                        "type": "PACKAGE_RESULT",
-                        "action_id": action_id,
-                        "package_id": package_id,
-                        "status": "SUCCESS",
-                        "sha256": computed_hash,
-                        "file_path": str(final_path),
-                        "total_bytes": session["bytes_written"],
-                    }
+
+                    # 2. Extract into staging subdirectory
+                    staging_extract_dir = PACKAGE_STAGING_DIR / f"{package_id}_{uuid.uuid4().hex[:8]}"
+                    shutil.rmtree(staging_extract_dir, ignore_errors=True)
+                    staging_extract_dir.mkdir(parents=True, exist_ok=True)
+                    try:
+                        safe_extract(final_path, staging_extract_dir)
+                        atomic_swap_directory(staging_extract_dir, PACKAGE_CURRENT_DIR)
+                        return {
+                            "type": "PACKAGE_RESULT",
+                            "action_id": action_id,
+                            "package_id": package_id,
+                            "status": "SUCCESS",
+                            "sha256": computed_hash,
+                            "file_path": str(final_path),
+                            "extracted_path": str(PACKAGE_CURRENT_DIR),
+                            "total_bytes": session["bytes_written"],
+                        }
+                    except Exception as extract_error:
+                        shutil.rmtree(staging_extract_dir, ignore_errors=True)
+                        return {
+                            "type": "PACKAGE_RESULT",
+                            "action_id": action_id,
+                            "package_id": package_id,
+                            "status": "FAILED",
+                            "sha256": computed_hash,
+                            "error": f"safe extraction failed: {extract_error}",
+                        }
                 else:
                     try:
                         part_path.unlink(missing_ok=True)
