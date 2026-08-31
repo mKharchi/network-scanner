@@ -39,6 +39,7 @@ ENV/
 # Stored activity log files (preserve directory via .gitkeep)
 server/storage/logs/
 server/storage/network_scans/
+server/storage/packages/
 client/storage/network_neighborhood/
 
 *.db
