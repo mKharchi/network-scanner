@@ -30,6 +30,9 @@ from server_components.action_framework import (
 )
 from server_components.client_health import record_client_health
 
+# Maximum package payload accepted for DEPLOY_PACKAGE (raw zip bytes).
+DEPLOY_PACKAGE_MAX_BYTES = 4777 * 1024 * 1024
+
 
 def _now() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
@@ -134,6 +137,12 @@ def _transport_command(action_type: str) -> str:
     return action_type
 
 
+def _deploy_transfer_timeout_seconds(total_size: int, chunk_size: int) -> float:
+    """Scale watchdog timeout with package size (3s per chunk, minimum 5 minutes)."""
+    total_chunks = max(1, math.ceil(total_size / chunk_size)) if total_size > 0 else 1
+    return max(300.0, float(total_chunks) * 3.0)
+
+
 def deploy_package_to_client(
     client_id: str,
     action_id: str,
@@ -166,6 +175,14 @@ def deploy_package_to_client(
 
     sha256 = hashlib.sha256(raw_bytes).hexdigest().lower()
     total_size = len(raw_bytes)
+    if total_size > DEPLOY_PACKAGE_MAX_BYTES:
+        return {
+            "status": "error",
+            "message": (
+                f"Package too large: {total_size} bytes exceeds limit of "
+                f"{DEPLOY_PACKAGE_MAX_BYTES} bytes ({DEPLOY_PACKAGE_MAX_BYTES // (1024 * 1024)} MB)."
+            ),
+        }
     chunk_size = max(1, int(params.get("chunk_size", 131072)))
     total_chunks = max(1, math.ceil(total_size / chunk_size)) if total_size > 0 else 1
     package_id = str(params.get("package_id") or action_id or "update-package").strip()
@@ -248,7 +265,9 @@ def deploy_package_to_client(
                 server_lib.send_message(conn, frame)
 
         # Step 3: Wait for PACKAGE_RESULT with watchdog timeout
-        timeout = float(params.get("timeout", 60.0))
+        timeout = float(
+            params.get("timeout", _deploy_transfer_timeout_seconds(total_size, chunk_size))
+        )
         try:
             result_msg = result_queue.get(timeout=timeout)
         except queue.Empty:
