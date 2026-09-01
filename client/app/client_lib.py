@@ -1357,8 +1357,9 @@ def process_package_chunk(message):
                             "total_bytes": session["bytes_written"],
                         }
                         # Spawn the updater subprocess in the background
-                        # Get client_root from the final_path (which is updates/incoming)
-                        client_root = final_path.parent.parent.parent  # Go up from incoming -> updates -> client root
+                        # Get client_root from the final_path (which is storage/updates/incoming)
+                        # Navigate: pkg.zip -> incoming -> updates -> storage -> client
+                        client_root = final_path.parent.parent.parent.parent  # Go up 4 levels to client root
                         spawn_result = _spawn_updater_subprocess(final_path, client_root)
                         result["updater_spawn_status"] = spawn_result.get("status")
                         if spawn_result.get("status") == "ok":

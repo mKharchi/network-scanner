@@ -1,4 +1,4 @@
-import datetime
+from datetime import datetime, timezone
 import ipaddress
 import json
 import os
@@ -264,7 +264,7 @@ def get_working_hours_status(checked_at=None):
     and Sunday is 6. A schedule ending at a given time excludes that exact
     end boundary, so 18:00 is outside a 09:30–18:00 workday.
     """
-    checked_at = checked_at or datetime.datetime.now()
+    checked_at = checked_at or datetime.now()
     conn = None
     cursor = None
     try:
@@ -332,7 +332,7 @@ def create_alert(
         severity = "LOW"
 
     if detected_at is None:
-        detected_at = datetime.datetime.now()
+        detected_at = datetime.now()
 
     conn = None
     cursor = None
@@ -435,7 +435,7 @@ def create_alert(
 
 def create_connection_alert(client_info, registered_at=None):
     """Persist and display the appropriate server-side registration alert."""
-    registered_at = registered_at or datetime.datetime.now()
+    registered_at = registered_at or datetime.now()
     working_hours_status = get_working_hours_status(registered_at)
 
     if working_hours_status == WORKING_HOURS_OUTSIDE:
@@ -660,18 +660,18 @@ def _parse_alert_time(value, field_name, *, required=False):
     """Return a database-safe timestamp or raise ValueError."""
     if value is None:
         if required:
-            return datetime.datetime.now()
+            return datetime.now()
         return None
 
     if not isinstance(value, str):
         raise ValueError(f"{field_name} must be a timestamp string")
 
     try:
-        return datetime.datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+        return datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
     except ValueError:
         try:
-            parsed = datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
-            return parsed.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return parsed.astimezone(timezone.utc).replace(tzinfo=None)
         except ValueError as error:
             raise ValueError(
                 f"{field_name} must use YYYY-MM-DD HH:MM:SS or ISO-8601"
@@ -843,7 +843,7 @@ def handle_package_result(mac, message):
                    JOIN actions a ON a.id = at.action_id
                    JOIN clients c ON c.id = at.client_id
                    SET at.status = %s, at.completed_at = %s, at.result = %s, at.error = %s
-                   WHERE a.action_id = %s AND (c.client_id = %s OR c.mac_address = %s)""",
+                   WHERE a.action_id = %s AND c.client_id = %s""",
                 (
                     target_status,
                     datetime.now(timezone.utc).replace(tzinfo=None),
@@ -851,7 +851,6 @@ def handle_package_result(mac, message):
                     json.dumps(message, cls=DecimalJSONEncoder) if target_status == "FAILED" else None,
                     action_id,
                     client_id or "",
-                    mac,
                 ),
             )
             conn.commit()
@@ -1278,7 +1277,7 @@ def remove_client(mac, connection=None, *, agent_role="service"):
                 device_isolation_status[client["client_id"]] = {
                     **existing,
                     "status": "CONNECTION_LOST_AFTER_ISOLATION",
-                    "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
                 }
             check_token = None
             if not expected_disconnect:
@@ -2027,7 +2026,7 @@ def quarantine_client(client_id, reason="Administrator requested network quarant
                 "status": "QUARANTINED",
                 "reason": reason,
                 "command_id": cmd_id,
-                "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
             }
         print(
             f"[QUARANTINE] client_id={client_id} command_sent=true client_ack=true",
@@ -2090,7 +2089,7 @@ def isolate_client(
     if not client:
         return {"status": "error", "message": f"Client '{client_id}' is not connected."}
 
-    sent_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    sent_at = datetime.now(timezone.utc).isoformat()
     with clients_lock:
         current_client = clients.get(client["mac"])
         if current_client is not client:
@@ -2116,7 +2115,7 @@ def isolate_client(
             device_isolation_status[client_id] = {
                 **existing,
                 "status": "ACKNOWLEDGED",
-                "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
             }
         return {**result, "isolation_status": "ACKNOWLEDGED"}
 
@@ -2127,7 +2126,7 @@ def isolate_client(
             device_isolation_status[client_id] = {
                 **existing,
                 "status": "CONNECTION_LOST_AFTER_ISOLATION",
-                "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
             }
         return {
             "status": "ok",
@@ -2146,7 +2145,7 @@ def isolate_client(
             **existing,
             "status": "FAILED",
             "message": message,
-            "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
         }
     return result
 
