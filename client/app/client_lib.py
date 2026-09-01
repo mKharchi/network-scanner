@@ -16,7 +16,7 @@ import threading
 import uuid
 import zipfile
 from datetime import datetime, timedelta
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import psutil
 
@@ -103,9 +103,39 @@ def get_client_version() -> str:
     try:
         with CLIENT_VERSION_PATH.open("r", encoding="utf-8") as version_file:
             value = json.load(version_file).get("version")
-        return str(value).strip() if value else DEFAULT_CLIENT_VERSION
-    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        return str(value or DEFAULT_CLIENT_VERSION)
+    except (OSError, ValueError, TypeError):
         return DEFAULT_CLIENT_VERSION
+
+
+def send_pending_update_results(connection) -> int:
+    """Report durable updater results after the client reconnects."""
+    results_dir = Path(__file__).resolve().parent.parent / "storage" / "updates" / "results"
+    if not results_dir.is_dir():
+        return 0
+
+    sent = 0
+    for result_path in sorted(results_dir.glob("*.json")):
+        try:
+            result = json.loads(result_path.read_text(encoding="utf-8"))
+            action_id = result.get("action_id") or result_path.stem
+            update_status = result.get("status")
+            message = {
+                "type": "PACKAGE_RESULT",
+                "action_id": action_id,
+                "status": "SUCCESS" if update_status == "COMPLETED" else "FAILED",
+                "update_status": update_status,
+                **result,
+            }
+            with socket_lock:
+                send_message(connection, message)
+            result_path.unlink()
+            sent += 1
+        except (OSError, ValueError, TypeError):
+            continue
+    return sent
+
+
 
 
 def get_system_info(ip_address=None):
@@ -1360,7 +1390,7 @@ def process_package_chunk(message):
                         # Get client_root from the final_path (which is storage/updates/incoming)
                         # Navigate: pkg.zip -> incoming -> updates -> storage -> client
                         client_root = final_path.parent.parent.parent.parent  # Go up 4 levels to client root
-                        spawn_result = _spawn_updater_subprocess(final_path, client_root)
+                        spawn_result = _spawn_updater_subprocess(final_path, client_root, action_id)
                         result["updater_spawn_status"] = spawn_result.get("status")
                         if spawn_result.get("status") == "ok":
                             result["updater_pid"] = spawn_result.get("updater_pid")
@@ -1442,6 +1472,7 @@ def process_package_chunk(message):
 def _spawn_updater_subprocess(
     staged_package_path: Path | str,
     client_root: Path | str,
+    action_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Spawn the updater as a subprocess to apply a staged package.
     
@@ -1473,7 +1504,13 @@ def _spawn_updater_subprocess(
         # We pass the staged package path and client_root as arguments.
         python_exe = sys.executable
         proc = subprocess.Popen(
-            [python_exe, str(updater_path), str(staged_path), str(client_root_path)],
+            [
+                python_exe,
+                str(updater_path),
+                str(staged_path),
+                str(client_root_path),
+                *( [str(action_id)] if action_id else [] ),
+            ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True,  # Detach from parent on Unix; on Windows this is ignored

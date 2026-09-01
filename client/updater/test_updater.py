@@ -3,8 +3,10 @@ import io
 import json
 from pathlib import Path
 import shutil
+import subprocess
 import tempfile
 import unittest
+from unittest import mock
 import zipfile
 
 from updater import updater
@@ -69,17 +71,41 @@ class UpdaterTests(unittest.TestCase):
 
     def test_dependency_failure_rolls_back(self):
         self.write_package(make_package({"version.json": b'{"version":"2.0.0"}', "requirements.txt": b"broken-package==999"}))
-        def fail_runner(*args, **kwargs):
-            raise __import__("subprocess").CalledProcessError(1, args[0])
+        venv_python = self.root / "venv" / "Scripts" / "python.exe"
+        venv_python.parent.mkdir(parents=True)
+        venv_python.write_bytes(b"fake python")
+        pip_commands = []
+
+        def fail_runner(command, **kwargs):
+            pip_commands.append(command)
+            raise subprocess.CalledProcessError(1, command)
+
         result = updater.apply_update(
             self.package,
             client_root=self.root,
             stop_client=lambda: None,
             runner=fail_runner,
         )
+        self.assertEqual(result["status"], "UPDATE_FAILED")
         self.assertEqual(result["reason"], "DEPENDENCY_INSTALL_FAILED")
         self.assertTrue(result["rolled_back"])
         self.assertTrue((self.app / "old.txt").exists())
+        self.assertEqual(json.loads((self.app / "version.json").read_text())["version"], "1.0.0")
+        self.assertEqual(len(pip_commands), 1)
+        self.assertIn("pip", pip_commands[0])
+
+    def test_missing_python_with_requirements_rolls_back(self):
+        self.write_package(make_package({"version.json": b'{"version":"2.0.0"}', "requirements.txt": b"broken-package==999"}))
+        with mock.patch.object(updater.sys, "executable", str(self.root / "missing-python.exe")):
+            result = updater.apply_update(
+                self.package,
+                client_root=self.root,
+                stop_client=lambda: None,
+            )
+        self.assertEqual(result["status"], "UPDATE_FAILED")
+        self.assertEqual(result["reason"], "DEPENDENCY_INSTALL_FAILED")
+        self.assertTrue(result["rolled_back"])
+        self.assertEqual(json.loads((self.app / "version.json").read_text())["version"], "1.0.0")
 
     def test_start_failure_rolls_back(self):
         self.write_package(make_package({"version.json": b'{"version":"2.0.0"}'}))
