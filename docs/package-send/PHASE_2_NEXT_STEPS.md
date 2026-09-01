@@ -64,6 +64,13 @@
 
 ## After Milestone F Passes
 
+### Environment Notes
+
+**Server Configuration (Windows):**
+- Server package storage: `server/storage/packages/`
+- Packages are uploaded and stored in this directory
+- Ensure directory exists and has read/write permissions for the server process
+
 ### Immediate Tasks (Milestone G)
 
 **Phase 1: Database Schema** (30 min)

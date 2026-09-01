@@ -5,6 +5,13 @@
 
 ---
 
+## Windows Server Notes
+- **Platform:** Windows
+- **Package Storage:** `server/storage/packages/` (absolute path: `C:\Users\merou\OneDrive\Desktop\network-scanner\server\storage\packages\`)
+- **Pre-test:** Verify directory exists and is writable (see WINDOWS_SERVER_SETUP_VERIFICATION.md)
+
+---
+
 ## 3-Step Testing (40 minutes)
 
 ### 1. Build Packages (5 min)
