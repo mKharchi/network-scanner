@@ -39,6 +39,14 @@ class ClientIdentityTests(unittest.TestCase):
         self.assertEqual(registration["type"], "REGISTER")
         get_info.assert_called_once_with("172.16.0.102")
 
+    def test_registration_includes_client_version_and_platform(self):
+        with patch.object(client_lib, "get_system_info", return_value={"ip": "172.16.0.102"}), \
+             patch.object(client_lib, "get_client_version", return_value="1.2.3"):
+            registration = client_lib.create_registration_message()
+
+        self.assertEqual(registration["data"]["client_version"], "1.2.3")
+        self.assertIn("platform", registration["data"])
+
     def test_registration_reports_cached_location(self):
         location = {"id": 4, "label": "F1-A1-T1-P1"}
         with patch.object(client_lib, "get_system_info", return_value={"ip": "172.16.0.102"}), \

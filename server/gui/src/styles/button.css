@@ -1,5 +1,5 @@
 /* ============================================================
-   Button Component — Deep Navy Intelligence Platform
+   Button Component — Light Intelligence Platform
    ============================================================ */
 
 .btn {
@@ -49,12 +49,12 @@
   transform: none;
 }
 
-/* Primary Accent */
+/* Primary CTA — Steel Blue */
 .btn--primary {
-  background: var(--accent-blue);
-  border-color: var(--accent-blue);
+  background: var(--steel-blue);
+  border-color: var(--steel-blue);
   color: var(--white);
-  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
+  box-shadow: var(--shadow);
 }
 .btn--primary:hover {
   background: var(--accent-blue-hover);
@@ -62,15 +62,15 @@
   box-shadow: 0 6px 20px rgba(37, 99, 235, 0.5);
 }
 
-/* Secondary Navy */
+/* Secondary — Midnight Navy */
 .btn--secondary {
-  background: var(--badge-solid);
-  border-color: var(--navy-border);
-  color: var(--white);
+  background: var(--midnight-navy);
+  border-color: var(--midnight-navy);
+  color: var(--frost-blue);
 }
 .btn--secondary:hover {
-  background: #3B5490;
-  border-color: rgba(255, 255, 255, 0.3);
+  background: #152238;
+  border-color: #152238;
 }
 
 /* Quiet / Ghost */
@@ -80,31 +80,31 @@
   color: var(--muted-text);
 }
 .btn--quiet:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--white);
+  background: var(--surface-card-subtle);
+  color: var(--text-primary);
 }
 
-/* Outline Pill */
+/* Outline */
 .btn--outline {
   background: transparent;
-  border-color: var(--navy-border);
-  color: var(--white);
+  border-color: var(--border);
+  color: var(--text-primary);
 }
 .btn--outline:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.3);
+  background: var(--surface-card-subtle);
+  border-color: var(--border-hover);
 }
 
 /* Danger */
 .btn--danger {
   background: var(--danger-bg);
   border-color: var(--danger-border);
-  color: #F87171;
+  color: var(--danger);
 }
 .btn--danger:hover {
-  background: rgba(239, 68, 68, 0.28);
-  border-color: #EF4444;
-  color: #FFFFFF;
+  background: rgba(220, 38, 38, 0.14);
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 /* Sizes */
@@ -126,7 +126,6 @@
   padding: 0;
   width: 40px;
   height: 40px;
-  border-radius: var(--radius-pill);
 }
 .btn--icon.btn--sm {
   width: 32px;

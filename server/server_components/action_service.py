@@ -29,9 +29,15 @@ from server_components.action_framework import (
     summarize_action_progress,
 )
 from server_components.client_health import record_client_health
+from server_components.package_service import (
+    MAX_PACKAGE_SIZE_BYTES,
+    calculate_sha256_file,
+    get_package,
+    get_package_path,
+)
 
-# Maximum package payload accepted for DEPLOY_PACKAGE (raw zip bytes).
-DEPLOY_PACKAGE_MAX_BYTES = 4777 * 1024 * 1024
+# Maximum package/file payload accepted by the shared chunk transport.
+DEPLOY_PACKAGE_MAX_BYTES = MAX_PACKAGE_SIZE_BYTES
 
 
 def _now() -> datetime:
@@ -47,6 +53,19 @@ def _json(value: Any) -> str:
     from api_server import DecimalJSONEncoder
 
     return json.dumps(value, ensure_ascii=False, cls=DecimalJSONEncoder)
+
+
+def _sanitize_action_parameters(action_type: str, parameters: Any) -> Any:
+    """Strip bulky package payloads before persisting action parameters in MySQL."""
+    if action_type not in {ActionType.DEPLOY_PACKAGE.value, ActionType.SEND_FILE.value}:
+        return parameters or {}
+    if not isinstance(parameters, dict):
+        return {}
+    sanitized = dict(parameters)
+    sanitized.pop("package_data_base64", None)
+    sanitized.pop("package_bytes", None)
+    sanitized.pop("package_path", None)
+    return sanitized
 
 
 def _row_to_action(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -105,7 +124,13 @@ def create_action(
             """INSERT INTO actions
                (action_id, action_type, requested_by, status, parameters)
                VALUES (%s, %s, %s, %s, %s)""",
-            (action_id, normalized, requested_by, ActionState.PENDING.value, _json(parameters or {})),
+            (
+                action_id,
+                normalized,
+                requested_by,
+                ActionState.PENDING.value,
+                _json(_sanitize_action_parameters(normalized, parameters)),
+            ),
         )
         action_pk = cursor.lastrowid
         for order, client_id in enumerate(dict.fromkeys(targets)):
@@ -118,12 +143,13 @@ def create_action(
                     (action_pk, client["id"], order),
                 )
         conn.commit()
+        stored_parameters = _sanitize_action_parameters(normalized, parameters)
         return {
             "action_id": action_id,
             "action_type": normalized,
             "requested_by": requested_by,
             "status": ActionState.PENDING.value,
-            "parameters": parameters or {},
+            "parameters": stored_parameters,
             "targets": list(dict.fromkeys(targets)),
         }
     finally:
@@ -143,49 +169,128 @@ def _deploy_transfer_timeout_seconds(total_size: int, chunk_size: int) -> float:
     return max(300.0, float(total_chunks) * 3.0)
 
 
-def deploy_package_to_client(
-    client_id: str,
-    action_id: str,
-    parameters: Any = None,
-) -> Dict[str, Any]:
-    """Stream a deployment package zip to a target client in chunks and verify."""
-    params = parameters if isinstance(parameters, dict) else {}
+def _resolve_package_source(params: Dict[str, Any]) -> Dict[str, Any]:
+    """Resolve package metadata and optional in-memory bytes for deployment."""
+    package_record = None
+    pkg_path: Optional[Path] = None
+    raw_bytes: Optional[bytes] = None
 
-    raw_bytes = None
     if "package_bytes" in params and isinstance(params["package_bytes"], (bytes, bytearray)):
         raw_bytes = bytes(params["package_bytes"])
     elif "package_data_base64" in params and isinstance(params["package_data_base64"], str):
         try:
             raw_bytes = base64.b64decode(params["package_data_base64"], validate=True)
         except Exception as exc:
-            return {"status": "error", "message": f"Invalid base64 package data: {exc}"}
+            return {
+                "error": {
+                    "status": "error",
+                    "message": f"Invalid base64 package data: {exc}",
+                }
+            }
     elif "package_path" in params and isinstance(params["package_path"], str):
         pkg_path = Path(params["package_path"])
         if not pkg_path.is_file():
-            return {"status": "error", "message": f"Package file not found: {pkg_path}"}
-        try:
-            raw_bytes = pkg_path.read_bytes()
-        except OSError as exc:
-            return {"status": "error", "message": f"Could not read package file: {exc}"}
+            return {
+                "error": {
+                    "status": "error",
+                    "message": f"Package file not found: {pkg_path}",
+                }
+            }
     else:
-        return {
-            "status": "error",
-            "message": "No package payload provided (must supply package_path, package_data_base64, or package_bytes).",
-        }
+        package_ref = str(params.get("package_id") or "").strip()
+        if not package_ref:
+            return {
+                "error": {
+                    "status": "error",
+                    "message": (
+                        "No package reference provided (must supply package_id, package_path, "
+                        "package_data_base64, or package_bytes)."
+                    ),
+                }
+            }
+        package_record = get_package(package_ref)
+        if not package_record:
+            return {
+                "error": {
+                    "status": "error",
+                    "message": f"Package '{package_ref}' was not found.",
+                }
+            }
+        pkg_path = get_package_path(package_ref)
+        if pkg_path is None:
+            return {
+                "error": {
+                    "status": "error",
+                    "message": f"Package file for '{package_ref}' is missing from storage.",
+                }
+            }
 
-    sha256 = hashlib.sha256(raw_bytes).hexdigest().lower()
-    total_size = len(raw_bytes)
+    if pkg_path is not None:
+        try:
+            total_size = pkg_path.stat().st_size
+        except OSError as exc:
+            return {
+                "error": {
+                    "status": "error",
+                    "message": f"Could not read package file: {exc}",
+                }
+            }
+        sha256 = (
+            str(package_record.get("sha256")).lower()
+            if package_record and package_record.get("sha256")
+            else calculate_sha256_file(pkg_path)
+        )
+        package_id = str(
+            package_record.get("package_id")
+            if package_record
+            else params.get("package_id") or pkg_path.stem
+        ).strip()
+    else:
+        assert raw_bytes is not None
+        total_size = len(raw_bytes)
+        sha256 = hashlib.sha256(raw_bytes).hexdigest().lower()
+        package_id = str(params.get("package_id") or "update-package").strip()
+
     if total_size > DEPLOY_PACKAGE_MAX_BYTES:
         return {
-            "status": "error",
-            "message": (
-                f"Package too large: {total_size} bytes exceeds limit of "
-                f"{DEPLOY_PACKAGE_MAX_BYTES} bytes ({DEPLOY_PACKAGE_MAX_BYTES // (1024 * 1024)} MB)."
-            ),
+            "error": {
+                "status": "error",
+                "message": (
+                    f"Package too large: {total_size} bytes exceeds limit of "
+                    f"{DEPLOY_PACKAGE_MAX_BYTES} bytes ({DEPLOY_PACKAGE_MAX_BYTES // (1024 * 1024)} MB)."
+                ),
+            }
         }
+
+    return {
+        "package_id": package_id,
+        "sha256": sha256,
+        "total_size": total_size,
+        "pkg_path": pkg_path,
+        "raw_bytes": raw_bytes,
+    }
+
+
+def deploy_package_to_client(
+    client_id: str,
+    action_id: str,
+    parameters: Any = None,
+    *,
+    operation: str = "DEPLOY_PACKAGE",
+) -> Dict[str, Any]:
+    """Stream a package/file to a target client using the shared chunk transport."""
+    params = parameters if isinstance(parameters, dict) else {}
+    resolved = _resolve_package_source(params)
+    if "error" in resolved:
+        return resolved["error"]
+
+    sha256 = resolved["sha256"]
+    total_size = resolved["total_size"]
+    pkg_path = resolved.get("pkg_path")
+    raw_bytes = resolved.get("raw_bytes")
+    package_id = resolved["package_id"]
     chunk_size = max(1, int(params.get("chunk_size", 131072)))
     total_chunks = max(1, math.ceil(total_size / chunk_size)) if total_size > 0 else 1
-    package_id = str(params.get("package_id") or action_id or "update-package").strip()
 
     client = server_lib.get_client(client_id)
     if not client:
@@ -201,6 +306,8 @@ def deploy_package_to_client(
         "total_size": total_size,
         "chunk_size": chunk_size,
         "total_chunks": total_chunks,
+        "operation": operation,
+        "filename": params.get("filename") or params.get("file_name") or f"{package_id}.zip",
     }
     init_res = server_lib.execute_client_command(
         client_id,
@@ -246,23 +353,42 @@ def deploy_package_to_client(
     # Step 2: Stream PACKAGE_CHUNK frames
     result_queue = server_lib.register_package_result_waiter(action_id, mac)
     try:
-        for seq in range(1, total_chunks + 1):
-            start_idx = (seq - 1) * chunk_size
-            end_idx = min(total_size, seq * chunk_size)
-            chunk_raw = raw_bytes[start_idx:end_idx]
-            chunk_b64 = base64.b64encode(chunk_raw).decode("ascii")
+        if pkg_path is not None:
+            with pkg_path.open("rb") as package_file:
+                for seq in range(1, total_chunks + 1):
+                    chunk_raw = package_file.read(chunk_size)
+                    if not chunk_raw:
+                        break
+                    chunk_b64 = base64.b64encode(chunk_raw).decode("ascii")
+                    frame = {
+                        "type": "PACKAGE_CHUNK",
+                        "action_id": action_id,
+                        "package_id": package_id,
+                        "seq": seq,
+                        "total_chunks": total_chunks,
+                        "data": chunk_b64,
+                    }
+                    with client["send_lock"]:
+                        server_lib.send_message(conn, frame)
+        else:
+            assert raw_bytes is not None
+            for seq in range(1, total_chunks + 1):
+                start_idx = (seq - 1) * chunk_size
+                end_idx = min(total_size, seq * chunk_size)
+                chunk_raw = raw_bytes[start_idx:end_idx]
+                chunk_b64 = base64.b64encode(chunk_raw).decode("ascii")
 
-            frame = {
-                "type": "PACKAGE_CHUNK",
-                "action_id": action_id,
-                "package_id": package_id,
-                "seq": seq,
-                "total_chunks": total_chunks,
-                "data": chunk_b64,
-            }
+                frame = {
+                    "type": "PACKAGE_CHUNK",
+                    "action_id": action_id,
+                    "package_id": package_id,
+                    "seq": seq,
+                    "total_chunks": total_chunks,
+                    "data": chunk_b64,
+                }
 
-            with client["send_lock"]:
-                server_lib.send_message(conn, frame)
+                with client["send_lock"]:
+                    server_lib.send_message(conn, frame)
 
         # Step 3: Wait for PACKAGE_RESULT with watchdog timeout
         timeout = float(
@@ -326,11 +452,19 @@ def execute_action(action: Dict[str, Any]) -> Dict[str, Any]:
     # ThreadPoolExecutor capped at DEPLOY_PACKAGE_MAX_CONCURRENT so chunk
     # streams run in parallel without saturating the TCP server thread pool.
     # All other action types keep the original sequential loop below.
-    if action_type == ActionType.DEPLOY_PACKAGE.value:
+    if action_type in {ActionType.DEPLOY_PACKAGE.value, ActionType.SEND_FILE.value}:
         target_results_lock = threading.Lock()
 
         def _deploy_one(client_id: str):
-            result = deploy_package_to_client(client_id, action_id, parameters)
+            if action_type == ActionType.SEND_FILE.value:
+                result = deploy_package_to_client(
+                    client_id,
+                    action_id,
+                    parameters,
+                    operation=action_type,
+                )
+            else:
+                result = deploy_package_to_client(client_id, action_id, parameters)
             ok = result.get("status") == "ok"
             entry = {
                 "client_id": client_id,

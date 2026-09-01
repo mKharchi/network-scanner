@@ -41,27 +41,31 @@ export function useRealTimeEvents() {
             const data = JSON.parse(e.data);
             console.log('[SSE Event: alert]', data);
 
-            setUnreadAlerts((c) => c + 1);
+            const isStatusUpdate = data.kind === 'updated';
 
-            const severity: ToastSeverity =
-              data.severity === 'CRITICAL' ||
-              data.severity === 'HIGH' ||
-              data.severity === 'MEDIUM' ||
-              data.severity === 'LOW'
-                ? data.severity
-                : 'HIGH';
+            if (!isStatusUpdate) {
+              setUnreadAlerts((c) => c + 1);
 
-            addToast({
-              title: data.title || 'New Alert Received',
-              message: data.description || `Severity: ${data.severity}`,
-              severity,
-              action: data.id
-                ? {
-                    label: 'View Alert →',
-                    onClick: () => navigate(`/alerts/${data.id}`),
-                  }
-                : undefined,
-            });
+              const severity: ToastSeverity =
+                data.severity === 'CRITICAL' ||
+                data.severity === 'HIGH' ||
+                data.severity === 'MEDIUM' ||
+                data.severity === 'LOW'
+                  ? data.severity
+                  : 'HIGH';
+
+              addToast({
+                title: data.title || 'New Alert Received',
+                message: data.description || `Severity: ${data.severity}`,
+                severity,
+                action: data.id
+                  ? {
+                      label: 'View Alert →',
+                      onClick: () => navigate(`/alerts/${data.id}`),
+                    }
+                  : undefined,
+              });
+            }
 
             // Dispatch global event for active pages to reactively refetch
             window.dispatchEvent(new CustomEvent('app:alert', { detail: data }));

@@ -2,8 +2,15 @@ import win32serviceutil
 import win32service
 import servicemanager
 import threading
+import sys
+from pathlib import Path
 
-from client import start_client
+CLIENT_DIR = Path(__file__).resolve().parent
+APP_DIR = CLIENT_DIR / "app"
+if str(APP_DIR) not in sys.path:
+    sys.path.insert(0, str(APP_DIR))
+
+from app.client import start_client
 
 
 class ClientService(win32serviceutil.ServiceFramework):

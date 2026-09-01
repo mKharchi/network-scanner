@@ -10,9 +10,13 @@ from pathlib import Path
 
 
 CLIENT_DIR = Path(__file__).resolve().parent
+APP_DIR = CLIENT_DIR / "app"
 os.chdir(CLIENT_DIR)
+import sys
+if str(APP_DIR) not in sys.path:
+    sys.path.insert(0, str(APP_DIR))
 
-from client import start_client  # noqa: E402  (set the working directory first)
+from app.client import start_client  # noqa: E402  (set the working directory first)
 
 
 if __name__ == "__main__":

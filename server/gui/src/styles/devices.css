@@ -1,4 +1,4 @@
-/* Stage 4 — Device intelligence explorer */
+/* Device intelligence explorer */
 .device-page-header__heading {
   display: flex;
   align-items: start;
@@ -33,9 +33,10 @@
   gap: var(--space-4);
   padding: var(--space-4) var(--space-5);
   margin: var(--space-6) 0 var(--space-4);
-  border: 1px solid var(--navy-border);
+  border: 1px solid var(--border);
   border-radius: var(--radius-card);
-  background: rgba(17, 34, 77, 0.72);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-card);
 }
 
 .device-toolbar__heading {
@@ -45,7 +46,7 @@
 }
 
 .device-toolbar__heading strong {
-  color: var(--white);
+  color: var(--text-primary);
   font-size: var(--font-sm);
 }
 
@@ -58,19 +59,19 @@
 .device-filter-pills {
   display: inline-flex;
   gap: 2px;
-  padding: 3px;
-  border: 1px solid var(--navy-border);
-  border-radius: var(--radius-pill);
-  background: rgba(8, 19, 41, 0.55);
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-muted);
 }
 
 .device-filter-pills button {
   min-height: 34px;
   padding: 0 var(--space-4);
   border: 0;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius);
   background: transparent;
-  color: var(--muted-text);
+  color: var(--text-muted);
   font: inherit;
   font-size: var(--font-xs);
   font-weight: 700;
@@ -80,7 +81,7 @@
 
 .device-filter-pills button:hover,
 .device-filter-pills button[aria-pressed="true"] {
-  background: var(--accent-blue);
+  background: var(--steel-blue);
   color: var(--white);
 }
 
@@ -89,16 +90,16 @@
   min-height: 40px;
   flex: 1 1 280px;
   padding: 0 var(--space-4);
-  border: 1px solid var(--navy-border);
-  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   outline: none;
-  background: rgba(8, 19, 41, 0.72);
-  color: var(--white);
+  background: var(--surface);
+  color: var(--text-primary);
   font: inherit;
 }
 
 .device-search::placeholder { color: var(--text-faint); }
-.device-search:focus { border-color: var(--accent-blue); box-shadow: var(--focus-ring); }
+.device-search:focus { border-color: var(--steel-blue); box-shadow: var(--focus-ring); }
 
 @media (max-width: 900px) {
   .device-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

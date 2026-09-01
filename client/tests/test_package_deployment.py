@@ -33,11 +33,13 @@ class ClientPackageDeploymentTests(unittest.TestCase):
         self.incoming_dir = self.test_dir / "updates" / "incoming"
         self.staging_dir = self.test_dir / "updates" / "staging"
         self.current_dir = self.test_dir / "updates" / "current"
+        self.sent_files_dir = self.test_dir / "storage" / "sent-files"
 
         client_lib.configure_package_paths(
             incoming=self.incoming_dir,
             staging=self.staging_dir,
             current=self.current_dir,
+            sent_files=self.sent_files_dir,
         )
 
     def tearDown(self):
@@ -120,6 +122,51 @@ class ClientPackageDeploymentTests(unittest.TestCase):
         self.assertEqual((current_dir / "app.py").read_text(), "print('Hello from deployed package!')")
         self.assertTrue((current_dir / "config" / "settings.json").exists())
         self.assertEqual((current_dir / "config" / "settings.json").read_text(), '{"version": "1.0.0"}')
+
+    def test_send_file_lands_in_sent_files_without_touching_updates(self):
+        payload = b"plain file sent to the client"
+        expected_hash = hashlib.sha256(payload).hexdigest()
+        init_res = client_lib.handle_command({
+            "command": "SEND_FILE",
+            "action_id": "act-send-file",
+            "args": {
+                "package_id": "file-001",
+                "filename": "notes.txt",
+                "sha256": expected_hash,
+                "total_size": len(payload),
+                "chunk_size": len(payload),
+                "total_chunks": 1,
+                "operation": "SEND_FILE",
+            },
+        })
+        self.assertEqual(init_res.get("status"), "ready")
+        result = client_lib.process_package_chunk({
+            "type": "PACKAGE_CHUNK",
+            "action_id": "act-send-file",
+            "seq": 1,
+            "total_chunks": 1,
+            "data": base64.b64encode(payload).decode("ascii"),
+        })
+        self.assertEqual(result.get("status"), "SUCCESS")
+        self.assertEqual((self.sent_files_dir / "notes.txt").read_bytes(), payload)
+        self.assertFalse(self.current_dir.exists())
+        self.assertFalse((self.incoming_dir / "file-001.zip").exists())
+
+    def test_send_file_rejects_traversal_filename(self):
+        payload = b"unsafe destination"
+        with self.assertRaisesRegex(ValueError, "single relative filename"):
+            client_lib.handle_command({
+                "command": "SEND_FILE",
+                "action_id": "act-send-file-unsafe",
+                "args": {
+                    "package_id": "file-002",
+                    "filename": "..\\\\outside.txt",
+                    "sha256": hashlib.sha256(payload).hexdigest(),
+                    "total_size": len(payload),
+                    "total_chunks": 1,
+                    "operation": "SEND_FILE",
+                },
+            })
 
     def test_safe_extract_rejects_path_traversal_zip_slip(self):
         # Craft malicious zip with ../ traversal

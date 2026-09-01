@@ -51,6 +51,7 @@ class ClientRegistrationTests(unittest.TestCase):
             "ip": "172.16.0.102",
             "mac": "e4-fd-45-ba-8b-96",
             "os": {"system": "Windows"},
+            "client_version": "1.2.3",
         }
 
     def test_registration_id_is_stable_and_mac_derived(self):
@@ -84,6 +85,7 @@ class ClientRegistrationTests(unittest.TestCase):
                 "DESKTOP-DJP05CM",
                 "172.16.0.102",
                 {"system": "Windows"},
+                "1.2.3",
             )
 
         self.assertTrue(stored)

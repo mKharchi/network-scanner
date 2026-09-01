@@ -121,8 +121,23 @@ Do not expose ports `5000` or `8080` directly to the public internet.
 Extract the compressed `client` folder to a permanent location, for example:
 
 ```text
-C:\NetworkScanner\client
+C:\\NetworkScanner\\client
 ```
+
+The installed folder uses this structure:
+
+```text
+client\\
+├── app\\            # replaceable monitored application code and dependencies
+├── config\\         # machine-specific .env; never overwritten by updates
+├── updater\\        # reserved for the standalone updater
+├── storage\\        # sent-files, update transport, and durable local state
+├── logs\\            # client logs
+├── venv\\            # virtual environment, outside app\\
+└── user_agent.py     # stable startup entry point
+```
+
+Existing flat-layout installations remain compatible through root launch shims during migration.
 
 Avoid placing it in `Downloads`, because the folder should not be moved after installing the scheduled task.
 
@@ -147,13 +162,13 @@ If the command is not found, install Python from the official Python website and
 ## Create a virtual environment
 
 ```powershell
-python -m venv .venv
+python -m venv venv
 ```
 
 Activate it:
 
 ```powershell
-.\.venv\Scripts\Activate.ps1
+.\venv\Scripts\Activate.ps1
 ```
 
 If PowerShell blocks script execution, run this once for your user account:
@@ -165,7 +180,7 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 Then activate again:
 
 ```powershell
-.\.venv\Scripts\Activate.ps1
+.\venv\Scripts\Activate.ps1
 ```
 
 ## Install dependencies
@@ -189,7 +204,7 @@ The client requirements include:
 Create this file:
 
 ```text
-C:\NetworkScanner\client\.env
+C:\NetworkScanner\client\config\.env
 ```
 
 Use the following content, replacing the IP address with the server’s LAN address:
@@ -278,7 +293,7 @@ Get-NetTCPConnection -LocalPort 5000 -State Listen
 You can also test the client manually:
 
 ```powershell
-.\.venv\Scripts\python.exe .\client.py
+.\venv\Scripts\python.exe .\client.py
 ```
 
 You should see startup messages indicating that the client connected and registered.
@@ -300,7 +315,7 @@ The recommended mode is the per-user scheduled task because activity logs and sc
 From PowerShell in the client folder:
 
 ```powershell
-.\install_user_logon_task.ps1 -PythonExecutable "$PWD\.venv\Scripts\pythonw.exe"
+.\install_user_logon_task.ps1 -PythonExecutable "$PWD\venv\Scripts\pythonw.exe"
 ```
 
 Start it immediately without logging out:
@@ -324,7 +339,7 @@ Get-ScheduledTaskInfo -TaskName "NetworkClientUserAgent"
 Review the client log:
 
 ```powershell
-Get-Content .\client_service.log -Wait
+Get-Content .\logs\client_service.log -Wait
 ```
 
 The client should connect to:
@@ -426,8 +441,8 @@ API_PORT=8080
 
 ```powershell
 cd C:\NetworkScanner\client
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+python -m venv venv
+.\venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
@@ -443,13 +458,13 @@ Test and install startup:
 
 ```powershell
 Test-NetConnection 192.168.1.10 -Port 5000
-.\.venv\Scripts\python.exe .\client.py
+.\venv\Scripts\python.exe .\client.py
 ```
 
 After stopping the manual test:
 
 ```powershell
-.\install_user_logon_task.ps1 -PythonExecutable "$PWD\.venv\Scripts\pythonw.exe"
+.\install_user_logon_task.ps1 -PythonExecutable "$PWD\venv\Scripts\pythonw.exe"
 Start-ScheduledTask -TaskName "NetworkClientUserAgent"
 ```
 

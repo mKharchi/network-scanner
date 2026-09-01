@@ -35,6 +35,8 @@ CREATE TABLE IF NOT EXISTS clients (
     os_release VARCHAR(100),
     os_version VARCHAR(255),
     os_machine VARCHAR(100),
+    client_version VARCHAR(64) NULL,
+    client_version_updated_at DATETIME NULL,
     location_id INT NULL,
     location_assignment_method VARCHAR(16) NULL,
     location_assignment_status VARCHAR(16) NULL,
@@ -121,6 +123,18 @@ CREATE TABLE IF NOT EXISTS screenshots (
     FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
     INDEX idx_screenshots_client_time (client_id, uploaded_at),
     INDEX idx_screenshots_command (command_id)
+);
+
+CREATE TABLE IF NOT EXISTS packages (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    package_id VARCHAR(100) NOT NULL UNIQUE,
+    filename VARCHAR(255) NOT NULL,
+    size_bytes BIGINT NOT NULL,
+    sha256 CHAR(64) NOT NULL,
+    storage_path VARCHAR(512) NOT NULL,
+    uploaded_by VARCHAR(255) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_packages_created_at (created_at)
 );
 
 CREATE TABLE IF NOT EXISTS actions (

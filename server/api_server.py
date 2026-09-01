@@ -28,12 +28,12 @@ try:
 except ImportError:
     pass
 
-from server_components import action_service, api_service, event_broadcaster, server_lib
+from server_components import action_service, api_service, event_broadcaster, package_service, server_lib
 from server_components.action_framework import ActionState, ActionType, get_supported_client_commands
 
 API_HOST = os.getenv("API_HOST", "0.0.0.0")
 API_PORT = int(os.getenv("API_PORT", "8080"))
-LONG_RUNNING_ACTION_TYPES = {ActionType.DEPLOY_PACKAGE.value}
+LONG_RUNNING_ACTION_TYPES = {ActionType.DEPLOY_PACKAGE.value, ActionType.SEND_FILE.value, ActionType.UPDATE_CLIENT.value}
 
 
 class DecimalJSONEncoder(json.JSONEncoder):
@@ -60,7 +60,7 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
     def _send_cors_headers(self) -> None:
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Accept, Authorization")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Accept, Authorization, X-Package-Filename, X-Package-Id, X-Operator-Id")
 
     def do_OPTIONS(self) -> None:  # noqa: N802
         print(f"[REST API] OPTIONS (CORS preflight) {self.path}")
@@ -101,6 +101,43 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
             return payload if isinstance(payload, dict) else None
         except (ValueError, TypeError, json.JSONDecodeError, UnicodeDecodeError):
             return None
+
+    def _stream_package_upload(self) -> Dict[str, Any]:
+        content_length = int(self.headers.get("Content-Length", "0"))
+        if content_length <= 0:
+            raise ValueError("Package upload body is empty.")
+        if content_length > package_service.MAX_PACKAGE_SIZE_BYTES:
+            raise ValueError(
+                f"Package exceeds the {package_service.MAX_PACKAGE_SIZE_BYTES // (1024 * 1024)} MB size limit."
+            )
+
+        filename = (
+            self.headers.get("X-Package-Filename")
+            or self.headers.get("X-Filename")
+            or "package.zip"
+        )
+        package_id = self.headers.get("X-Package-Id")
+        uploaded_by = self.headers.get("X-Operator-Id") or "local-network-operator"
+
+        class _RequestReader:
+            def __init__(self, handler: ApiRequestHandler, remaining: int) -> None:
+                self._handler = handler
+                self._remaining = remaining
+
+            def read(self, size: int = -1) -> bytes:
+                if self._remaining <= 0:
+                    return b""
+                chunk_size = self._remaining if size < 0 else min(size, self._remaining)
+                data = self._handler.rfile.read(chunk_size)
+                self._remaining -= len(data)
+                return data
+
+        return package_service.stream_to_storage(
+            _RequestReader(self, content_length),
+            filename=filename,
+            package_id=package_id,
+            uploaded_by=uploaded_by,
+        )
 
     def do_GET(self) -> None:  # noqa: N802
         print(f"[REST API REQUEST] GET {self.path} (from {self.client_address[0]})")
@@ -695,6 +732,18 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 self.send_data({"location": location})
                 return
 
+            if path == "/api/packages":
+                try:
+                    package = self._stream_package_upload()
+                except ValueError as exc:
+                    message = str(exc)
+                    code = "UPLOAD_TOO_LARGE" if "size limit" in message.lower() else "INVALID_PACKAGE"
+                    status = 413 if code == "UPLOAD_TOO_LARGE" else 400
+                    self.send_error_response(status, code, message)
+                    return
+                self.send_data(package, status_code=201)
+                return
+
             if path == "/api/actions":
                 payload = self._read_json_payload()
                 if payload is None:
@@ -1080,6 +1129,35 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
     def do_PATCH(self) -> None:  # noqa: N802
         parsed_url = urllib.parse.urlparse(self.path)
         path = parsed_url.path.rstrip("/")
+
+        m = re.match(r"^/api/v1/alerts/(\d+)$", path)
+        if m:
+            alert_id = int(m.group(1))
+            payload = self._read_json_payload()
+            if payload is None or not isinstance(payload.get("status"), str):
+                self.send_error_response(400, "INVALID_PAYLOAD", "Field 'status' is required.")
+                return
+            try:
+                result = api_service.update_alert_status(alert_id, payload["status"])
+            except ValueError as exc:
+                self.send_error_response(400, "INVALID_STATUS", str(exc))
+                return
+            except RuntimeError as exc:
+                self.send_error_response(503, "DATABASE_UNAVAILABLE", str(exc))
+                return
+            if not result:
+                self.send_error_response(404, "NOT_FOUND", f"Alert #{alert_id} not found.")
+                return
+            try:
+                from server_components import event_broadcaster
+
+                alert = result.get("alert") or {}
+                event_broadcaster.broadcast_alert({**alert, "kind": "updated"})
+            except Exception:
+                pass
+            self.send_data(result)
+            return
+
         m = re.match(r"^/api/clients/([^/]+)/location$", path)
         if m:
             payload = self._read_json_payload()

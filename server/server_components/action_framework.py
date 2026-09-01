@@ -42,6 +42,8 @@ class ActionType(str, Enum):
     TRIGGER_ARP_SCAN = "TRIGGER_ARP_SCAN"
     FLUSH_NEIGHBOURHOOD_STORAGE = "FLUSH_NEIGHBOURHOOD_STORAGE"
     DEPLOY_PACKAGE = "DEPLOY_PACKAGE"
+    SEND_FILE = "SEND_FILE"
+    UPDATE_CLIENT = "UPDATE_CLIENT"
 
 
 class ActionState(str, Enum):
@@ -108,6 +110,8 @@ _SUPPORTED_COMMANDS = (
     {"command": ActionType.ISOLATE_DEVICE.value, "label": "Isolate device"},
     {"command": ActionType.DISCONNECT.value, "label": "Disconnect client"},
     {"command": ActionType.DEPLOY_PACKAGE.value, "label": "Deploy package"},
+    {"command": ActionType.SEND_FILE.value, "label": "Send file"},
+    {"command": ActionType.UPDATE_CLIENT.value, "label": "Update client"},
 )
 
 

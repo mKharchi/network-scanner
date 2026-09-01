@@ -1,62 +1,62 @@
 /* ============================================================
-   Card Component — Deep Navy Intelligence Platform
+   Card Component — Light Intelligence Platform
    ============================================================ */
 
 .card {
-  background: var(--deep-card-navy);
-  border: 1px solid var(--navy-border);
+  background: var(--surface-card);
+  border: 1px solid var(--border);
   border-radius: var(--radius-card);
   padding: var(--space-8);
   box-shadow: var(--shadow-card);
-  color: var(--white);
-  transition: transform var(--transition), box-shadow var(--transition), border-color var(--transition);
+  color: var(--text-primary);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .card:hover {
-  border-color: rgba(255, 255, 255, 0.24);
+  border-color: var(--border-hover);
 }
 
 /* ── Metric Card ──────────────────────────────────────────── */
 .metric-card {
-  background: var(--deep-card-navy);
-  border: 1px solid var(--navy-border);
+  background: var(--surface-card);
+  border: 1px solid var(--border);
   border-radius: var(--radius-card);
   padding: var(--space-6) var(--space-8);
   box-shadow: var(--shadow-card);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  color: var(--white);
-  transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
+  color: var(--text-primary);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .metric-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45);
-  border-color: rgba(37, 99, 235, 0.5);
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow-md);
 }
 
 .metric-card__label {
   font-size: var(--font-xs);
   font-weight: 700;
-  color: var(--muted-text);
+  color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 
 .metric-card__value {
+  font-family: var(--font-mono);
   font-size: var(--font-2xl);
-  font-weight: 800;
+  font-weight: 700;
   line-height: var(--lh-2xl);
-  color: var(--white);
+  color: var(--text-primary);
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
 }
 
-.metric-card__value--success { color: #34D399; }
-.metric-card__value--warning { color: #FBBF24; }
-.metric-card__value--danger  { color: #F87171; }
-.metric-card__value--info    { color: #60A5FA; }
+.metric-card__value--success { color: var(--success); }
+.metric-card__value--warning { color: var(--warning); }
+.metric-card__value--danger  { color: var(--danger); }
+.metric-card__value--info    { color: var(--steel-blue); }
 
 .metric-card__context {
   font-size: var(--font-xs);
@@ -69,12 +69,12 @@
 
 /* ── Section Card ─────────────────────────────────────────── */
 .section-card {
-  background: var(--deep-card-navy);
-  border: 1px solid var(--navy-border);
+  background: var(--surface-card);
+  border: 1px solid var(--border);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
   overflow: hidden;
-  color: var(--white);
+  color: var(--text-primary);
 }
 
 .section-card__header {
@@ -82,14 +82,15 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--space-5) var(--space-8);
-  border-bottom: 1px solid var(--navy-border-subtle);
-  background: rgba(8, 19, 41, 0.4);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-muted);
 }
 
 .section-card__title {
+  font-family: var(--font-display);
   font-size: var(--font-lg);
   font-weight: 700;
-  color: var(--white);
+  color: var(--text-primary);
   letter-spacing: -0.01em;
 }
 
@@ -102,5 +103,5 @@
 }
 
 .section-card__body--floor {
-  padding: var(--space-2) ;
+  padding: var(--space-2);
 }
