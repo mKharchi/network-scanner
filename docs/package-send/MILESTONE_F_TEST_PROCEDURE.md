@@ -20,8 +20,21 @@ This document provides step-by-step instructions to verify Milestone F's accepta
 ### 1a. On Server: Check Supported Actions
 
 ```bash
-curl http://SERVER_IP:8080/api/v1/actions
-# Should include "UPDATE_CLIENT" in the list
+curl "http://SERVER_IP:8080/api/v1/actions?types=1"
+# Should include "UPDATE_CLIENT" in the supported_actions list
+```
+
+Expected response:
+```json
+{
+  "data": {
+    "supported_actions": [
+      "SHUTDOWN", "RESTART", "SCREENSHOT", ..., "DEPLOY_PACKAGE", "SEND_FILE", "UPDATE_CLIENT"
+    ],
+    "count": 31
+  },
+  "meta": {}
+}
 ```
 
 ### 1b. On Server: Verify Package Directory

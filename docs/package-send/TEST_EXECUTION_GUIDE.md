@@ -11,7 +11,8 @@
 ### Prerequisites Checklist
 - [ ] One dedicated test PC with current client installed (v1.x running)
 - [ ] Test PC on same network as server or routing configured
-- [ ] Server running updated code with UPDATE_CLIENT support
+- [ ] Server running on Windows with updated code (api_server.py with UPDATE_CLIENT endpoint fix)
+- [ ] Server storage directory exists: `server/storage/packages/` (packages uploaded here)
 - [ ] Python 3.8+ on build machine for package creation script
 - [ ] Administrator access on test PC (to stop/start services, access app folder)
 
@@ -356,7 +357,8 @@ curl "http://${SERVER_IP}:8080/api/v1/clients/${TEST_CLIENT_ID}"
 
 **Error:** `403 Forbidden`
 - **Cause:** Server storage directory not writable
-- **Fix:** Check server permissions on `server/packages/` directory
+- **Fix:** Check server permissions on `server/storage/packages/` directory
+- **Note (Windows):** Ensure `server/storage/packages/` exists and is readable/writable by the Python process running the server
 
 ### Action Stays in RUNNING for Too Long
 

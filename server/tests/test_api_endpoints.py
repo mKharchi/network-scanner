@@ -85,6 +85,12 @@ class ApiEndpointsTestCase(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(body["data"]["status"], "ok")
 
+    def test_supported_actions_types_query(self):
+        status, body = self._fetch("/api/v1/actions?types=1")
+        self.assertEqual(status, 200)
+        self.assertIn("supported_actions", body["data"])
+        self.assertIn("UPDATE_CLIENT", body["data"]["supported_actions"])
+
     # 2. Dashboard
     @patch("server_components.api_service.get_connection")
     def test_dashboard_endpoint(self, mock_db):

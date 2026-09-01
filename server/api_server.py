@@ -254,7 +254,14 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 return
 
             # Unified action history and per-target status.
-            if path == "/api/actions":
+            if path == "/api/actions" or path == "/api/v1/actions":
+                # Support ?types=1 query param to return supported action types instead of history
+                if get_param("types") == "1":
+                    # Return list of supported action types
+                    supported_types = [a.value for a in ActionType]
+                    self.send_data({"supported_actions": supported_types, "count": len(supported_types)})
+                    return
+                # Otherwise return action history
                 limit = get_int_param("limit", 50)
                 self.send_data({"items": action_service.list_actions(limit=limit)})
                 return
