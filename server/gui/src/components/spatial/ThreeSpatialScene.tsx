@@ -130,8 +130,8 @@ export function ThreeSpatialScene({
       shadows="percentage"
       onPointerMissed={() => onSelect(-1)}
     >
-      <color attach="background" args={["#081329"]} />
-      <fog attach="fog" args={["#081329", 40, 120]} />
+      <color attach="background" args={["#EBF3FA"]} />
+      <fog attach="fog" args={["#EBF3FA", 40, 120]} />
 
       <ambientLight intensity={0.75} />
       <directionalLight position={[10, 24, 6]} intensity={1.4} castShadow shadow-mapSize={[1024, 1024]} />

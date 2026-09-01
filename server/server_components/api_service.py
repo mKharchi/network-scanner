@@ -832,6 +832,7 @@ def list_clients(
         query = """
             SELECT c.id, c.client_id, c.mac, c.hostname, c.ip,
                    c.os_system, c.os_release, c.os_version, c.os_machine,
+                   c.client_version, c.client_version_updated_at,
                    c.created_at, c.updated_at,
                    c.health_cpu_percent, c.health_memory_percent,
                    c.health_disk_percent, c.health_updated_at,
@@ -904,6 +905,8 @@ def list_clients(
                     "version": r["os_version"],
                     "machine": r["os_machine"],
                 },
+                "client_version": r.get("client_version"),
+                "client_version_updated_at": _iso_utc(r.get("client_version_updated_at")),
                 "connection": conn_obj,
                 "location": _client_location_from_row(r),
                 "location_assignment": _location_assignment_from_row(r),
@@ -1066,6 +1069,7 @@ def get_client_detail(client_id: str) -> Optional[Dict[str, Any]]:
             """
             SELECT c.id, c.client_id, c.mac, c.hostname, c.ip,
                    c.os_system, c.os_release, c.os_version, c.os_machine,
+                   c.client_version, c.client_version_updated_at,
                    c.created_at, c.updated_at,
                    c.health_cpu_percent, c.health_memory_percent,
                    c.health_disk_percent, c.health_updated_at,
@@ -1822,6 +1826,51 @@ def get_alert_detail(alert_id: int) -> Optional[Dict[str, Any]]:
         }
     finally:
         conn.close()
+
+
+_ALERT_STATUS_TRANSITIONS = {
+    "NEW": frozenset({"ACKNOWLEDGED", "RESOLVED"}),
+    "ACKNOWLEDGED": frozenset({"RESOLVED"}),
+    "RESOLVED": frozenset(),
+}
+
+
+def update_alert_status(alert_id: int, status: str) -> Optional[Dict[str, Any]]:
+    """Transition an alert to ACKNOWLEDGED or RESOLVED."""
+    normalized = (status or "").strip().upper()
+    if normalized not in {"ACKNOWLEDGED", "RESOLVED"}:
+        raise ValueError(f"Status must be ACKNOWLEDGED or RESOLVED, not '{status}'.")
+
+    conn = get_connection()
+    if not conn:
+        raise RuntimeError("Database unavailable.")
+
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT id, status FROM alerts WHERE id = %s", (alert_id,))
+        row = cursor.fetchone()
+        if not row:
+            return None
+
+        current = row["status"]
+        if current == normalized:
+            return get_alert_detail(alert_id)
+
+        allowed = _ALERT_STATUS_TRANSITIONS.get(current, frozenset())
+        if normalized not in allowed:
+            raise ValueError(
+                f"Cannot change alert #{alert_id} from {current} to {normalized}."
+            )
+
+        cursor.execute(
+            "UPDATE alerts SET status = %s WHERE id = %s",
+            (normalized, alert_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    return get_alert_detail(alert_id)
 
 
 # ============================================================

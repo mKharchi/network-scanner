@@ -3,7 +3,7 @@
 
 a = Analysis(
     ['client.py'],
-    pathex=[],
+    pathex=['app'],
     binaries=[],
     datas=[],
     hiddenimports=[],

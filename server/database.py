@@ -114,6 +114,26 @@ def _ensure_client_location_history_assignment_columns(cursor):
             )
 
 
+def _ensure_client_version_columns(cursor):
+    """Store the installed network-scanner client version and its last report time."""
+    cursor.execute(
+        """
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'clients'
+        """
+    )
+    existing_columns = {row[0] for row in cursor.fetchall()}
+    columns = {
+        "client_version": "VARCHAR(64) NULL",
+        "client_version_updated_at": "DATETIME NULL",
+    }
+    for column_name, definition in columns.items():
+        if column_name not in existing_columns:
+            cursor.execute(f"ALTER TABLE clients ADD COLUMN {column_name} {definition}")
+
+
 def _ensure_client_health_columns(cursor):
     """Store the last health snapshot used by the center visualization."""
     cursor.execute(
@@ -298,6 +318,7 @@ def initiate_db():
         _ensure_client_location_assignment_columns(cursor)
         _ensure_client_location_history_assignment_columns(cursor)
         _ensure_client_health_columns(cursor)
+        _ensure_client_version_columns(cursor)
         _ensure_location_type_column(cursor)
         _ensure_location_spatial_columns(cursor)
         _ensure_observation_spatial_columns(cursor)

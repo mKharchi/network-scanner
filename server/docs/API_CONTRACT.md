@@ -464,6 +464,13 @@
   }
   ```
 
+#### `PATCH /api/v1/alerts/{alert_id}`
+* **Description:** Acknowledge or resolve an alert.
+* **Request Body:** `{ "status": "ACKNOWLEDGED" | "RESOLVED" }`
+* **Valid transitions:** `NEW` → `ACKNOWLEDGED` or `RESOLVED`; `ACKNOWLEDGED` → `RESOLVED`.
+* **Success Response (200 OK):** Same shape as `GET /api/v1/alerts/{alert_id}`.
+* **Error Responses:** `400 INVALID_STATUS` (invalid transition), `404 NOT_FOUND`.
+
 ---
 
 ### 2.6 Activity Logs

@@ -5,7 +5,7 @@
 > (restructuring the client so it can self-update) is intentionally
 > out of scope here and will be its own plan once this is proven.
 >
-> Internally this is broken into Milestones A–D so "Phase" always
+> Internally this is broken into Milest>ones A–D so "Phase" always
 > refers to the overall feature, never gets confused with a step below.
 
 ---

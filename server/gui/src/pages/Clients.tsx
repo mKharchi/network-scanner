@@ -179,6 +179,12 @@ function buildClientColumns(
     render: (c) => c.ip_address ?? null,
   },
   {
+    key: "client_version",
+    label: "Client version",
+    mono: true,
+    render: (c) => c.client_version ?? "—",
+  },
+  {
     key: "mac_address",
     label: "MAC",
     mono: true,

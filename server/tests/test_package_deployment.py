@@ -40,11 +40,13 @@ def _connection(cursor=None):
 
 
 class ServerPackageDeploymentTests(unittest.TestCase):
-    def test_long_running_action_types_contains_deploy_package(self):
+    def test_long_running_action_types_contains_deploy_package_and_send_file(self):
         self.assertIn("DEPLOY_PACKAGE", LONG_RUNNING_ACTION_TYPES)
+        self.assertIn("SEND_FILE", LONG_RUNNING_ACTION_TYPES)
         self.assertNotIn("GET_PROCESSES", LONG_RUNNING_ACTION_TYPES)
         self.assertNotIn("SCREENSHOT", LONG_RUNNING_ACTION_TYPES)
         self.assertNotIn("SHUTDOWN", LONG_RUNNING_ACTION_TYPES)
+        self.assertEqual(ActionType.SEND_FILE.value, "SEND_FILE")
 
     @patch("server_components.action_service.get_connection")
     @patch("server_components.action_service.server_lib.get_client")

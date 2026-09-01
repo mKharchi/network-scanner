@@ -1004,8 +1004,8 @@ def _client_id_for_mac(mac):
     return f"client-{mac.replace(':', '').replace('-', '').lower()}"
 
 
-def update_client_db(mac, client_id, hostname, ip, os_info):
-    """Persist/update client metadata in the MySQL database."""
+def update_client_db(mac, client_id, hostname, ip, os_info, client_version=None):
+    """Persist/update client metadata, including the application version."""
     conn = None
     cursor = None
     try:
@@ -1023,8 +1023,8 @@ def update_client_db(mac, client_id, hostname, ip, os_info):
 
         cursor.execute(
             """
-            INSERT INTO clients (client_id, hostname, ip, mac, os_system, os_release, os_version, os_machine)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO clients (client_id, hostname, ip, mac, os_system, os_release, os_version, os_machine, client_version, client_version_updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
             ON DUPLICATE KEY UPDATE
                 client_id=VALUES(client_id),
                 hostname=VALUES(hostname),
@@ -1033,9 +1033,11 @@ def update_client_db(mac, client_id, hostname, ip, os_info):
                 os_release=VALUES(os_release),
                 os_version=VALUES(os_version),
                 os_machine=VALUES(os_machine),
+                client_version=VALUES(client_version),
+                client_version_updated_at=CURRENT_TIMESTAMP,
                 updated_at=CURRENT_TIMESTAMP
         """,
-            (client_id, hostname, ip, mac, system, release, version, machine),
+            (client_id, hostname, ip, mac, system, release, version, machine, client_version),
         )
 
         conn.commit()
@@ -1167,6 +1169,7 @@ def register_client(client_info, conn):
                 client_info["hostname"],
                 client_info["ip"],
                 client_info["os"],
+                client_info.get("client_version"),
             ):
                 print(
                     f"Client registration rejected because {mac} could not be saved to MySQL."
@@ -1176,6 +1179,7 @@ def register_client(client_info, conn):
             client["hostname"] = client_info["hostname"]
             client["ip"] = client_info["ip"]
             client["os"] = client_info["os"]
+            client["client_version"] = client_info.get("client_version")
             client["client_id"] = client_id
             client["connection"] = conn
             client["responses"] = queue.Queue()
@@ -1197,6 +1201,7 @@ def register_client(client_info, conn):
             client_info["hostname"],
             client_info["ip"],
             client_info["os"],
+            client_info.get("client_version"),
         ):
             print(
                 f"Client registration rejected because {mac} could not be saved to MySQL."
@@ -1209,6 +1214,7 @@ def register_client(client_info, conn):
             "ip": client_info["ip"],
             "mac": mac,
             "os": client_info["os"],
+            "client_version": client_info.get("client_version"),
             "connection": conn,
             "responses": queue.Queue(),
             "send_lock": threading.Lock(),
@@ -1512,6 +1518,33 @@ def handle_network_neighbour_report(
     return False
 
 
+def _persist_client_heartbeat(mac, payload):
+    client = get_client_by_mac(mac)
+    client_id = client.get("client_id") if client else _client_id_for_mac(mac)
+    version = payload.get("client_version") if isinstance(payload, dict) else None
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE clients SET client_version = %s, client_version_updated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE client_id = %s",
+            (version, client_id),
+        )
+        conn.commit()
+        if client:
+            client["client_version"] = version
+        return True
+    except Exception as error:
+        print(f"Failed to persist heartbeat from {mac}: {error}")
+        return False
+    finally:
+        if cursor:
+            cursor.close()
+        if conn and conn.is_connected():
+            conn.close()
+
+
 def receive_client_messages(mac, conn, *, agent_role="service"):
     """Continuously consume one client's frames after registration.
 
@@ -1536,6 +1569,8 @@ def receive_client_messages(mac, conn, *, agent_role="service"):
                 handle_network_neighbour_report(mac, message.get("data"))
             elif message_type == "PACKAGE_RESULT":
                 handle_package_result(mac, message)
+            elif message_type == "HEARTBEAT":
+                _persist_client_heartbeat(mac, message.get("data") or {})
             elif message_type == "RESPONSE":
                 client = get_client_by_mac(mac, agent_role=agent_role)
                 if client and client["connection"] is conn:
