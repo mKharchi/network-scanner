@@ -113,18 +113,60 @@ def _requirements(path: Path) -> set[str]:
     return values
 
 
-def _install_dependencies(app_root: Path, venv_python: Optional[Path], runner: Callable[..., Any]) -> None:
-    if not venv_python or not venv_python.exists():
-        return
+class DependencyInstallError(RuntimeError):
+    """Raised when an update cannot prepare its declared dependencies."""
+
+
+def _resolve_python(client_root: Path) -> Optional[Path]:
+    """Resolve the interpreter used for dependency installation and startup."""
+    venv_python = client_root / "venv" / "Scripts" / "python.exe"
+    if venv_python.is_file():
+        return venv_python
+
+    current_python = Path(sys.executable)
+    if current_python.is_file():
+        return current_python
+    return None
+
+
+def _install_dependencies(app_root: Path, python_executable: Optional[Path], runner: Callable[..., Any]) -> None:
     requirements = app_root / "requirements.txt"
     if not requirements.is_file():
         return
-    runner([str(venv_python), "-m", "pip", "install", "-r", str(requirements)], check=True)
+    if python_executable is None or not python_executable.is_file():
+        raise DependencyInstallError(
+            f"requirements.txt exists but no Python interpreter is available: {python_executable}"
+        )
+    runner(
+        [
+            str(python_executable),
+            "-m",
+            "pip",
+            "install",
+            "--disable-pip-version-check",
+            "-r",
+            str(requirements),
+        ],
+        check=True,
+    )
 
 
-def _start_application(app_root: Path, venv_python: Optional[Path], runner: Callable[..., Any], timeout: float) -> Any:
-    executable = venv_python or Path(sys.executable)
-    process = runner([str(executable), str(app_root / "client.py")], cwd=str(app_root), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+def _start_application(
+    app_root: Path,
+    python_executable: Optional[Path],
+    launcher: Callable[..., Any],
+    timeout: float,
+) -> Any:
+    if python_executable is None or not python_executable.is_file():
+        raise RuntimeError(f"No Python interpreter is available to start the client: {python_executable}")
+
+    process = launcher(
+        [str(python_executable), str(app_root / "client.py")],
+        cwd=str(app_root),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
     if hasattr(process, "poll"):
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
@@ -175,17 +217,17 @@ def apply_update(
         stop_client()
         _copy_tree(app_root, backup_root)
         _copy_tree(staged_app, app_root)
-        venv_python = root / "venv" / "Scripts" / "python.exe"
-        _install_dependencies(app_root, venv_python if venv_python.exists() else None, runner)
+        python_executable = _resolve_python(root)
+        _install_dependencies(app_root, python_executable, runner)
         if start_client:
             start_client()
         else:
-            _start_application(app_root, venv_python if venv_python.exists() else None, runner, startup_timeout)
+            _start_application(app_root, python_executable, subprocess.Popen, startup_timeout)
         return {"status": "COMPLETED", "version": manifest["version"], "old_version": old_version}
     except ValueError as error:
         reason = "VERSION_INVALID" if "version" in str(error).lower() or "updater" in str(error).lower() else "INVALID_PACKAGE"
         return _rollback_result(reason, str(error), app_root, backup_root, start_client)
-    except subprocess.CalledProcessError as error:
+    except (DependencyInstallError, subprocess.CalledProcessError) as error:
         return _rollback_result("DEPENDENCY_INSTALL_FAILED", str(error), app_root, backup_root, start_client)
     except Exception as error:
         return _rollback_result("APPLICATION_START_FAILED", str(error), app_root, backup_root, start_client)
@@ -203,6 +245,18 @@ def _rollback_result(reason: str, error: str, app_root: Path, backup_root: Optio
         except Exception as rollback_error:
             return {"status": "UPDATE_FAILED", "reason": "ROLLBACK", "error": f"{error}; rollback failed: {rollback_error}", "rolled_back": False}
     return {"status": "UPDATE_FAILED", "reason": reason, "error": error, "rolled_back": False}
+
+
+def _persist_update_result(client_root: Path, action_id: Optional[str], result: Dict[str, Any]) -> None:
+    """Persist the final result so the restarted client can report it."""
+    if not action_id:
+        return
+    result_dir = client_root / "storage" / "updates" / "results"
+    result_dir.mkdir(parents=True, exist_ok=True)
+    result_path = result_dir / f"{action_id}.json"
+    temporary_path = result_path.with_suffix(".tmp")
+    temporary_path.write_text(json.dumps(result), encoding="utf-8")
+    os.replace(temporary_path, result_path)
 
 
 if __name__ == "__main__":
@@ -234,6 +288,7 @@ if __name__ == "__main__":
 
     staged_pkg = Path(sys.argv[1])
     client_root = Path(sys.argv[2])
+    action_id = sys.argv[3] if len(sys.argv) >= 4 else None
 
     if not staged_pkg.is_file():
         log.error(f"Staged package not found: {staged_pkg}")
@@ -254,16 +309,31 @@ if __name__ == "__main__":
             os.system("taskkill /F /IM python.exe /FI \"COMMANDLINE eq *client.py*\"")
         else:
             os.system("pkill -f 'python.*client.py'")
-        # Allow time for process to fully release file locks
+        # Allow time for the process to fully release file locks
         time.sleep(1.0)
+
+    def _start_client() -> Any:
+        """Restart the client after a successful update or rollback."""
+        python_executable = _resolve_python(client_root)
+        return _start_application(
+            client_root / "app",
+            python_executable,
+            subprocess.Popen,
+            timeout=10.0,
+        )
 
     result = apply_update(
         staged_pkg,
         client_root=client_root,
         stop_client=_stop_client,
+        start_client=_start_client,
     )
 
     log.info(f"Update result: {result}")
+    try:
+        _persist_update_result(client_root, action_id, result)
+    except Exception as error:
+        log.error(f"Could not persist update result: {error}")
 
     # Exit with status 0 for success, 1 for failure
     sys.exit(0 if result.get("status") == "COMPLETED" else 1)
