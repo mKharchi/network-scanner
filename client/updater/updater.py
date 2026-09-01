@@ -245,15 +245,18 @@ if __name__ == "__main__":
      
      log.info(f"Starting update from staged package: {staged_pkg}")
      
-     def _stop_client():
-         """Stop the running client (platform-specific)."""
-         import platform
-         if platform.system() == "Windows":
-             os.system("taskkill /F /IM NetworkScannerClient.exe")
-         else:
-             os.system("pkill -f 'python.*client.py'")
-     
-     result = apply_update(
+      def _stop_client():
+          """Stop the running client (platform-specific)."""
+          import platform
+          if platform.system() == "Windows":
+              # Kill the Python process running client.py (not a compiled executable)
+              os.system("taskkill /F /IM python.exe /FI \"COMMANDLINE eq *client.py*\"")
+          else:
+              os.system("pkill -f 'python.*client.py'")
+          # Allow time for process to fully release file locks
+          time.sleep(1.0)
+      
+      result = apply_update(
          staged_pkg,
          client_root=client_root,
          stop_client=_stop_client,
