@@ -206,4 +206,60 @@ def _rollback_result(reason: str, error: str, app_root: Path, backup_root: Optio
 
 
 if __name__ == "__main__":
-    raise SystemExit("The updater is a library entry point; invoke apply_update from the action handler.")
+     """Run the updater as a standalone subprocess.
+     
+     Usage: python updater.py <staged_package_path> <client_root>
+     
+     This entry point is used when spawning the updater from the client
+     to apply a staged package after it has been transferred and verified.
+     """
+     import logging
+     
+     # Configure minimal logging for standalone operation
+     logging.basicConfig(
+         level=logging.INFO,
+         format="%(asctime)s [UPDATER] %(levelname)s: %(message)s",
+         handlers=[
+             logging.FileHandler(
+                 Path(__file__).parent.parent / "logs" / "updater.log",
+                 encoding="utf-8"
+             )
+         ],
+     )
+     log = logging.getLogger("updater")
+     
+     if len(sys.argv) < 3:
+         log.error("Usage: python updater.py <staged_package_path> <client_root>")
+         raise SystemExit(1)
+     
+     staged_pkg = Path(sys.argv[1])
+     client_root = Path(sys.argv[2])
+     
+     if not staged_pkg.is_file():
+         log.error(f"Staged package not found: {staged_pkg}")
+         raise SystemExit(1)
+     
+     if not (client_root / "app").is_dir():
+         log.error(f"Client app directory not found: {client_root / 'app'}")
+         raise SystemExit(1)
+     
+     log.info(f"Starting update from staged package: {staged_pkg}")
+     
+     def _stop_client():
+         """Stop the running client (platform-specific)."""
+         import platform
+         if platform.system() == "Windows":
+             os.system("taskkill /F /IM NetworkScannerClient.exe")
+         else:
+             os.system("pkill -f 'python.*client.py'")
+     
+     result = apply_update(
+         staged_pkg,
+         client_root=client_root,
+         stop_client=_stop_client,
+     )
+     
+     log.info(f"Update result: {result}")
+     
+     # Exit with status 0 for success, 1 for failure
+     sys.exit(0 if result.get("status") == "COMPLETED" else 1)
