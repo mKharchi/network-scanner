@@ -56,16 +56,16 @@ def _json(value: Any) -> str:
 
 
 def _sanitize_action_parameters(action_type: str, parameters: Any) -> Any:
-    """Strip bulky package payloads before persisting action parameters in MySQL."""
-    if action_type not in {ActionType.DEPLOY_PACKAGE.value, ActionType.SEND_FILE.value}:
-        return parameters or {}
-    if not isinstance(parameters, dict):
-        return {}
-    sanitized = dict(parameters)
-    sanitized.pop("package_data_base64", None)
-    sanitized.pop("package_bytes", None)
-    sanitized.pop("package_path", None)
-    return sanitized
+     """Strip bulky package payloads before persisting action parameters in MySQL."""
+     if action_type not in {ActionType.DEPLOY_PACKAGE.value, ActionType.SEND_FILE.value, ActionType.UPDATE_CLIENT.value}:
+         return parameters or {}
+     if not isinstance(parameters, dict):
+         return {}
+     sanitized = dict(parameters)
+     sanitized.pop("package_data_base64", None)
+     sanitized.pop("package_bytes", None)
+     sanitized.pop("package_path", None)
+     return sanitized
 
 
 def _row_to_action(row: Dict[str, Any]) -> Dict[str, Any]:
@@ -445,18 +445,25 @@ def execute_action(action: Dict[str, Any]) -> Dict[str, Any]:
         conn.close()
     action["status"] = ActionState.RUNNING.value
     action["started_at"] = _now().isoformat()
-
-    # ── DEPLOY_PACKAGE: concurrent fan-out with a throttle cap ──────────────
+    
+    # ── DEPLOY_PACKAGE / SEND_FILE / UPDATE_CLIENT: concurrent fan-out with a throttle cap ──────────────
     # Each per-client transfer can take minutes; running them sequentially
     # would multiply that delay by the number of targets. We use a
     # ThreadPoolExecutor capped at DEPLOY_PACKAGE_MAX_CONCURRENT so chunk
     # streams run in parallel without saturating the TCP server thread pool.
     # All other action types keep the original sequential loop below.
-    if action_type in {ActionType.DEPLOY_PACKAGE.value, ActionType.SEND_FILE.value}:
+    if action_type in {ActionType.DEPLOY_PACKAGE.value, ActionType.SEND_FILE.value, ActionType.UPDATE_CLIENT.value}:
         target_results_lock = threading.Lock()
 
         def _deploy_one(client_id: str):
             if action_type == ActionType.SEND_FILE.value:
+                result = deploy_package_to_client(
+                    client_id,
+                    action_id,
+                    parameters,
+                    operation=action_type,
+                )
+            elif action_type == ActionType.UPDATE_CLIENT.value:
                 result = deploy_package_to_client(
                     client_id,
                     action_id,

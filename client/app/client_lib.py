@@ -1346,7 +1346,7 @@ def process_package_chunk(message):
                 if computed_hash == expected_hash:
                     os.replace(part_path, final_path)
                     if session.get("operation") == "UPDATE_CLIENT":
-                        return {
+                        result = {
                             "type": "PACKAGE_RESULT",
                             "action_id": action_id,
                             "package_id": package_id,
@@ -1356,6 +1356,16 @@ def process_package_chunk(message):
                             "destination": "updates/incoming",
                             "total_bytes": session["bytes_written"],
                         }
+                        # Spawn the updater subprocess in the background
+                        # Get client_root from the final_path (which is updates/incoming)
+                        client_root = final_path.parent.parent.parent  # Go up from incoming -> updates -> client root
+                        spawn_result = _spawn_updater_subprocess(final_path, client_root)
+                        result["updater_spawn_status"] = spawn_result.get("status")
+                        if spawn_result.get("status") == "ok":
+                            result["updater_pid"] = spawn_result.get("updater_pid")
+                        else:
+                            result["updater_error"] = spawn_result.get("message")
+                        return result
                     if session.get("operation") == "SEND_FILE":
                         return {
                             "type": "PACKAGE_RESULT",
@@ -1426,6 +1436,58 @@ def process_package_chunk(message):
                 "status": "FAILED",
                 "error": f"chunk write failed: {error}",
             }
+
+
+def _spawn_updater_subprocess(
+    staged_package_path: Path | str,
+    client_root: Path | str,
+) -> Dict[str, Any]:
+    """Spawn the updater as a subprocess to apply a staged package.
+    
+    This runs asynchronously; the subprocess continues even if the main client
+    exits or is stopped. Returns immediately with status 'UPDATER_SPAWNED' or an error.
+    """
+    import subprocess
+    import sys
+    
+    try:
+        staged_path = Path(staged_package_path).resolve()
+        client_root_path = Path(client_root).resolve()
+        updater_path = client_root_path / "updater" / "updater.py"
+        
+        if not staged_path.is_file():
+            return {
+                "status": "error",
+                "message": f"Staged package not found: {staged_path}",
+            }
+        
+        if not updater_path.is_file():
+            return {
+                "status": "error",
+                "message": f"Updater not found: {updater_path}",
+            }
+        
+        # Use subprocess.Popen to spawn the updater in the background.
+        # The updater will handle stopping the client, replacing app/, and restarting.
+        # We pass the staged package path and client_root as arguments.
+        python_exe = sys.executable
+        proc = subprocess.Popen(
+            [python_exe, str(updater_path), str(staged_path), str(client_root_path)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,  # Detach from parent on Unix; on Windows this is ignored
+        )
+        
+        return {
+            "status": "ok",
+            "message": "Updater spawned successfully",
+            "updater_pid": proc.pid,
+        }
+    except Exception as error:
+        return {
+            "status": "error",
+            "message": f"Failed to spawn updater: {error}",
+        }
 
 
 ACTION_MANAGER = ActionManager()
