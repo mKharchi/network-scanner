@@ -374,12 +374,12 @@ curl http://SERVER_IP:8080/api/actions/${ACTION_ID_BROKEN} | jq '.data.result'
 
 ## Step 9: Acceptance Criteria Checklist
 
-- [ ] **Successful update:** Old version (1.0.0) → new version (2.0.0) completed end-to-end
-- [ ] **Server reflects update:** Server's client list shows version 2.0.0 after successful update
-- [ ] **Failure case:** Broken package (bad requirements) triggers update failure
-- [ ] **Rollback verified:** After failure, client continues running old version (2.0.0)
-- [ ] **Rollback visible on server:** Server shows version is still 2.0.0 after failed update attempt
-- [ ] **No service disruption:** Client remains connected and responsive throughout tests
+- [x] **Successful update:** Old version (1.0.0) → new version (2.0.0) completed end-to-end
+- [x] **Server reflects update:** Server's client list shows version 2.0.0 after successful update
+- [x] **Failure case:** Broken package (bad requirements) triggers update failure
+- [x] **Rollback verified:** After failure, client continues running old version (2.0.0)
+- [x] **Rollback visible on server:** Server shows version is still 2.0.0 after failed update attempt
+- [x] **No service disruption:** Client remains connected and responsive throughout tests
 
 ## Troubleshooting
 
