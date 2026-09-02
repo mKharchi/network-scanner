@@ -144,19 +144,48 @@ loop, and its callback is not connected to a Sync Manager.
 
 ## Phase 6 — Sync Manager (v2 §7.6, schema §3.5)
 
-**Status:** ⬜ Not started
+**Status:** ✅ Done — standalone client library completed September 2, 2026
 
-No delta builder, 15-minute sync scheduler, retry/backoff, ACK/NACK handling, or
-`window_id` idempotency implementation exists yet.
+Implemented in `client/app/sync_manager.py`:
+
+- **Delta builder:** `build_delta_payload()` whitelists only v2 §3.5 fields (device identity + activity), strips raw packet/flow-level data, enforces `window_id` consistency.
+- **Durable persistence:** Pending payloads stored to `sync_pending/<window_hash>.json`; completed window IDs tracked in `sync_pending/completed.json` (last 500 entries kept).
+- **Retry/backoff:** Exponential backoff with configurable base (default 5 sec) and max retries (default 3).
+- **ACK/NACK handling:** `handle_ack()` receives server ACK/NACK, signals worker thread, auto-marks completed on ACK.
+- **`window_id` idempotency:** Skips re-sending and re-marking if the payload is already in `completed.json`.
+- **Async send:** One background thread per window, configurable ACK timeout (default 15 sec), graceful shutdown via `stop()`.
+- **Reconnect recovery:** `retry_pending()` restarts workers for any durable payloads on client restart/reconnect.
+
+Tests: `client/tests/test_sync_manager.py` — 10 tests passed (delta builder, persistence, ACK/NACK, retry logic, idempotency).
+
+**Integration status:** ✅ Wired into the production client loop in `client/app/client.py`: `ActivityWindowAggregator.on_window_closed` feeds `SyncManager.handle_window_closed`, pending windows retry after registration, and ACK/NACK frames are routed back to `SyncManager.handle_ack`. The Device Enrichment Job also starts from the live `PassiveProtocolListener` snapshot.
 
 ---
 
 ## Phase 7 — Server Merge Service (v2 §7.7)
 
-**Status:** ⬜ Not started
+**Status:** ✅ Done — implemented and tested September 2, 2026
 
-No v2 server endpoint/service was found for merging `updated_devices`, storing
-activity windows, or deduplicating by `(device_mac, window_id)`.
+Implemented in:
+
+- `server/server_components/telemetry_merge.py`
+- `server/server_components/server_lib.py` (`TELEMETRY_SYNC` socket dispatch and ACK/NACK)
+- `server/api_server.py` (`POST /api/v1/telemetry/sync`)
+- `server/scripts.sql` (`telemetry_devices`, `telemetry_activity_windows`)
+
+The merge service now:
+
+- Strictly validates and whitelists v2 §3.5 identity, discovery, and activity fields.
+- Rejects raw packet/flow fields, location fields, and ML/scoring fields.
+- Upserts the global `network_devices` identity table.
+- Stores observer-specific device metadata in `telemetry_devices`.
+- Stores activity summaries in `telemetry_activity_windows`.
+- Deduplicates repeated deliveries with unique `(device_mac, window_id)` handling.
+- Returns idempotent ACK results for duplicate windows and NACKs invalid payloads.
+- Enforces registered socket client identity before merging socket payloads.
+
+Tests: `server/tests/test_telemetry_merge.py` — 4 tests passed.
+
 
 ---
 

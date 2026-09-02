@@ -725,6 +725,24 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
         path = parsed_url.path.rstrip("/")
 
         try:
+            if path in {"/api/v1/telemetry/sync", "/api/telemetry/sync"}:
+                payload = self._read_json_payload()
+                if payload is None:
+                    self.send_error_response(400, "INVALID_PAYLOAD", "Invalid JSON payload.")
+                    return
+                try:
+                    from server_components.telemetry_merge import merge_telemetry_delta
+
+                    result = merge_telemetry_delta(payload)
+                except (ValueError, RuntimeError) as exc:
+                    self.send_error_response(400, "INVALID_TELEMETRY_SYNC", str(exc))
+                    return
+                except Exception as exc:  # pragma: no cover - database-specific failures
+                    self.send_error_response(500, "TELEMETRY_MERGE_FAILED", str(exc))
+                    return
+                self.send_data(result, status_code=200)
+                return
+
             if path == "/api/locations":
                 payload = self._read_json_payload()
                 if payload is None:

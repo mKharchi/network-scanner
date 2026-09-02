@@ -14,9 +14,11 @@ from client_lib import (
     process_package_chunk,
     receive_message,
     send_message,
-    get_activity_log,
-    get_mac,
 )
+from client_lib import get_activity_log, get_mac
+from sync_manager import SyncManager, SYNC_ACK_TYPE, SYNC_NACK_TYPE
+from activity_window_aggregator import ActivityWindowAggregator
+from device_enrichment import DeviceEnrichmentJob
 from action_framework import (
     PASSIVE_NEIGHBOURHOOD_COMMAND,
     SCREENSHOT_COMMAND,
@@ -749,6 +751,9 @@ def start_client(stop_event=None, *, agent_role="service"):
         passive_protocol_listener = None
         packet_observer = None
         process_monitor = None
+        sync_manager = None
+        activity_aggregator = None
+        enrichment_job = None
 
         def _on_process_alert(alert):
             send_process_monitor_alert(client, alert)
@@ -898,6 +903,20 @@ def start_client(stop_event=None, *, agent_role="service"):
 
             _startup_log(f"Connected to server {SERVER_IP}:{SERVER_PORT}.")
 
+            observer_client_id = os.getenv("CLIENT_ID") or _snapshot_client_mac() or "unknown-client"
+
+            def _send_telemetry_message(message):
+                with socket_lock:
+                    send_message(client, message)
+
+            sync_manager = SyncManager(
+                client_id=observer_client_id,
+                send_message=_send_telemetry_message,
+            )
+            activity_aggregator = ActivityWindowAggregator(
+                on_window_closed=sync_manager.handle_window_closed,
+            )
+
             # --------------------------------------------------------
             # Register
             # --------------------------------------------------------
@@ -927,6 +946,9 @@ def start_client(stop_event=None, *, agent_role="service"):
 
                     # Silently acknowledge registration confirmation
                     if msg_type == "REGISTERED":
+                        if sync_manager is not None:
+                            sync_manager.retry_pending()
+
                         # Send stored snapshot if available.
                         # Do NOT collect synchronously during registration.
                         threading.Thread(
@@ -1020,10 +1042,21 @@ def start_client(stop_event=None, *, agent_role="service"):
                                     dhcp_callback=_on_passive_dhcp,
                                 )
                                 passive_protocol_listener.start()
+                                enrichment_job = DeviceEnrichmentJob(
+                                    device_snapshot_provider=passive_protocol_listener.snapshot_devices,
+                                )
+                                enrichment_job.start()
+                                if activity_aggregator is not None:
+                                    activity_aggregator.start()
                         except Exception as error:
                             print(
                                 f"[PASSIVE LISTENER] Could not start listener: {error}"
                             )
+                        continue
+
+                    if msg_type in (SYNC_ACK_TYPE, SYNC_NACK_TYPE):
+                        if sync_manager is not None:
+                            sync_manager.handle_ack(message)
                         continue
 
                     if msg_type == "PACKAGE_CHUNK":
@@ -1105,6 +1138,21 @@ def start_client(stop_event=None, *, agent_role="service"):
             stop_event.set()
         finally:
             session_stop_event.set()
+            if enrichment_job is not None:
+                try:
+                    enrichment_job.stop()
+                except Exception as error:
+                    print(f"[DEVICE_ENRICHMENT] Could not stop job: {error}")
+            if activity_aggregator is not None:
+                try:
+                    activity_aggregator.stop()
+                except Exception as error:
+                    print(f"[ACTIVITY_WINDOW] Could not stop aggregator: {error}")
+            if sync_manager is not None:
+                try:
+                    sync_manager.stop()
+                except Exception as error:
+                    print(f"[SYNC] Could not stop manager: {error}")
             if process_monitor is not None:
                 try:
                     process_monitor.stop()
