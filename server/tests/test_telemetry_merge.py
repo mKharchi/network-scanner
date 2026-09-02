@@ -7,7 +7,12 @@ from pathlib import Path
 SERVER_DIRECTORY = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SERVER_DIRECTORY))
 
-from server_components.telemetry_merge import merge_telemetry_delta, validate_delta_payload  # noqa: E402
+from server_components.telemetry_merge import (  # noqa: E402
+    merge_telemetry_delta,
+    merge_telemetry_seed,
+    validate_delta_payload,
+    validate_seed_payload,
+)
 
 
 PAYLOAD = {
@@ -39,6 +44,21 @@ PAYLOAD = {
             },
         }
     ],
+}
+
+
+SEED_PAYLOAD = {
+    "client_id": "client_07",
+    "sync_timestamp": "2026-09-02T13:15:03Z",
+    "updated_devices": [{
+        "mac": "aa:bb:cc:dd:ee:01",
+        "ip": "172.16.2.110",
+        "hostname": "DESKTOP-XYZ",
+        "vendor": "Dell",
+        "os_guess": None,
+        "last_seen": "2026-09-02T13:14:58Z",
+        "discovery": {"dhcp": {"seen": True}},
+    }],
 }
 
 
@@ -111,6 +131,25 @@ class TelemetryMergeTests(unittest.TestCase):
             payload = {**PAYLOAD, field: 1}
             with self.subTest(field=field), self.assertRaises(ValueError):
                 validate_delta_payload(payload)
+
+    def test_seed_accepts_identity_without_activity_and_writes_no_window(self):
+        normalized = validate_seed_payload(SEED_PAYLOAD)
+        self.assertEqual(normalized["updated_devices"][0]["mac"], "AA:BB:CC:DD:EE:01")
+        connection = FakeConnection()
+        result = merge_telemetry_seed(SEED_PAYLOAD, conn=connection)
+        self.assertEqual(result["status"], "ack")
+        self.assertEqual(result["seeded_devices"], 1)
+        self.assertTrue(connection.committed)
+        self.assertTrue(any("INSERT INTO telemetry_devices" in query for query in connection.cursor_instance.queries))
+        self.assertFalse(any("telemetry_activity_windows" in query for query in connection.cursor_instance.queries))
+
+    def test_seed_rejects_activity_and_raw_fields(self):
+        with self.assertRaises(ValueError):
+            validate_seed_payload({**SEED_PAYLOAD, "window_id": "must-not-appear"})
+        with self.assertRaises(ValueError):
+            validate_seed_payload({**SEED_PAYLOAD, "flows": []})
+        with self.assertRaises(ValueError):
+            validate_seed_payload({**SEED_PAYLOAD, "updated_devices": [{**SEED_PAYLOAD["updated_devices"][0], "activity": {}}]})
 
 
 if __name__ == "__main__":

@@ -250,6 +250,98 @@ def broadcast_forbidden_processes():
     return {"sent": sent, "failed": failed}
 
 
+def _normalise_observation_scope(observation_scope):
+    """Validate CIDR assignments and return canonical network strings."""
+    if observation_scope is None:
+        return []
+    if not isinstance(observation_scope, list):
+        raise ValueError("observation_scope must be an array of CIDR strings")
+    normalized = []
+    for value in observation_scope:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("observation_scope entries must be non-empty CIDR strings")
+        try:
+            normalized.append(str(ipaddress.ip_network(value.strip(), strict=False)))
+        except ValueError as error:
+            raise ValueError(f"Invalid observation scope CIDR: {value!r}") from error
+    return normalized
+
+
+def get_client_observation_scope(client_id):
+    """Return a client's persisted v2 observation scope, or [] for fail-open."""
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        if conn is None:
+            return []
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT observation_scope FROM clients WHERE client_id = %s", (client_id,))
+        row = cursor.fetchone()
+        raw_scope = row.get("observation_scope") if isinstance(row, dict) else (row[0] if row else None)
+        if not raw_scope:
+            return []
+        parsed = json.loads(raw_scope) if isinstance(raw_scope, str) else raw_scope
+        try:
+            return _normalise_observation_scope(parsed)
+        except ValueError:
+            return []
+    except Exception as error:
+        print(f"Failed to read observation scope for {client_id}: {error}")
+        return []
+    finally:
+        if cursor:
+            cursor.close()
+        if conn and conn.is_connected():
+            conn.close()
+
+
+def set_client_observation_scope(client_id, observation_scope):
+    """Persist a validated CIDR assignment for the next registration and live push."""
+    normalized = _normalise_observation_scope(observation_scope)
+    conn = None
+    cursor = None
+    try:
+        conn = get_connection()
+        if conn is None:
+            raise RuntimeError("Database connection unavailable")
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE clients
+            SET observation_scope = %s, observation_scope_updated_at = CURRENT_TIMESTAMP
+            WHERE client_id = %s
+            """,
+            (json.dumps(normalized), client_id),
+        )
+        conn.commit()
+        if cursor.rowcount == 0:
+            return None
+        return normalized
+    finally:
+        if cursor:
+            cursor.close()
+        if conn and conn.is_connected():
+            conn.close()
+
+
+def broadcast_observation_scope(client_id, observation_scope=None):
+    """Push one client's validated scope to its live connection, if present."""
+    scope = _normalise_observation_scope(
+        observation_scope if observation_scope is not None else get_client_observation_scope(client_id)
+    )
+    client = get_client(client_id)
+    if not client or not client.get("connection") or not client.get("send_lock"):
+        return {"sent": 0, "failed": 0, "observation_scope": scope}
+    try:
+        with client["send_lock"]:
+            send_message(client["connection"], {"type": "SCOPE_ASSIGNED", "observation_scope": scope})
+        return {"sent": 1, "failed": 0, "observation_scope": scope}
+    except OSError as error:
+        print(f"Could not push observation scope to {client_id}: {error}")
+        return {"sent": 0, "failed": 1, "observation_scope": scope}
+
+
 ALERT_SEVERITIES = {"LOW", "MEDIUM", "HIGH", "CRITICAL"}
 WORKING_HOURS_DISABLED = "DISABLED"
 WORKING_HOURS_WITHIN = "WITHIN"
@@ -1355,6 +1447,48 @@ def handle_telemetry_sync(mac, payload, *, sender=None):
     return valid
 
 
+def handle_telemetry_seed(mac, payload, *, sender=None):
+    """Merge a registration-time device-only v2 inventory seed."""
+    from server_components.telemetry_merge import merge_telemetry_seed
+
+    client = get_client_by_mac(mac)
+    sender = sender or client
+    registered_client_id = sender.get("client_id") if sender else _client_id_for_mac(mac)
+    valid = isinstance(payload, dict)
+    result = None
+    reason = None
+    if valid and registered_client_id and payload.get("client_id") != registered_client_id:
+        valid = False
+        reason = "Payload client_id does not match the registered connection"
+    if valid:
+        try:
+            result = merge_telemetry_seed(payload)
+        except (ValueError, RuntimeError) as error:
+            valid = False
+            reason = str(error)
+        except Exception as error:  # pragma: no cover - database-specific failures
+            valid = False
+            reason = f"Telemetry seed merge failed: {error}"
+
+    message = {
+        "type": "SEED_ACK" if valid else "SEED_NACK",
+        "client_id": registered_client_id,
+        "status": "ack" if valid else "nack",
+    }
+    if result:
+        message["result"] = result
+    if not valid:
+        message["reason"] = reason or "Invalid telemetry seed payload"
+    if sender and sender.get("connection"):
+        try:
+            with sender["send_lock"]:
+                send_message(sender["connection"], message)
+        except (ConnectionResetError, BrokenPipeError, OSError) as error:
+            print(f"Failed to send telemetry seed acknowledgement: {error}")
+            return False
+    return valid
+
+
 def handle_network_neighbour_report(
     reporter_mac,
     payload,
@@ -1617,6 +1751,8 @@ def receive_client_messages(mac, conn, *, agent_role="service"):
                 handle_network_neighbour_report(mac, message.get("data"))
             elif message_type == "TELEMETRY_SYNC":
                 handle_telemetry_sync(mac, message.get("data"))
+            elif message_type == "TELEMETRY_SEED":
+                handle_telemetry_seed(mac, message.get("data"))
             elif message_type == "PACKAGE_RESULT":
                 handle_package_result(mac, message)
             elif message_type == "HEARTBEAT":
@@ -1966,6 +2102,48 @@ def request_client_network_neighbourhood(client_id, *, timeout=None):
         "status": "completed",
         "client_id": client_id,
         "observations_sent": data.get("observations_sent", 0),
+        "timeout_seconds": timeout,
+    }
+
+
+def request_client_telemetry_flows(client_id, device_mac, window_id, *, timeout=None):
+    """Relay one bounded on-demand flow query to its originating client."""
+    if timeout is None:
+        try:
+            timeout = max(0.1, float(os.getenv("TELEMETRY_FLOW_REQUEST_TIMEOUT", "15")))
+        except ValueError:
+            timeout = 15.0
+
+    result = execute_client_command(
+        client_id,
+        "GET_TELEMETRY_FLOWS",
+        args={"device_mac": device_mac, "window": window_id},
+        timeout=timeout,
+        process_network_scan=False,
+    )
+    if result.get("status") != "ok":
+        message = result.get("message", "Client flow query failed.")
+        if "timed out" in message.lower():
+            return {"status": "client_timeout", "client_id": client_id, "timeout_seconds": timeout, "message": message}
+        if "not connected" in message.lower():
+            return {"status": "client_unavailable", "client_id": client_id, "message": message}
+        return {"status": "client_error", "client_id": client_id, "message": message}
+
+    data = result.get("data")
+    if (
+        not isinstance(data, dict)
+        or data.get("status") != "ok"
+        or data.get("window_id") != window_id
+        or not isinstance(data.get("flows"), list)
+    ):
+        return {"status": "client_error", "client_id": client_id, "message": "Client returned an invalid flow response."}
+    return {
+        "status": "completed",
+        "client_id": client_id,
+        "device_mac": data.get("device_mac"),
+        "window_id": window_id,
+        "flows": data["flows"],
+        "flow_count": len(data["flows"]),
         "timeout_seconds": timeout,
     }
 

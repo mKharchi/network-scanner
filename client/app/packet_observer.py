@@ -15,12 +15,21 @@ from typing import Any, Dict, Optional
 
 from packet_extractor import extract_metadata_from_scapy
 from packet_storage import DailyPacketStorage, DEFAULT_STORAGE_DIR
+from scope_filter import ScopeFilter
 
 LOG = logging.getLogger("packet_observer")
 
 
 class PacketObserver:
-    """Passively observes network traffic on the local interface and stores daily telemetry."""
+    """Passively observes network traffic on the local interface and stores daily telemetry.
+
+    Beyond the V1 raw daily packet dump, this also applies the v2 subnet scope
+    filter (v2 §6) right after classification and, when a fresh copy survives
+    the filter, forwards the observation to the v2 Flow Aggregator and the v2
+    per-protocol packet writer (v2 §7.1, §7.2, §7.3). V1 storage is always fed
+    first and is never gated by the scope filter, preserving existing V1
+    behavior for any deployment that has not yet been assigned a scope.
+    """
 
     def __init__(
         self,
@@ -32,6 +41,9 @@ class PacketObserver:
         local_mac: Optional[str] = None,
         local_ip: Optional[str] = None,
         log_interval_seconds: float = 60.0,
+        scope_filter: Optional[ScopeFilter] = None,
+        flow_aggregator: Optional[Any] = None,
+        telemetry_packet_writer: Optional[Any] = None,
     ):
         self.interface = interface
         self.observer_client_id = observer_client_id or os.getenv("CLIENT_ID")
@@ -43,6 +55,11 @@ class PacketObserver:
             storage_dir=storage_dir,
             observer_client_id=self.observer_client_id,
         )
+
+        # v2 consumers (optional — when omitted, behavior is unchanged from V1).
+        self.scope_filter = scope_filter
+        self.flow_aggregator = flow_aggregator
+        self.telemetry_packet_writer = telemetry_packet_writer
 
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
@@ -91,7 +108,33 @@ class PacketObserver:
                 local_mac=self.local_mac,
                 local_ip=self.local_ip,
             )
+            # V1 raw daily storage is always fed, unfiltered — preserves
+            # existing behavior regardless of v2 scope assignment.
             self.storage.record_observation(obs)
+
+            # v2 pipeline (v2 §6): apply the scope filter right after
+            # classification, before flow aggregation and per-protocol
+            # packet file writes. Fail-open (keep everything) when no scope
+            # filter is configured or no scope has been assigned yet.
+            in_scope = True
+            if self.scope_filter is not None:
+                try:
+                    in_scope = self.scope_filter.keep_observation(obs)
+                except Exception as error:  # pragma: no cover - defensive
+                    LOG.debug("[PACKET_OBSERVER] Scope filter error: %s", error)
+                    in_scope = True
+
+            if in_scope:
+                if self.flow_aggregator is not None:
+                    try:
+                        self.flow_aggregator.record_packet(obs)
+                    except Exception as error:  # pragma: no cover - defensive
+                        LOG.debug("[PACKET_OBSERVER] Flow aggregator error: %s", error)
+                if self.telemetry_packet_writer is not None:
+                    try:
+                        self.telemetry_packet_writer.record(obs)
+                    except Exception as error:  # pragma: no cover - defensive
+                        LOG.debug("[PACKET_OBSERVER] Telemetry packet writer error: %s", error)
 
             # Periodic diagnostic aggregate log
             now = time.monotonic()

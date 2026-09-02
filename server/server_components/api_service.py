@@ -40,7 +40,9 @@ from server_components.server_lib import (
     client_quarantine_status,
     clients_lock,
     device_isolation_status,
+    get_client_observation_scope,
     get_working_hours_status,
+    set_client_observation_scope,
 )
 
 
@@ -2017,6 +2019,31 @@ def get_working_hours_settings() -> Dict[str, Any]:
             "checked_at": datetime.now(timezone.utc).isoformat(),
         },
     }
+
+
+def get_client_observation_scope_settings(client_id: str) -> Optional[Dict[str, Any]]:
+    """Return the persisted distributed-capture CIDR policy for one client."""
+    conn = get_connection()
+    if not conn:
+        raise RuntimeError("Database connection unavailable.")
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT client_id FROM clients WHERE client_id = %s", (client_id,))
+        if cursor.fetchone() is None:
+            return None
+    finally:
+        conn.close()
+    return {"client_id": client_id, "observation_scope": get_client_observation_scope(client_id)}
+
+
+def update_client_observation_scope_settings(client_id: str, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Validate and persist a per-client v2 capture scope."""
+    if not isinstance(payload, dict) or "observation_scope" not in payload:
+        raise ValueError("Field 'observation_scope' is required.")
+    scope = set_client_observation_scope(client_id, payload["observation_scope"])
+    if scope is None:
+        return None
+    return {"client_id": client_id, "observation_scope": scope}
 
 
 def get_forbidden_processes_settings() -> Dict[str, Any]:

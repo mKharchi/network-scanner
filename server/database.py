@@ -156,6 +156,26 @@ def _ensure_client_health_columns(cursor):
             cursor.execute(f"ALTER TABLE clients ADD COLUMN {column_name} {definition}")
 
 
+def _ensure_client_observation_scope_columns(cursor):
+    """Persist v2 distributed-capture CIDR assignments across reconnects."""
+    cursor.execute(
+        """
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'clients'
+        """
+    )
+    existing_columns = {row[0] for row in cursor.fetchall()}
+    columns = {
+        "observation_scope": "TEXT NULL",
+        "observation_scope_updated_at": "DATETIME NULL",
+    }
+    for column_name, definition in columns.items():
+        if column_name not in existing_columns:
+            cursor.execute(f"ALTER TABLE clients ADD COLUMN {column_name} {definition}")
+
+
 def _ensure_location_type_column(cursor):
     """Add location_type and physical layout hierarchy columns to locations."""
     cursor.execute(
@@ -318,6 +338,7 @@ def initiate_db():
         _ensure_client_location_assignment_columns(cursor)
         _ensure_client_location_history_assignment_columns(cursor)
         _ensure_client_health_columns(cursor)
+        _ensure_client_observation_scope_columns(cursor)
         _ensure_client_version_columns(cursor)
         _ensure_location_type_column(cursor)
         _ensure_location_spatial_columns(cursor)

@@ -567,6 +567,20 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 return
 
             # 10. Settings
+            m = re.match(r"^/api/v1/clients/([^/]+)/observation-scope$", path)
+            if m:
+                client_id = urllib.parse.unquote(m.group(1))
+                try:
+                    scope = api_service.get_client_observation_scope_settings(client_id)
+                except RuntimeError as exc:
+                    self.send_error_response(503, "DATABASE_UNAVAILABLE", str(exc))
+                    return
+                if scope is None:
+                    self.send_error_response(404, "NOT_FOUND", f"Client '{client_id}' not found.")
+                    return
+                self.send_data(scope)
+                return
+
             if path == "/api/v1/settings/working-hours":
                 wh_data = api_service.get_working_hours_settings()
                 self.send_data(wh_data)
@@ -707,6 +721,32 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     self.send_data(bulk_status)
                 except ValueError as exc:
                     self.send_error_response(404, "NOT_FOUND", str(exc))
+                return
+
+            # Request finalized flow details from one connected client for one device/window.
+            m = re.match(r"^/api/v1/clients/([^/]+)/devices/([^/]+)/flows$", path)
+            if m:
+                client_id = urllib.parse.unquote(m.group(1))
+                device_mac = urllib.parse.unquote(m.group(2))
+                window_id = get_param("window") or get_param("window_id")
+                if not window_id:
+                    self.send_error_response(400, "MISSING_WINDOW", "The 'window' query parameter is required.")
+                    return
+                try:
+                    result = server_lib.request_client_telemetry_flows(
+                        client_id, device_mac, window_id
+                    )
+                except ValueError as error:
+                    self.send_error_response(400, "INVALID_FLOW_QUERY", str(error))
+                    return
+                if result["status"] == "completed":
+                    self.send_data(result, status_code=200)
+                elif result["status"] == "client_timeout":
+                    self.send_error_response(504, "CLIENT_TIMEOUT", result["message"])
+                elif result["status"] == "client_unavailable":
+                    self.send_error_response(409, "CLIENT_UNAVAILABLE", result["message"])
+                else:
+                    self.send_error_response(502, "CLIENT_REQUEST_FAILED", result["message"])
                 return
 
             # Fallback 404
@@ -1205,6 +1245,28 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
     def do_PUT(self) -> None:  # noqa: N802
         parsed_url = urllib.parse.urlparse(self.path)
         path = parsed_url.path.rstrip("/")
+        scope_match = re.match(r"^/api/v1/clients/([^/]+)/observation-scope$", path)
+        if scope_match:
+            payload = self._read_json_payload()
+            if payload is None:
+                self.send_error_response(400, "INVALID_PAYLOAD", "Invalid JSON payload.")
+                return
+            client_id = urllib.parse.unquote(scope_match.group(1))
+            try:
+                scope = api_service.update_client_observation_scope_settings(client_id, payload)
+            except ValueError as exc:
+                self.send_error_response(400, "INVALID_SCOPE", str(exc))
+                return
+            except RuntimeError as exc:
+                self.send_error_response(503, "DATABASE_UNAVAILABLE", str(exc))
+                return
+            if scope is None:
+                self.send_error_response(404, "NOT_FOUND", f"Client '{client_id}' not found.")
+                return
+            server_lib.broadcast_observation_scope(client_id, scope["observation_scope"])
+            self.send_data(scope)
+            return
+
         m = re.match(r"^/api/v1/settings/forbidden-processes/([^/]+)$", path)
         if not m:
             self.send_error_response(404, "NOT_FOUND", f"Unknown endpoint '{path}'.")
