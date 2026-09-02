@@ -164,6 +164,167 @@ def get_package_path(package_id: str) -> Optional[Path]:
     return path if path.is_file() else None
 
 
+def list_packages(limit: int = 100) -> list[Dict[str, Any]]:
+    """List all available packages in the repository."""
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """SELECT package_id, filename, size_bytes, sha256, storage_path,
+                      uploaded_by, created_at
+               FROM packages
+               ORDER BY created_at DESC
+               LIMIT %s""",
+            (max(1, min(limit, 500)),),
+        )
+        rows = cursor.fetchall() or []
+        for row in rows:
+            created_at = row.get("created_at")
+            if created_at is not None and hasattr(created_at, "isoformat"):
+                row["created_at"] = created_at.isoformat()
+        return rows
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def build_client_update_package(
+    version: str,
+    *,
+    release_notes: Optional[str] = None,
+    base_app_dir: Optional[Path | str] = None,
+    uploaded_by: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Build an update package (.zip with manifest.json and app/) from client/app."""
+    import json
+    import shutil
+    import tempfile
+    import zipfile
+
+    ver = str(version or "").strip()
+    if not ver or not re.match(r"^\d+\.\d+\.\d+(-[a-zA-Z0-9.]+)?$", ver):
+        raise ValueError(f"Invalid semantic version '{version}'. Expected format like '2.0.0'.")
+
+    if base_app_dir is None:
+        source_dir = Path(__file__).resolve().parents[2] / "client" / "app"
+    else:
+        source_dir = Path(base_app_dir).resolve()
+
+    if not source_dir.is_dir():
+        raise FileNotFoundError(f"Source client app directory does not exist: {source_dir}")
+
+    resolved_id = f"client-update-{ver}"
+    filename = f"client-update-{ver}.zip"
+
+    PACKAGE_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+    storage_path = PACKAGE_STORAGE_DIR / filename
+
+    with tempfile.TemporaryDirectory(prefix="pkg_build_") as tmp_str:
+        tmp_dir = Path(tmp_str)
+        app_target = tmp_dir / "app"
+
+        # Ignore python cache files, git files, and temporary outputs
+        def _ignore_patterns(_path: str, names: list[str]) -> set[str]:
+            ignored = set()
+            for name in names:
+                if name == "__pycache__" or name.startswith(".git") or name.endswith((".pyc", ".pyo", ".tmp", ".part")):
+                    ignored.add(name)
+            return ignored
+
+        shutil.copytree(source_dir, app_target, ignore=_ignore_patterns)
+
+        # Write version.json inside app/
+        version_data = {
+            "version": ver,
+            "release_date": _now().isoformat() + "Z",
+            "updater_version": "1.0.0",
+        }
+        with (app_target / "version.json").open("w", encoding="utf-8") as vf:
+            json.dump(version_data, vf, indent=2)
+
+        # Calculate file hashes for all files in app/
+        file_hashes: Dict[str, str] = {}
+        for item in sorted(app_target.rglob("*")):
+            if item.is_file():
+                rel_path = item.relative_to(app_target).as_posix()
+                file_hashes[rel_path] = calculate_sha256_file(item)
+
+        # Write manifest.json
+        manifest = {
+            "version": ver,
+            "package_type": "client-update",
+            "minimum_updater_version": "1.0.0",
+            "file_hashes": file_hashes,
+            "release_notes": release_notes or f"Client update package v{ver}",
+            "build_timestamp": _now().isoformat() + "Z",
+        }
+        with (tmp_dir / "manifest.json").open("w", encoding="utf-8") as mf:
+            json.dump(manifest, mf, indent=2)
+
+        # Build zip archive
+        tmp_zip = tmp_dir / "temp_package.zip"
+        with zipfile.ZipFile(tmp_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+            for root_path, _, file_names in os.walk(tmp_dir):
+                for fname in file_names:
+                    full_file = Path(root_path) / fname
+                    if full_file == tmp_zip:
+                        continue
+                    arcname = full_file.relative_to(tmp_dir).as_posix()
+                    zf.write(full_file, arcname)
+
+        # Atomic copy/replace to PACKAGE_STORAGE_DIR
+        shutil.copy2(tmp_zip, storage_path)
+
+    # Compute digest and size
+    size_bytes = storage_path.stat().st_size
+    sha256 = calculate_sha256_file(storage_path)
+
+    record = {
+        "package_id": resolved_id,
+        "filename": filename,
+        "size_bytes": size_bytes,
+        "sha256": sha256,
+        "storage_path": str(storage_path),
+        "uploaded_by": uploaded_by or "system-builder",
+        "created_at": _now(),
+    }
+
+    # Insert or update in database
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """INSERT INTO packages
+               (package_id, filename, size_bytes, sha256, storage_path, uploaded_by, created_at)
+               VALUES (%s, %s, %s, %s, %s, %s, %s)
+               ON DUPLICATE KEY UPDATE
+                   filename = VALUES(filename),
+                   size_bytes = VALUES(size_bytes),
+                   sha256 = VALUES(sha256),
+                   storage_path = VALUES(storage_path),
+                   uploaded_by = VALUES(uploaded_by),
+                   created_at = VALUES(created_at)""",
+            (
+                record["package_id"],
+                record["filename"],
+                record["size_bytes"],
+                record["sha256"],
+                record["storage_path"],
+                record["uploaded_by"],
+                record["created_at"],
+            ),
+        )
+        conn.commit()
+    finally:
+        cursor.close()
+        conn.close()
+
+    created_at = record.get("created_at")
+    if created_at is not None and hasattr(created_at, "isoformat"):
+        record["created_at"] = created_at.isoformat()
+    return record
+
+
 def delete_package(package_id: str) -> bool:
     record = get_package(package_id)
     if not record:
