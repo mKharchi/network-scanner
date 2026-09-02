@@ -676,8 +676,26 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 self.send_data(replay)
                 return
 
+            # ── Milestone G: Bulk update status endpoints ──────────────────────
+            if path == "/api/v1/bulk-updates":
+                limit = get_int_param("limit", 50)
+                self.send_data({"items": api_service.list_bulk_updates(limit=limit)})
+                return
+
+            m = re.match(r"^/api/v1/bulk-updates/([^/]+)$", path)
+            if m:
+                try:
+                    bulk_status = api_service.get_bulk_update_status(
+                        urllib.parse.unquote(m.group(1))
+                    )
+                    self.send_data(bulk_status)
+                except ValueError as exc:
+                    self.send_error_response(404, "NOT_FOUND", str(exc))
+                return
+
             # Fallback 404
             self.send_error_response(404, "NOT_FOUND", f"Unknown endpoint '{path}'.")
+
 
         except Exception as e:
             import traceback
@@ -1089,8 +1107,35 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     self.send_error_response(400, "INVALID_LABEL", str(err))
                 return
 
+            # ── Milestone G: Bulk update initiation ───────────────────────────
+            if path == "/api/v1/bulk-updates":
+                payload = self._read_json_payload()
+                if payload is None:
+                    self.send_error_response(400, "INVALID_PAYLOAD", "Invalid JSON payload.")
+                    return
+                package_id = payload.get("package_id")
+                target_selection = payload.get("target_selection")
+                if not package_id or not isinstance(package_id, str):
+                    self.send_error_response(400, "INVALID_REQUEST", "Field 'package_id' is required.")
+                    return
+                if not target_selection or not isinstance(target_selection, dict):
+                    self.send_error_response(400, "INVALID_REQUEST", "Field 'target_selection' is required.")
+                    return
+                try:
+                    bulk_result = api_service.create_bulk_update(
+                        package_id=package_id.strip(),
+                        target_selection=target_selection,
+                        requested_by=self.headers.get("X-Operator-Id") or "local-network-operator",
+                        bulk_update_id=payload.get("bulk_update_id"),
+                    )
+                    self.send_data(bulk_result, status_code=201)
+                except ValueError as exc:
+                    self.send_error_response(400, "INVALID_REQUEST", str(exc))
+                return
+
             # Fallback 404
             self.send_error_response(404, "NOT_FOUND", f"Unknown POST endpoint '{path}'.")
+
 
         except Exception as e:
             import traceback

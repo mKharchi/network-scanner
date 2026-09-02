@@ -226,6 +226,59 @@ export interface PackageUpload {
   created_at?: string;
 }
 
+export interface BulkUpdatePerClientStatus {
+  action_id: string;
+  client_id: string;
+  hostname: string;
+  status: string;
+  result: Record<string, unknown>;
+}
+
+export interface BulkUpdateDetail {
+  bulk_update_id: string;
+  package_id: string;
+  created_at: string | null;
+  created_by?: string | null;
+  target_count: number;
+  aggregate_status: {
+    total: number;
+    pending: number;
+    running: number;
+    completed: number;
+    failed: number;
+  };
+  per_client_status: BulkUpdatePerClientStatus[];
+}
+
+export interface BulkUpdateSummary {
+  bulk_update_id: string;
+  package_id: string;
+  created_at: string | null;
+  created_by?: string | null;
+  target_selection_strategy: string;
+  target_count: number;
+  aggregate_status: {
+    total: number;
+    completed: number;
+    failed: number;
+    pending: number;
+  };
+}
+
+export interface BulkUpdateCreateResponse {
+  bulk_update_id: string;
+  package_id: string;
+  target_count: number;
+  actions: { action_id: string; client_id: string; status: string }[];
+  aggregate_status: {
+    total: number;
+    pending: number;
+    running: number;
+    completed: number;
+    failed: number;
+  };
+}
+
 export interface ClientLocalizationDebug {
   client: {
     database_id: number;
@@ -1246,6 +1299,85 @@ export const api = {
       targets: payload.targets,
       parameters,
     });
+  },
+
+  updateClient: async (payload: {
+    target: string;
+    packageId: string;
+    actionId?: string;
+    timeoutSeconds?: number;
+  }) => {
+    const actionId =
+      payload.actionId ??
+      (typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `update-${Date.now()}`);
+    const parameters: Record<string, unknown> = {
+      package_id: payload.packageId,
+    };
+    if (payload.timeoutSeconds !== undefined) {
+      parameters.timeout = payload.timeoutSeconds;
+    }
+    return api.createAction({
+      action_id: actionId,
+      action_type: "UPDATE_CLIENT",
+      targets: [payload.target],
+      parameters,
+    });
+  },
+
+  createBulkUpdate: (payload: {
+    packageId: string;
+    targetSelection: {
+      strategy: "individual" | "all";
+      client_ids?: string[];
+    };
+    bulkUpdateId?: string;
+  }) =>
+    post<BulkUpdateCreateResponse>("/bulk-updates", {
+      package_id: payload.packageId,
+      target_selection: payload.targetSelection,
+      bulk_update_id: payload.bulkUpdateId,
+    }),
+
+  getBulkUpdateStatus: (bulkUpdateId: string) =>
+    get<BulkUpdateDetail>(`/bulk-updates/${encodeURIComponent(bulkUpdateId)}`),
+
+  listBulkUpdates: (limit: number = 50) =>
+    get<{ items: BulkUpdateSummary[] }>("/bulk-updates", { limit: String(limit) }),
+
+  waitForBulkUpdate: async (
+    bulkUpdateId: string,
+    options?: {
+      intervalMs?: number;
+      timeoutMs?: number;
+      onUpdate?: (status: BulkUpdateDetail) => void;
+    },
+  ) => {
+    const intervalMs = options?.intervalMs ?? 1500;
+    const timeoutMs = options?.timeoutMs ?? 10 * 60 * 1000;
+    const started = Date.now();
+
+    while (true) {
+      const status = await api.getBulkUpdateStatus(bulkUpdateId);
+      options?.onUpdate?.(status);
+
+      const agg = status.aggregate_status;
+      const isDone = agg.total > 0 && agg.completed + agg.failed >= agg.total;
+      if (isDone) {
+        return status;
+      }
+
+      if (Date.now() - started > timeoutMs) {
+        throw new ApiError(
+          "BULK_UPDATE_TIMEOUT",
+          `Bulk update ${bulkUpdateId} timed out after ${Math.round(timeoutMs / 1000)}s`,
+          408,
+        );
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
   },
 
   uploadPackage: async (

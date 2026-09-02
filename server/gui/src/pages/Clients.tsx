@@ -16,6 +16,7 @@ import {
 import { formatRelative } from "../utils/format";
 import { MetricCard } from "../components/Card";
 import { DeployPackagePanel } from "../components/DeployPackagePanel";
+import { UpdateClientPanel } from "../components/UpdateClientPanel";
 import "../styles/operations.css";
 
 // ── Filter bar ────────────────────────────────────────────────────
@@ -274,6 +275,7 @@ export function ClientsPage() {
   const [autoLocatingClientId, setAutoLocatingClientId] = useState<string | null>(null);
   const [selectedClientIds, setSelectedClientIds] = useState<Set<string>>(new Set());
   const [showBulkDeploy, setShowBulkDeploy] = useState(false);
+  const [showBulkUpdate, setShowBulkUpdate] = useState(false);
 
   const { state, refetch } = useFetch(
     () =>
@@ -444,13 +446,45 @@ export function ClientsPage() {
             Clear
           </Button>
           <Button
+            variant="secondary"
+            size="sm"
+            disabled={selectedOnlineTargets.length === 0}
+            onClick={() => {
+              setShowBulkUpdate((open) => !open);
+              setShowBulkDeploy(false);
+            }}
+          >
+            {showBulkUpdate ? "Hide update panel" : "Update clients…"}
+          </Button>
+          <Button
             variant="primary"
             size="sm"
             disabled={selectedOnlineTargets.length === 0}
-            onClick={() => setShowBulkDeploy((open) => !open)}
+            onClick={() => {
+              setShowBulkDeploy((open) => !open);
+              setShowBulkUpdate(false);
+            }}
           >
             {showBulkDeploy ? "Hide deploy panel" : "Deploy package…"}
           </Button>
+        </div>
+      )}
+
+      {showBulkUpdate && selectedOnlineTargets.length > 0 && (
+        <div style={{ marginBottom: "var(--space-5)" }}>
+          <UpdateClientPanel
+            targets={selectedOnlineTargets}
+            title="Bulk Client Update"
+            description={`Deploy update package to ${selectedOnlineTargets.length} selected client(s). Each client is updated and validated independently with automatic rollback on failure.`}
+            onCompleted={() => {
+              refetch();
+              addToast({
+                title: "Bulk update complete",
+                message: `Update batch completed. Check per-client status above.`,
+                severity: "SUCCESS",
+              });
+            }}
+          />
         </div>
       )}
 

@@ -410,3 +410,36 @@ INSERT IGNORE INTO working_hours (day_of_week, start_time, end_time, enabled) VA
     (3, '09:30:00', '18:00:00', TRUE),
     (5, '09:30:00', '18:00:00', TRUE),
     (6, '09:30:00', '18:00:00', TRUE);
+
+-- ── Milestone G: Bulk update tracking ─────────────────────────────────────────
+-- bulk_updates: one row per bulk-update operation (covers N clients).
+CREATE TABLE IF NOT EXISTS bulk_updates (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    bulk_update_id VARCHAR(255) NOT NULL UNIQUE,
+    package_id VARCHAR(255) NOT NULL,
+    target_selection_strategy VARCHAR(50) NOT NULL DEFAULT 'individual',  -- 'individual' | 'all'
+    target_count INT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(255) NULL,
+    INDEX idx_bulk_updates_id (bulk_update_id),
+    INDEX idx_bulk_updates_package (package_id),
+    INDEX idx_bulk_updates_created (created_at)
+);
+
+-- bulk_update_actions: one row per (bulk_update, client) pair.
+-- status mirrors the corresponding actions row so the status endpoint can read
+-- both tables without touching action_targets for every client.
+CREATE TABLE IF NOT EXISTS bulk_update_actions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    bulk_update_id VARCHAR(255) NOT NULL,
+    action_id VARCHAR(255) NOT NULL,
+    client_id VARCHAR(50) NOT NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+    result LONGTEXT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (bulk_update_id) REFERENCES bulk_updates(bulk_update_id) ON DELETE CASCADE,
+    UNIQUE KEY uq_bulk_action (bulk_update_id, action_id),
+    INDEX idx_bua_bulk_update (bulk_update_id),
+    INDEX idx_bua_client (client_id),
+    INDEX idx_bua_action (action_id)
+);
