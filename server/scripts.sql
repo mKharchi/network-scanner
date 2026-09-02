@@ -52,6 +52,8 @@ CREATE TABLE IF NOT EXISTS clients (
     health_memory_percent DOUBLE NULL,
     health_disk_percent DOUBLE NULL,
     health_updated_at DATETIME NULL,
+    observation_scope TEXT NULL,
+    observation_scope_updated_at DATETIME NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
         ON UPDATE CURRENT_TIMESTAMP,

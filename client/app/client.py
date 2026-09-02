@@ -19,6 +19,10 @@ from client_lib import get_activity_log, get_mac
 from sync_manager import SyncManager, SYNC_ACK_TYPE, SYNC_NACK_TYPE
 from activity_window_aggregator import ActivityWindowAggregator
 from device_enrichment import DeviceEnrichmentJob
+from flow_query import get_requested_flows
+from flow_aggregator import FlowAggregator
+from scope_filter import ScopeFilter, save_scope_config
+from telemetry_packet_writer import TelemetryPacketWriter
 from action_framework import (
     PASSIVE_NEIGHBOURHOOD_COMMAND,
     SCREENSHOT_COMMAND,
@@ -754,6 +758,8 @@ def start_client(stop_event=None, *, agent_role="service"):
         sync_manager = None
         activity_aggregator = None
         enrichment_job = None
+        flow_aggregator = None
+        telemetry_packet_writer = None
 
         def _on_process_alert(alert):
             send_process_monitor_alert(client, alert)
@@ -877,11 +883,26 @@ def start_client(stop_event=None, *, agent_role="service"):
 
             obs_iface = os.getenv("PACKET_OBSERVER_INTERFACE") or os.getenv("DHCP_LISTEN_INTERFACE") or detected_iface
             if packet_observer is None:
+                telemetry_client_id = os.getenv("CLIENT_ID") or _snapshot_client_mac() or "unknown-client"
+                # v2 §6/§7.2/§7.3: scope filter, Flow Aggregator, and the v2
+                # per-protocol packet writer all consume the same normalized
+                # observation stream already produced for V1 storage. Scope
+                # filtering fails open (keeps everything) until the server
+                # assigns an observation_scope, so this is safe to enable by
+                # default alongside the unmodified V1 capture path.
+                scope_filter = ScopeFilter.from_env_or_file()
+                flow_aggregator = FlowAggregator(observer_client_id=telemetry_client_id)
+                flow_aggregator.start()
+                telemetry_packet_writer = TelemetryPacketWriter()
+                telemetry_packet_writer.start()
                 packet_observer = PacketObserver(
                     interface=obs_iface,
                     local_ip=detected_ip,
                     local_mac=get_mac(detected_ip),
-                    observer_client_id=os.getenv("CLIENT_ID"),
+                    observer_client_id=telemetry_client_id,
+                    scope_filter=scope_filter,
+                    flow_aggregator=flow_aggregator,
+                    telemetry_packet_writer=telemetry_packet_writer,
                 )
                 packet_observer.start()
         except Exception as e:
@@ -946,8 +967,19 @@ def start_client(stop_event=None, *, agent_role="service"):
 
                     # Silently acknowledge registration confirmation
                     if msg_type == "REGISTERED":
+                        assigned_scope = message.get("observation_scope")
+                        if isinstance(assigned_scope, list):
+                            save_scope_config(assigned_scope)
+                            if scope_filter is not None:
+                                scope_filter.set_scope(assigned_scope)
+
                         if sync_manager is not None:
                             sync_manager.retry_pending()
+                            threading.Thread(
+                                target=sync_manager.seed_devices,
+                                daemon=True,
+                                name="telemetry-device-seed",
+                            ).start()
 
                         # Send stored snapshot if available.
                         # Do NOT collect synchronously during registration.
@@ -1059,6 +1091,21 @@ def start_client(stop_event=None, *, agent_role="service"):
                             sync_manager.handle_ack(message)
                         continue
 
+                    if msg_type in ("SEED_ACK", "SEED_NACK"):
+                        if msg_type == "SEED_NACK":
+                            LOG.warning("[TELEMETRY_SEED] Server rejected initial device seed: %s", message.get("reason"))
+                        continue
+
+                    if msg_type == "SCOPE_ASSIGNED":
+                        assigned_scope = message.get("observation_scope")
+                        if isinstance(assigned_scope, list):
+                            save_scope_config(assigned_scope)
+                            if scope_filter is not None:
+                                scope_filter.set_scope(assigned_scope)
+                        else:
+                            LOG.warning("[SCOPE_FILTER] Ignoring malformed SCOPE_ASSIGNED message")
+                        continue
+
                     if msg_type == "PACKAGE_CHUNK":
                         chunk_result = process_package_chunk(message)
                         if chunk_result:
@@ -1097,6 +1144,11 @@ def start_client(stop_event=None, *, agent_role="service"):
                         result = get_requested_passive_neighbourhood(
                             passive_protocol_listener
                         )
+                    elif command == "GET_TELEMETRY_FLOWS":
+                        try:
+                            result = get_requested_flows(message)
+                        except (ValueError, OSError) as error:
+                            result = {"status": "error", "message": str(error)}
                     else:
                         result = handle_command(
                             message,
@@ -1173,6 +1225,16 @@ def start_client(stop_event=None, *, agent_role="service"):
                     packet_observer.stop()
                 except Exception as error:
                     print(f"[PACKET_OBSERVER] Could not stop observer cleanly: {error}")
+            if flow_aggregator is not None:
+                try:
+                    flow_aggregator.stop()
+                except Exception as error:
+                    print(f"[FLOW_AGGREGATOR] Could not stop cleanly: {error}")
+            if telemetry_packet_writer is not None:
+                try:
+                    telemetry_packet_writer.stop()
+                except Exception as error:
+                    print(f"[TELEMETRY_PACKET_WRITER] Could not stop cleanly: {error}")
             if background_thread is not None and background_thread.is_alive():
                 background_thread.join(timeout=2)
             if heartbeat_thread is not None and heartbeat_thread.is_alive():

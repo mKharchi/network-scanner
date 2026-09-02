@@ -9,7 +9,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 
-from sync_manager import SyncManager, build_delta_payload
+from sync_manager import SyncManager, build_delta_payload, build_seed_payload
 from telemetry_storage import atomic_write_json, get_devices_path
 
 
@@ -43,6 +43,24 @@ class SyncManagerTests(unittest.TestCase):
         self.assertEqual(device["hostname"], "host")
         self.assertNotIn("flow_id", device["activity"])
         self.assertNotIn("src_ip", device["activity"])
+
+    def test_seed_payload_is_device_only_and_excludes_raw_fields(self):
+        payload = build_seed_payload(
+            client_id="client_07",
+            sync_timestamp="2026-09-02T11:15:03Z",
+            devices=[{
+                "mac": "AA:BB:CC:DD:EE:01",
+                "hostname": "host",
+                "discovery": {"mdns": {"seen": True}},
+                "flows": [{"flow_id": "must-not-leave-client"}],
+                "location": {"floor": 1},
+            }],
+        )
+        self.assertEqual(payload["client_id"], "client_07")
+        self.assertNotIn("window_id", payload)
+        self.assertNotIn("flows", payload["updated_devices"][0])
+        self.assertNotIn("location", payload["updated_devices"][0])
+        self.assertNotIn("activity", payload["updated_devices"][0])
 
     def test_inactive_device_is_retained(self):
         payload = build_delta_payload(

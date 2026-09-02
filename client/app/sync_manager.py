@@ -24,6 +24,7 @@ LOG = logging.getLogger("sync_manager")
 SYNC_MESSAGE_TYPE = "TELEMETRY_SYNC"
 SYNC_ACK_TYPE = "SYNC_ACK"
 SYNC_NACK_TYPE = "SYNC_NACK"
+SEED_MESSAGE_TYPE = "TELEMETRY_SEED"
 DEFAULT_SYNC_INTERVAL_SECONDS = 900
 DEFAULT_RETRY_BASE_SECONDS = 5.0
 DEFAULT_MAX_RETRIES = 3
@@ -100,6 +101,36 @@ def build_delta_payload(
     }
 
 
+def build_seed_payload(
+    *,
+    client_id: str,
+    devices: Optional[List[Dict[str, Any]]] = None,
+    sync_timestamp: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Build a device-only initial inventory seed from local v2 device records.
+
+    The seed uses the same identity/discovery allowlist as a delta but deliberately
+    contains no activity window, raw packets, or flow-level data.
+    """
+    updated_devices: List[Dict[str, Any]] = []
+    seen_macs = set()
+    for device in devices or []:
+        if not isinstance(device, dict) or not isinstance(device.get("mac"), str):
+            continue
+        mac = device["mac"].strip().lower()
+        if not mac or mac in seen_macs:
+            continue
+        safe_device = _copy_allowed(device, _DEVICE_FIELDS)
+        safe_device["mac"] = mac
+        updated_devices.append(safe_device)
+        seen_macs.add(mac)
+    return {
+        "client_id": str(client_id),
+        "sync_timestamp": sync_timestamp or _utc_now_iso(),
+        "updated_devices": updated_devices,
+    }
+
+
 class SyncManager:
     """Build, persist, send, and retry one delta per activity window."""
 
@@ -171,6 +202,19 @@ class SyncManager:
             devices=self._load_devices(),
             sync_timestamp=self._now_provider(),
         )
+
+    def build_seed_payload(self) -> Dict[str, Any]:
+        return build_seed_payload(
+            client_id=self.client_id,
+            devices=self._load_devices(),
+            sync_timestamp=self._now_provider(),
+        )
+
+    def seed_devices(self) -> Dict[str, Any]:
+        """Send the current local v2 device base once after registration."""
+        payload = self.build_seed_payload()
+        self._send_message({"type": SEED_MESSAGE_TYPE, "data": payload})
+        return payload
 
     def _enqueue_payload(self, payload: Dict[str, Any]) -> None:
         window_id = payload["window_id"]

@@ -89,15 +89,25 @@ class ScopeFilter:
     """
 
     def __init__(self, observation_scope: Optional[List[str]] = None):
+        self._lock = threading.RLock()
         self._networks = _parse_cidr_list(observation_scope or [])
+
+    def set_scope(self, observation_scope: Optional[List[str]]) -> None:
+        """Replace the active server-assigned scope without restarting capture."""
+        networks = _parse_cidr_list(observation_scope or [])
+        with self._lock:
+            self._networks = networks
 
     @property
     def is_configured(self) -> bool:
-        return bool(self._networks)
+        with self._lock:
+            return bool(self._networks)
 
     def keep(self, src_ip: Optional[str], dst_ip: Optional[str]) -> bool:
         """Return True if the packet should be retained under the current scope."""
-        if not self._networks:
+        with self._lock:
+            networks = tuple(self._networks)
+        if not networks:
             # Fail-open: no scope assigned yet, or intentionally unrestricted.
             return True
         for ip_str in (src_ip, dst_ip):
@@ -107,7 +117,7 @@ class ScopeFilter:
                 addr = ipaddress.ip_address(ip_str)
             except ValueError:
                 continue
-            for network in self._networks:
+            for network in networks:
                 if addr.version == network.version and addr in network:
                     return True
         return False

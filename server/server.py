@@ -13,6 +13,7 @@ from server_components.server_lib import (
     send_message,
     server_menu,
     get_forbidden_processes,
+    get_client_observation_scope,
     receive_client_messages,
 )
 from database import initiate_db
@@ -59,7 +60,14 @@ def accept_clients(server):
                     conn.close()
                     continue
 
-                send_message(conn, {"type": "REGISTERED", "client_id": client_id})
+                send_message(
+                    conn,
+                    {
+                        "type": "REGISTERED",
+                        "client_id": client_id,
+                        "observation_scope": get_client_observation_scope(client_id),
+                    },
+                )
                 
                 req = receive_message(conn)
                 if req and req.get("type") == "REQUEST" and req.get("command") == "GET_FORBIDDEN_PROCESSES":

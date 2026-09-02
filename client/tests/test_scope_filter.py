@@ -40,6 +40,17 @@ class TestScopeFilter(unittest.TestCase):
         sf = ScopeFilter(["not-a-cidr", "172.16.2.0/26"])
         self.assertTrue(sf.keep("172.16.2.10", "8.8.8.8"))
 
+    def test_set_scope_hot_applies_and_can_restore_fail_open(self):
+        sf = ScopeFilter([])
+        self.assertTrue(sf.keep("8.8.8.8", "1.1.1.1"))
+        sf.set_scope(["172.16.2.0/26"])
+        self.assertTrue(sf.is_configured)
+        self.assertFalse(sf.keep("8.8.8.8", "1.1.1.1"))
+        self.assertTrue(sf.keep("8.8.8.8", "172.16.2.9"))
+        sf.set_scope([])
+        self.assertFalse(sf.is_configured)
+        self.assertTrue(sf.keep("8.8.8.8", "1.1.1.1"))
+
     def test_multiple_cidrs(self):
         sf = ScopeFilter(["172.16.2.0/26", "10.0.0.0/8"])
         self.assertTrue(sf.keep("10.1.2.3", "8.8.8.8"))
