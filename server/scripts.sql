@@ -361,6 +361,41 @@ CREATE TABLE IF NOT EXISTS daily_network_scan_files (
         ON UPDATE CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS telemetry_devices (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    observer_client_id VARCHAR(255) NOT NULL,
+    device_mac VARCHAR(17) NOT NULL,
+    os_guess VARCHAR(255) NULL,
+    discovery_json LONGTEXT NOT NULL,
+    last_seen DATETIME NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_telemetry_device_observer_mac (observer_client_id, device_mac),
+    INDEX idx_telemetry_devices_mac (device_mac),
+    INDEX idx_telemetry_devices_last_seen (last_seen)
+);
+
+CREATE TABLE IF NOT EXISTS telemetry_activity_windows (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    device_mac VARCHAR(17) NOT NULL,
+    observer_client_id VARCHAR(255) NOT NULL,
+    window_id VARCHAR(255) NOT NULL,
+    window_start DATETIME NOT NULL,
+    window_end DATETIME NOT NULL,
+    active BOOLEAN NOT NULL,
+    flow_count INT UNSIGNED NOT NULL DEFAULT 0,
+    packet_count BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    bytes BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    protocols_json LONGTEXT NOT NULL,
+    ports_json LONGTEXT NOT NULL,
+    connections_json LONGTEXT NOT NULL,
+    unique_destinations INT UNSIGNED NOT NULL DEFAULT 0,
+    received_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_telemetry_activity_device_window (device_mac, window_id),
+    INDEX idx_telemetry_activity_observer_window (observer_client_id, window_end),
+    INDEX idx_telemetry_activity_device_time (device_mac, window_end)
+);
+
 CREATE TABLE IF NOT EXISTS device_classifications (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     device_id BIGINT NOT NULL UNIQUE,

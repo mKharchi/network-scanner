@@ -1306,6 +1306,55 @@ def remove_client(mac, connection=None, *, agent_role="service"):
             ).start()
 
 
+def handle_telemetry_sync(mac, payload, *, sender=None):
+    """Merge one v2 telemetry delta and acknowledge its window.
+
+    The socket identity is authoritative: a client cannot submit a delta under a
+    different registered client ID. The merge service whitelists the v2 §3.5
+    fields and deduplicates activity by ``(device_mac, window_id)``.
+    """
+    from server_components.telemetry_merge import merge_telemetry_delta
+
+    client = get_client_by_mac(mac)
+    sender = sender or client
+    registered_client_id = sender.get("client_id") if sender else _client_id_for_mac(mac)
+    window_id = payload.get("window_id") if isinstance(payload, dict) else None
+    result = None
+    reason = None
+    valid = isinstance(payload, dict)
+    if valid and registered_client_id and payload.get("client_id") != registered_client_id:
+        valid = False
+        reason = "Payload client_id does not match the registered connection"
+    if valid:
+        try:
+            result = merge_telemetry_delta(payload)
+        except (ValueError, RuntimeError) as error:
+            valid = False
+            reason = str(error)
+        except Exception as error:  # pragma: no cover - database-specific failures
+            valid = False
+            reason = f"Telemetry merge failed: {error}"
+
+    message = {
+        "type": "SYNC_ACK" if valid else "SYNC_NACK",
+        "window_id": window_id,
+        "client_id": registered_client_id,
+        "status": "ack" if valid else "nack",
+    }
+    if result:
+        message["result"] = result
+    if not valid:
+        message["reason"] = reason or "Invalid telemetry sync payload"
+    if sender and sender.get("connection"):
+        try:
+            with sender["send_lock"]:
+                send_message(sender["connection"], message)
+        except (ConnectionResetError, BrokenPipeError, OSError) as error:
+            print(f"Failed to send telemetry sync acknowledgement: {error}")
+            return False
+    return valid
+
+
 def handle_network_neighbour_report(
     reporter_mac,
     payload,
@@ -1566,6 +1615,8 @@ def receive_client_messages(mac, conn, *, agent_role="service"):
                 handle_client_alert(mac, message.get("alert"))
             elif message_type == "NETWORK_NEIGHBOURS":
                 handle_network_neighbour_report(mac, message.get("data"))
+            elif message_type == "TELEMETRY_SYNC":
+                handle_telemetry_sync(mac, message.get("data"))
             elif message_type == "PACKAGE_RESULT":
                 handle_package_result(mac, message)
             elif message_type == "HEARTBEAT":
