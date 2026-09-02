@@ -64,7 +64,7 @@ class ClientPackageDeploymentTests(unittest.TestCase):
         self.assertEqual(res.get("package_id"), "pkg-v1")
         self.assertIn("act-101", client_lib.ACTIVE_PACKAGE_SESSIONS)
 
-        part_file = self.incoming_dir / "pkg-v1.zip.part"
+        part_file = self.incoming_dir / "pkg-v1.part"
         self.assertTrue(part_file.exists())
 
     def test_chunk_streaming_sha256_match_and_safe_extraction_success(self):
