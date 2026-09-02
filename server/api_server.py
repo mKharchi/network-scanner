@@ -600,6 +600,22 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 self.send_data({"items": items, "total": len(items)})
                 return
 
+            # Package Management
+            if path in {"/api/v1/packages", "/api/packages"}:
+                limit = get_int_param("limit", 100)
+                self.send_data({"items": package_service.list_packages(limit=limit)})
+                return
+
+            m = re.match(r"^/(?:api/v1/|api/)packages/([^/]+)$", path)
+            if m:
+                pkg_id = urllib.parse.unquote(m.group(1))
+                pkg = package_service.get_package(pkg_id)
+                if not pkg:
+                    self.send_error_response(404, "NOT_FOUND", f"Package '{pkg_id}' not found.")
+                    return
+                self.send_data(pkg)
+                return
+
             m = re.match(r"^/(?:api/v1/|api/)rogue-devices/([^/]+)$", path)
             if m:
                 device_id = urllib.parse.unquote(m.group(1))
@@ -757,7 +773,32 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 self.send_data({"location": location})
                 return
 
-            if path == "/api/packages":
+            if path in {"/api/v1/packages/build-client-update", "/api/packages/build-client-update"}:
+                payload = self._read_json_payload() or {}
+                version = payload.get("version")
+                if not version or not isinstance(version, str):
+                    self.send_error_response(400, "INVALID_REQUEST", "Field 'version' is required (e.g. '2.0.0').")
+                    return
+                release_notes = payload.get("release_notes")
+                try:
+                    record = package_service.build_client_update_package(
+                        version=version.strip(),
+                        release_notes=release_notes.strip() if isinstance(release_notes, str) else None,
+                    )
+                    self.send_data(
+                        {
+                            "package": record,
+                            "message": f"Client update package v{version.strip()} built successfully.",
+                        },
+                        status_code=201,
+                    )
+                except ValueError as err:
+                    self.send_error_response(400, "INVALID_VERSION", str(err))
+                except Exception as err:
+                    self.send_error_response(500, "BUILD_FAILED", f"Failed to build package: {err}")
+                return
+
+            if path in {"/api/v1/packages", "/api/packages"}:
                 try:
                     package = self._stream_package_upload()
                 except ValueError as exc:
