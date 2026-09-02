@@ -14,6 +14,7 @@ import { ClientStatusBadge, Badge } from "../components/Badge";
 import { Button } from "../components/Button";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { DeployPackagePanel } from "../components/DeployPackagePanel";
+import { UpdateClientPanel } from "../components/UpdateClientPanel";
 import { SectionCard, MetricCard } from "../components/Card";
 import { Skeleton, ErrorState, Notice, EmptyState } from "../components/States";
 import { formatDateTime, formatRelative } from "../utils/format";
@@ -1392,30 +1393,45 @@ export function ClientDetailPage() {
               </div>
             </div>
             <div style={{
-              display: activeTab=== "remote" ? "grid" : "none",
+              display: activeTab === "remote" ? "grid" : "none",
+              gap: "var(--space-4)",
             }}>
               {clientId && (
-                <DeployPackagePanel
-                  targets={[clientId]}
-                  disabled={!isOnline || commandLoading}
-                  onCompleted={(action) => {
-                    addToast({
-                      title:
-                        action.status === "SUCCESS"
-                          ? "Package deployed"
-                          : action.status === "PARTIAL_SUCCESS"
-                            ? "Package partially deployed"
-                            : "Package deployment failed",
-                      message: `Action ${action.action_id} finished with status ${action.status}.`,
-                      severity:
-                        action.status === "SUCCESS"
-                          ? "SUCCESS"
-                          : action.status === "PARTIAL_SUCCESS"
-                            ? "HIGH"
-                            : "CRITICAL",
-                    });
-                  }}
-                />
+                <>
+                  <UpdateClientPanel
+                    targets={[clientId]}
+                    disabled={!isOnline || commandLoading}
+                    onCompleted={() => {
+                      addToast({
+                        title: "Client update complete",
+                        message: `Update applied to ${clientId}. Client will report new version on next heartbeat.`,
+                        severity: "SUCCESS",
+                      });
+                      refetch();
+                    }}
+                  />
+                  <DeployPackagePanel
+                    targets={[clientId]}
+                    disabled={!isOnline || commandLoading}
+                    onCompleted={(action) => {
+                      addToast({
+                        title:
+                          action.status === "SUCCESS"
+                            ? "Package deployed"
+                            : action.status === "PARTIAL_SUCCESS"
+                              ? "Package partially deployed"
+                              : "Package deployment failed",
+                        message: `Action ${action.action_id} finished with status ${action.status}.`,
+                        severity:
+                          action.status === "SUCCESS"
+                            ? "SUCCESS"
+                            : action.status === "PARTIAL_SUCCESS"
+                              ? "HIGH"
+                              : "CRITICAL",
+                      });
+                    }}
+                  />
+                </>
               )}
             </div>
 

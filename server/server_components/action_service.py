@@ -64,7 +64,6 @@ def _sanitize_action_parameters(action_type: str, parameters: Any) -> Any:
      sanitized = dict(parameters)
      sanitized.pop("package_data_base64", None)
      sanitized.pop("package_bytes", None)
-     sanitized.pop("package_path", None)
      return sanitized
 
 
@@ -582,6 +581,13 @@ def execute_action(action: Dict[str, Any]) -> Dict[str, Any]:
                 (item["status"], _now(), _json(item["result"]) if item["status"] == ActionState.SUCCESS.value else None,
                  _json(item["result"]) if item["status"] == ActionState.FAILED.value else None, action_id, item["client_id"]),
             )
+        # Update bulk_update_actions if this action was triggered as part of a bulk update
+        cursor.execute(
+            """UPDATE bulk_update_actions
+               SET status = %s, result = %s
+               WHERE action_id = %s""",
+            (status, _json({"targets": target_results}), action_id),
+        )
         conn.commit()
     finally:
         cursor.close()

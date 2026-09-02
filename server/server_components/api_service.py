@@ -2521,4 +2521,316 @@ def retrain_classification_model() -> Dict[str, Any]:
     return service.retrain_model_pipeline()
 
 
+# ============================================================
+# MILESTONE G: BULK UPDATE
+# ============================================================
 
+def create_bulk_update(
+    package_id: str,
+    target_selection: Dict[str, Any],
+    requested_by: str,
+    bulk_update_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Create a bulk UPDATE_CLIENT operation targeting multiple clients.
+
+    Creates **one independent UPDATE_CLIENT action per target client** so that
+    each client's success/failure is tracked independently and a single failing
+    client does not block others.
+
+    Args:
+        package_id: ID of a package already present in the server's package store.
+        target_selection: Dict with ``strategy`` (``"individual"`` or ``"all"``)
+            and, when strategy is ``"individual"``, a ``client_ids`` list.
+        requested_by: Operator identifier recorded on each created action.
+        bulk_update_id: Optional caller-supplied idempotency key.  A UUID hex is
+            generated when omitted.
+
+    Returns:
+        Dict describing the bulk update and the initial per-action stubs.
+    """
+    import uuid as _uuid
+    import threading as _threading
+    from server_components import action_service as _action_svc
+    from server_components.package_service import get_package as _get_pkg
+    from server_components.action_framework import ActionType as _AT
+
+    # Validate package exists.
+    if not _get_pkg(package_id):
+        raise ValueError(f"Package '{package_id}' not found in the server package store.")
+
+    # Resolve target client IDs.
+    strategy = target_selection.get("strategy", "")
+    if strategy == "individual":
+        client_ids = [str(c).strip() for c in target_selection.get("client_ids", []) if c]
+    elif strategy == "all":
+        # Pull every client_id known to the database (online *and* offline).
+        # The action framework handles offline clients gracefully.
+        conn = get_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("SELECT client_id FROM clients ORDER BY client_id")
+            client_ids = [row["client_id"] for row in cursor.fetchall()]
+        finally:
+            cursor.close()
+            conn.close()
+    else:
+        raise ValueError(
+            f"Unknown target_selection strategy '{strategy}'.  "
+            "Supported values: 'individual', 'all'."
+        )
+
+    if not client_ids:
+        raise ValueError("No target clients selected – the client list is empty.")
+
+    bulk_update_id = bulk_update_id or _uuid.uuid4().hex
+
+    # Create one independent UPDATE_CLIENT action per client.
+    actions: List[Dict[str, Any]] = []
+    for client_id in client_ids:
+        action = _action_svc.create_action(
+            _AT.UPDATE_CLIENT.value,
+            [client_id],
+            parameters={"package_id": package_id},
+            requested_by=requested_by,
+        )
+        actions.append(action)
+
+    # Persist the bulk update record and per-client rows atomically.
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """INSERT INTO bulk_updates
+               (bulk_update_id, package_id, target_selection_strategy, target_count, created_by)
+               VALUES (%s, %s, %s, %s, %s)""",
+            (bulk_update_id, package_id, strategy, len(client_ids), requested_by),
+        )
+        for action, client_id in zip(actions, client_ids):
+            cursor.execute(
+                """INSERT INTO bulk_update_actions
+                   (bulk_update_id, action_id, client_id, status)
+                   VALUES (%s, %s, %s, %s)""",
+                (bulk_update_id, action["action_id"], client_id, "PENDING"),
+            )
+        conn.commit()
+    finally:
+        cursor.close()
+        conn.close()
+
+    # Dispatch all actions concurrently (fire-and-forget daemon threads, same
+    # pattern as do_POST /api/actions for LONG_RUNNING_ACTION_TYPES).
+    for action in actions:
+        _threading.Thread(
+            target=_action_svc.execute_action,
+            args=(action,),
+            daemon=True,
+            name=f"bulk-{bulk_update_id[:8]}-{action['action_id'][:8]}",
+        ).start()
+
+    return {
+        "bulk_update_id": bulk_update_id,
+        "package_id": package_id,
+        "target_count": len(client_ids),
+        "actions": [
+            {"action_id": a["action_id"], "client_id": c, "status": "PENDING"}
+            for a, c in zip(actions, client_ids)
+        ],
+        "aggregate_status": {
+            "total": len(client_ids),
+            "pending": len(client_ids),
+            "running": 0,
+            "completed": 0,
+            "failed": 0,
+        },
+    }
+
+
+def get_bulk_update_status(bulk_update_id: str) -> Dict[str, Any]:
+    """Fetch aggregate and per-client status for a bulk update.
+
+    Reads live status directly from the ``actions`` table (which
+    ``action_service.execute_action`` keeps up-to-date) joined against
+    ``bulk_update_actions`` so the result always reflects current state.
+
+    Args:
+        bulk_update_id: The identifier returned by :func:`create_bulk_update`.
+
+    Returns:
+        Dict with ``bulk_update_id``, ``package_id``, ``created_at``,
+        ``target_count``, ``aggregate_status`` (counts), and
+        ``per_client_status`` (one entry per target client).
+
+    Raises:
+        ValueError: If the bulk_update_id is not found.
+    """
+    from server_components.action_framework import ActionState as _AS
+    from server_components import server_lib as _slib
+
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # Fetch bulk update metadata.
+        cursor.execute(
+            "SELECT * FROM bulk_updates WHERE bulk_update_id = %s",
+            (bulk_update_id,),
+        )
+        bulk_rec = cursor.fetchone()
+        if not bulk_rec:
+            raise ValueError(f"Bulk update '{bulk_update_id}' not found.")
+
+        # Fetch per-action status by joining against the live actions table.
+        cursor.execute(
+            """SELECT bua.action_id, bua.client_id, a.status, a.result
+               FROM bulk_update_actions bua
+               JOIN actions a ON a.action_id = bua.action_id
+               WHERE bua.bulk_update_id = %s
+               ORDER BY bua.created_at""",
+            (bulk_update_id,),
+        )
+        action_rows = cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+    # Build aggregate counts and per-client list.
+    status_counts: Dict[str, int] = {
+        "total": len(action_rows),
+        "pending": 0,
+        "running": 0,
+        "completed": 0,
+        "failed": 0,
+    }
+    per_client: List[Dict[str, Any]] = []
+
+    for row in action_rows:
+        raw_status = (row.get("status") or "PENDING").upper()
+        if raw_status == _AS.PENDING.value:
+            status_counts["pending"] += 1
+        elif raw_status == _AS.RUNNING.value:
+            status_counts["running"] += 1
+        elif raw_status in {"COMPLETED", _AS.SUCCESS.value, _AS.PARTIAL_SUCCESS.value}:
+            status_counts["completed"] += 1
+        elif raw_status in {_AS.FAILED.value, _AS.CANCELLED.value}:
+            status_counts["failed"] += 1
+        else:
+            # Treat unknown/transitional states as running.
+            status_counts["running"] += 1
+
+        # Enrich with hostname from the in-memory client registry (best-effort).
+        client_rec = _slib.get_client(row["client_id"])
+        hostname = (
+            client_rec.get("hostname") or row["client_id"]
+            if client_rec
+            else row["client_id"]
+        )
+
+        raw_result = row.get("result")
+        if isinstance(raw_result, str) and raw_result:
+            try:
+                parsed_result = json.loads(raw_result)
+            except json.JSONDecodeError:
+                parsed_result = {}
+        elif isinstance(raw_result, dict):
+            parsed_result = raw_result
+        else:
+            parsed_result = {}
+
+        per_client.append({
+            "action_id": row["action_id"],
+            "client_id": row["client_id"],
+            "hostname": hostname,
+            "status": raw_status,
+            "result": parsed_result,
+        })
+
+    created_at_val = bulk_rec.get("created_at")
+    created_at_str = (
+        created_at_val.isoformat()
+        if created_at_val and hasattr(created_at_val, "isoformat")
+        else str(created_at_val) if created_at_val else None
+    )
+
+    return {
+        "bulk_update_id": bulk_update_id,
+        "package_id": bulk_rec.get("package_id"),
+        "created_at": created_at_str,
+        "created_by": bulk_rec.get("created_by"),
+        "target_count": bulk_rec.get("target_count"),
+        "aggregate_status": status_counts,
+        "per_client_status": per_client,
+    }
+
+
+def list_bulk_updates(limit: int = 50) -> List[Dict[str, Any]]:
+    """Fetch a summary list of recent bulk update operations.
+
+    Returns one entry per bulk update with aggregate counts derived from the
+    live ``actions`` table so the numbers stay current without a separate
+    background sync job.
+
+    Args:
+        limit: Maximum number of results (capped at 200).
+
+    Returns:
+        List of summary dicts ordered newest-first.
+    """
+    from server_components.action_framework import ActionState as _AS
+
+    completed_val = "COMPLETED"
+    # Also count SUCCESS/PARTIAL_SUCCESS as completed (action_service uses SUCCESS for targets).
+    success_val = _AS.SUCCESS.value
+    failed_val = _AS.FAILED.value
+
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            """SELECT
+                   bu.bulk_update_id,
+                   bu.package_id,
+                   bu.target_count,
+                   bu.created_at,
+                   bu.created_by,
+                   bu.target_selection_strategy,
+                   COUNT(bua.action_id) AS action_count,
+                   SUM(CASE WHEN a.status IN (%s, %s, %s) THEN 1 ELSE 0 END) AS completed_count,
+                   SUM(CASE WHEN a.status IN (%s, %s) THEN 1 ELSE 0 END) AS failed_count
+               FROM bulk_updates bu
+               LEFT JOIN bulk_update_actions bua ON bu.bulk_update_id = bua.bulk_update_id
+               LEFT JOIN actions a ON bua.action_id = a.action_id
+               GROUP BY bu.id
+               ORDER BY bu.created_at DESC
+               LIMIT %s""",
+            (completed_val, success_val, _AS.PARTIAL_SUCCESS.value, failed_val, _AS.CANCELLED.value, max(1, min(limit, 200))),
+        )
+        rows = cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+    result = []
+    for r in rows:
+        total = int(r.get("target_count") or 0)
+        completed = int(r.get("completed_count") or 0)
+        failed = int(r.get("failed_count") or 0)
+        pending = max(0, total - completed - failed)
+        created_at_val = r.get("created_at")
+        result.append({
+            "bulk_update_id": r["bulk_update_id"],
+            "package_id": r["package_id"],
+            "created_at": (
+                created_at_val.isoformat()
+                if created_at_val and hasattr(created_at_val, "isoformat")
+                else str(created_at_val) if created_at_val else None
+            ),
+            "created_by": r.get("created_by"),
+            "target_selection_strategy": r.get("target_selection_strategy"),
+            "target_count": total,
+            "aggregate_status": {
+                "total": total,
+                "completed": completed,
+                "failed": failed,
+                "pending": pending,
+            },
+        })
+    return result
