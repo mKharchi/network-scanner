@@ -8,7 +8,8 @@ APP_DIR = Path(__file__).resolve().parent / "app"
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
-from app.client import *  # noqa: F401,F403,E402
+from app import client as _module
+sys.modules[__name__] = _module
 
 if __name__ == "__main__":
-    start_client(agent_role="combined")
+    _module.start_client(agent_role="combined")

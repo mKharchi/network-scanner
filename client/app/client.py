@@ -30,6 +30,7 @@ from network_state_manager import NetworkStateManager
 from network_neighbour_collector import NetworkNeighbourCollector
 from dhcp_listener import DHCPListener
 from passive_protocol_listener import PassiveProtocolListener
+from packet_observer import PacketObserver
 from screenshot_manager import ScreenshotManager, screenshot_capture_enabled
 from neighbourhood import (
     get_daily_neighbourhood_path,
@@ -92,6 +93,16 @@ class _StopEventProxy:
 
     def is_set(self):
         return any(event is not None and event.is_set() for event in self._events)
+
+    def wait(self, timeout=None):
+        if self.is_set():
+            return True
+        start = time.monotonic()
+        while timeout is None or time.monotonic() - start < timeout:
+            if self.is_set():
+                return True
+            time.sleep(0.05)
+        return self.is_set()
 
 
 def disabled_active_network_scan_result(command):
@@ -736,6 +747,7 @@ def start_client(stop_event=None, *, agent_role="service"):
         heartbeat_thread = None
         dhcp_listener = None
         passive_protocol_listener = None
+        packet_observer = None
         process_monitor = None
 
         def _on_process_alert(alert):
@@ -844,6 +856,31 @@ def start_client(stop_event=None, *, agent_role="service"):
             isolation_callback=_on_escalation_isolate,
             auto_terminate=True,
         )
+
+        # Start passive network packet observer (independent local telemetry)
+        try:
+            detected_iface = None
+            detected_ip = None
+            try:
+                from network_neighbour_collector import get_local_network
+                local_net = get_local_network()
+                if local_net:
+                    detected_iface = local_net.get("interface")
+                    detected_ip = local_net.get("local_ip")
+            except Exception:
+                pass
+
+            obs_iface = os.getenv("PACKET_OBSERVER_INTERFACE") or os.getenv("DHCP_LISTEN_INTERFACE") or detected_iface
+            if packet_observer is None:
+                packet_observer = PacketObserver(
+                    interface=obs_iface,
+                    local_ip=detected_ip,
+                    local_mac=get_mac(detected_ip),
+                    observer_client_id=os.getenv("CLIENT_ID"),
+                )
+                packet_observer.start()
+        except Exception as e:
+            print(f"[PACKET_OBSERVER] Could not start packet observer: {e}", flush=True)
 
         try:
             try:
@@ -1083,6 +1120,11 @@ def start_client(stop_event=None, *, agent_role="service"):
                     passive_protocol_listener.stop()
                 except Exception as error:
                     print(f"[PASSIVE LISTENER] Could not stop listener cleanly: {error}")
+            if packet_observer is not None:
+                try:
+                    packet_observer.stop()
+                except Exception as error:
+                    print(f"[PACKET_OBSERVER] Could not stop observer cleanly: {error}")
             if background_thread is not None and background_thread.is_alive():
                 background_thread.join(timeout=2)
             if heartbeat_thread is not None and heartbeat_thread.is_alive():

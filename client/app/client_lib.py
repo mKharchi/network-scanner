@@ -1237,7 +1237,7 @@ def _safe_file_name(value: Any, fallback: str) -> str:
         or candidate in {"", ".", ".."}
         or candidate != raw_value
         or "/" in raw_value
-        or "\\\\" in raw_value
+        or "\\" in raw_value
         or Path(raw_value).is_absolute()
     ):
         raise ValueError("destination name must be a single relative filename")
@@ -1262,6 +1262,9 @@ def _handle_deploy_package_init(message, **_context):
             "message": "Missing required package parameters (action_id, package_id, sha256).",
         }
 
+    requested_name = args.get("filename") or args.get("file_name")
+    final_name = _safe_file_name(requested_name, f"{package_id}.zip")
+
     try:
         staging_dir = _package_state()["incoming"]
         destination_dir = (
@@ -1272,8 +1275,6 @@ def _handle_deploy_package_init(message, **_context):
         staging_dir.mkdir(parents=True, exist_ok=True)
         destination_dir.mkdir(parents=True, exist_ok=True)
         part_path = staging_dir / f"{package_id}.part"
-        requested_name = args.get("filename") or args.get("file_name")
-        final_name = _safe_file_name(requested_name, f"{package_id}.zip")
         final_path = (
             destination_dir / final_name
             if operation == "SEND_FILE"
@@ -1622,6 +1623,10 @@ def create_registration_message(ip_address=None, *, agent_role="service"):
     interactive connection while retaining the existing MAC-derived device ID.
     """
     data = get_system_info(ip_address)
+    if "client_version" not in data:
+        data["client_version"] = get_client_version()
+    if "platform" not in data:
+        data["platform"] = platform.system()
     data["agent_role"] = agent_role
     location = load_client_location()
     if location:
