@@ -29,18 +29,20 @@ DISCOVERY_PROTOCOLS = ("dhcp", "mdns", "llmnr", "nbns", "ssdp")
 def _build_discovery_block(device: Dict[str, Any]) -> Dict[str, Any]:
     """Build the §3.3 ``discovery`` object from one DeviceCorrelator snapshot dict."""
     protocols_seen = set(device.get("protocols_seen") or [])
+    protocol_last_seen = device.get("protocol_last_seen") or {}
     last_seen = device.get("last_seen")
     discovery: Dict[str, Any] = {}
 
     for protocol in DISCOVERY_PROTOCOLS:
         seen = protocol in protocols_seen
+        exact_last_seen = protocol_last_seen.get(protocol) if isinstance(protocol_last_seen, dict) else None
         entry: Dict[str, Any] = {
             "seen": seen,
-            # Per-protocol last_seen is not separately tracked upstream by
-            # DeviceCorrelator; the device's overall last_seen is used as a
-            # reasonable approximation only when that protocol was actually
-            # observed (documented limitation — see v2-progress.md).
-            "last_seen": last_seen if seen else None,
+            # Prefer the exact per-protocol timestamp recorded by
+            # DeviceCorrelator.record_activity(); fall back to the device's
+            # overall last_seen only for snapshots collected before that
+            # field existed.
+            "last_seen": (exact_last_seen or last_seen) if seen else None,
         }
         if protocol == "mdns" and seen:
             services = device.get("services") or []

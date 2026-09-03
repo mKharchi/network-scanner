@@ -65,6 +65,23 @@ class DeviceModelTests(unittest.TestCase):
         self.assertEqual(dev.seen_count, 3)
         self.assertEqual(dev.protocols_seen, ["dhcp", "mdns"])
 
+    def test_protocol_last_seen_tracks_exact_per_protocol_timestamps(self):
+        t1 = "2026-08-22T10:00:00+00:00"
+        t2 = "2026-08-22T10:15:00+00:00"
+        t0 = "2026-08-22T09:00:00+00:00"  # earlier than t1, same protocol as t1
+
+        dev = DeviceRecord(mac_address="AA:BB:CC:DD:EE:FF", first_seen=t1)
+        dev.record_activity(t1, protocol="dhcp")
+        dev.record_activity(t2, protocol="mdns")
+        self.assertEqual(dev.protocol_last_seen["dhcp"], t1)
+        self.assertEqual(dev.protocol_last_seen["mdns"], t2)
+
+        # An out-of-order (earlier) observation for an already-seen protocol
+        # must not regress its recorded last_seen.
+        dev.record_activity(t0, protocol="dhcp")
+        self.assertEqual(dev.protocol_last_seen["dhcp"], t1)
+        self.assertEqual(dev.to_dict()["protocol_last_seen"], {"dhcp": t1, "mdns": t2})
+
     def test_device_correlator_merges_multi_protocol_evidence(self):
         correlator = DeviceCorrelator()
 
