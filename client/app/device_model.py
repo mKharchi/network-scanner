@@ -176,6 +176,11 @@ class DeviceRecord:
         self.protocols_seen: list[str] = []
         self.services: list[str] = []
         self.last_protocol: str | None = None
+        # Exact last-observed timestamp per discovery protocol (v2 §3.3):
+        # unlike ``last_seen`` (overall device activity), this lets Device
+        # Enrichment report a real per-protocol ``last_seen`` instead of the
+        # coarse device-wide approximation.
+        self.protocol_last_seen: dict[str, str] = {}
 
         # Temporal information
         now_ts = utc_now()
@@ -368,6 +373,9 @@ class DeviceRecord:
         self.observation_count = min(2_147_483_647, self.observation_count + 1)
         if protocol:
             self.add_protocol(protocol)
+            existing = self.protocol_last_seen.get(protocol)
+            if existing is None or ts > existing:
+                self.protocol_last_seen[protocol] = ts
 
     @property
     def presence_state(self) -> str:
@@ -388,6 +396,7 @@ class DeviceRecord:
             "software_hint": self.software_hint,
             "software_hints": list(self.software_hints),
             "protocols_seen": list(self.protocols_seen),
+            "protocol_last_seen": dict(self.protocol_last_seen),
             "services": list(self.services),
             "first_seen": self.first_seen,
             "last_seen": self.last_seen,

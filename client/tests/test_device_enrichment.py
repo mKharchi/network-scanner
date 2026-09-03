@@ -60,6 +60,21 @@ class TestBuildDeviceRecord(unittest.TestCase):
         self.assertIsNone(record["discovery"]["ssdp"]["last_seen"])
         self.assertIsNotNone(record["discovery"]["dhcp"]["last_seen"])
 
+    def test_uses_exact_protocol_last_seen_when_available(self):
+        record = build_device_record(_correlator_device(
+            protocol_last_seen={"dhcp": "2026-09-02T09:00:00Z", "mdns": "2026-09-02T13:30:00Z"},
+        ))
+        # Exact per-protocol timestamps must be preferred over the coarse
+        # device-wide last_seen approximation.
+        self.assertEqual(record["discovery"]["dhcp"]["last_seen"], "2026-09-02T09:00:00Z")
+        self.assertEqual(record["discovery"]["mdns"]["last_seen"], "2026-09-02T13:30:00Z")
+
+    def test_falls_back_to_device_last_seen_without_protocol_last_seen(self):
+        device = _correlator_device()
+        device.pop("protocol_last_seen", None)
+        record = build_device_record(device)
+        self.assertEqual(record["discovery"]["dhcp"]["last_seen"], device["last_seen"])
+
     def test_mdns_includes_services(self):
         record = build_device_record(_correlator_device())
         self.assertEqual(record["discovery"]["mdns"]["services"], ["_nsdswc._tcp.local"])
