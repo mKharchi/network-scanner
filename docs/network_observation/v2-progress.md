@@ -5,7 +5,8 @@ This file is updated incrementally as each phase is actually implemented and ver
 entries are only marked ✅ after the corresponding code/tests exist and pass.
 
 ## Legend
-- ✅ Done  ⏳ In progress  ⬜ Not started
+
+- ✅ Done ⏳ In progress ⬜ Not started
 
 ---
 
@@ -16,17 +17,17 @@ entries are only marked ✅ after the corresponding code/tests exist and pass.
 The repo already has a V1 passive packet observation feature (see `docs/network_observation/plan.md`
 and `docs/network_observation/progress.md`). Relevant existing building blocks to reuse for v2:
 
-| Existing component | File | Reuse plan for v2 |
-|---|---|---|
-| `extract_metadata_from_scapy()` | `client/app/packet_extractor.py` | Feed per-packet metadata into the new Flow Aggregator instead of re-parsing packets |
-| `DailyPacketStorage` | `client/app/packet_storage.py` | Pattern (buffered, atomic, day-rotating JSON) mirrored for `flows.json` |
-| `PacketObserver` | `client/app/packet_observer.py` | Existing Scapy `sniff()` loop — extend to also feed the Flow Aggregator, no 2nd sniffer |
-| `get_local_network()` | `client/app/network_neighbour_collector.py` | Interface/IP/subnet detection reused for scope filter context |
-| `get_mac()` / `CLIENT_ID` env | `client/app/client_lib.py` | `observer_client_id` identity source |
-| `neighbourhood.py` atomic JSON write pattern | `client/app/neighbourhood.py` | Reused for `devices.json`, `activity/*.json` atomic writers |
-| `device_model.DeviceCorrelator` (in-memory, built by `PassiveProtocolListener`) | `client/app/device_model.py`, `passive_protocol_listener.py` | Discovery signal source for Device Enrichment Job (DHCP/mDNS/LLMNR/NBNS/SSDP) — avoids a second protocol parser |
-| Server `server_components/network_device_storage.py` + `database.py` | server | Pattern for upsert/observation-table storage, reused for the new Merge Service |
-| `server_components/server_lib.py` request/response pattern (`request_client_passive_neighbourhood`) | server | Pattern reused for the on-demand Flow API relay |
+| Existing component                                                                                  | File                                                         | Reuse plan for v2                                                                                               |
+| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `extract_metadata_from_scapy()`                                                                     | `client/app/packet_extractor.py`                             | Feed per-packet metadata into the new Flow Aggregator instead of re-parsing packets                             |
+| `DailyPacketStorage`                                                                                | `client/app/packet_storage.py`                               | Pattern (buffered, atomic, day-rotating JSON) mirrored for `flows.json`                                         |
+| `PacketObserver`                                                                                    | `client/app/packet_observer.py`                              | Existing Scapy `sniff()` loop — extend to also feed the Flow Aggregator, no 2nd sniffer                         |
+| `get_local_network()`                                                                               | `client/app/network_neighbour_collector.py`                  | Interface/IP/subnet detection reused for scope filter context                                                   |
+| `get_mac()` / `CLIENT_ID` env                                                                       | `client/app/client_lib.py`                                   | `observer_client_id` identity source                                                                            |
+| `neighbourhood.py` atomic JSON write pattern                                                        | `client/app/neighbourhood.py`                                | Reused for `devices.json`, `activity/*.json` atomic writers                                                     |
+| `device_model.DeviceCorrelator` (in-memory, built by `PassiveProtocolListener`)                     | `client/app/device_model.py`, `passive_protocol_listener.py` | Discovery signal source for Device Enrichment Job (DHCP/mDNS/LLMNR/NBNS/SSDP) — avoids a second protocol parser |
+| Server `server_components/network_device_storage.py` + `database.py`                                | server                                                       | Pattern for upsert/observation-table storage, reused for the new Merge Service                                  |
+| `server_components/server_lib.py` request/response pattern (`request_client_passive_neighbourhood`) | server                                                       | Pattern reused for the on-demand Flow API relay                                                                 |
 
 **Decision:** v2 uses a **new storage tree** `client/storage/network_telemetry/<date>/...`
 (v2 §2), kept separate from the V1 `client/storage/passive_packets/<date>.json` tree.
@@ -202,7 +203,6 @@ The merge service now:
 - Enforces registered socket client identity before merging socket payloads.
 
 Tests: `server/tests/test_telemetry_merge.py` — 4 tests passed.
-
 
 ---
 
