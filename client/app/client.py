@@ -4,7 +4,27 @@ import logging
 import os
 import platform
 import socket
+import sys
+import threading
+import time
+from datetime import datetime
 from pathlib import Path
+
+APP_DIR = Path(__file__).resolve().parent
+CLIENT_DIR = APP_DIR.parent
+REPO_ROOT = CLIENT_DIR.parent
+CONFIG_DIR = CLIENT_DIR / "config"
+LOG_DIR = CLIENT_DIR / "logs"
+STORAGE_DIR = CLIENT_DIR / "storage"
+
+if str(APP_DIR) not in sys.path:
+    sys.path.insert(0, str(APP_DIR))
+
+try:
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+except OSError:
+    pass
 
 from client_lib import (
     create_registration_message,
@@ -14,9 +34,10 @@ from client_lib import (
     process_package_chunk,
     receive_message,
     send_message,
+    get_activity_log,
+    get_mac,
 )
-from client_lib import get_activity_log, get_mac
-from sync_manager import SyncManager, SYNC_ACK_TYPE, SYNC_NACK_TYPE
+from sync_manager import SyncManager, SYNC_ACK_TYPE, SYNC_NACK_TYPE, sync_pending_telemetry_files
 from activity_window_aggregator import ActivityWindowAggregator
 from device_enrichment import DeviceEnrichmentJob
 from flow_query import get_requested_flows
@@ -46,22 +67,7 @@ from neighbourhood import (
     persist_raw_dhcp_observation,
     store_dhcp_neighbourhood_observation,
 )
-from flow_aggregator import FlowAggregator
-from telemetry_packet_writer import TelemetryPacketWriter
-from retention_manager import RetentionManager
-from scope_filter import ScopeFilter
-from sync_manager import sync_pending_telemetry_files
-import threading
-import time
-from datetime import datetime
 from dotenv import load_dotenv
-
-APP_DIR = Path(__file__).resolve().parent
-CLIENT_DIR = APP_DIR.parent
-REPO_ROOT = CLIENT_DIR.parent
-CONFIG_DIR = CLIENT_DIR / "config"
-LOG_DIR = CLIENT_DIR / "logs"
-STORAGE_DIR = CLIENT_DIR / "storage"
 
 
 def _load_env_file(path):

@@ -304,7 +304,7 @@ def _ensure_device_classification_tables(cursor):
             INDEX idx_device_labels_label (label),
             INDEX idx_device_labels_created (created_at)
         )
-        """
+        """)
 def _ensure_forbidden_processes_columns(cursor):
     """Add terminate_on_detection and resource_protection_eligible to forbidden_processes."""
     cursor.execute(
