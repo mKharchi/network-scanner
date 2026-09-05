@@ -119,9 +119,21 @@ class DependencyInstallError(RuntimeError):
 
 def _resolve_python(client_root: Path) -> Optional[Path]:
     """Resolve the interpreter used for dependency installation and startup."""
-    venv_python = client_root / "venv" / "Scripts" / "python.exe"
-    if venv_python.is_file():
-        return venv_python
+    candidates = [
+        # Linux / macOS virtualenv paths
+        client_root / ".venv" / "bin" / "python",
+        client_root / ".venv" / "bin" / "python3",
+        client_root / "venv" / "bin" / "python",
+        client_root / "venv" / "bin" / "python3",
+        # Windows virtualenv paths
+        client_root / ".venv" / "Scripts" / "python.exe",
+        client_root / "venv" / "Scripts" / "python.exe",
+        client_root / ".venv" / "python.exe",
+        client_root / "venv" / "python.exe",
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
 
     current_python = Path(sys.executable)
     if current_python.is_file():
@@ -269,13 +281,19 @@ if __name__ == "__main__":
     """
     import logging
 
+    log_dir = Path(__file__).parent.parent / "logs"
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+
     # Configure minimal logging for standalone operation
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [UPDATER] %(levelname)s: %(message)s",
         handlers=[
             logging.FileHandler(
-                Path(__file__).parent.parent / "logs" / "updater.log",
+                log_dir / "updater.log",
                 encoding="utf-8",
             )
         ],
@@ -308,7 +326,24 @@ if __name__ == "__main__":
             # Kill the Python process running client.py (not a compiled executable)
             os.system("taskkill /F /IM python.exe /FI \"COMMANDLINE eq *client.py*\"")
         else:
-            os.system("pkill -f 'python.*client.py'")
+            my_pid = os.getpid()
+            try:
+                import psutil
+                for proc in psutil.process_iter(["pid", "cmdline"]):
+                    if proc.info["pid"] == my_pid:
+                        continue
+                    cmdline = " ".join(proc.info.get("cmdline") or [])
+                    if "client.py" in cmdline:
+                        try:
+                            proc.terminate()
+                            proc.wait(timeout=2.0)
+                        except Exception:
+                            try:
+                                proc.kill()
+                            except Exception:
+                                pass
+            except Exception:
+                os.system("pkill -f 'client\\.py'")
         # Allow time for the process to fully release file locks
         time.sleep(1.0)
 
