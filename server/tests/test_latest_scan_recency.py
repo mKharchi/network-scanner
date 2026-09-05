@@ -32,7 +32,7 @@ class LatestScanRecencyTests(unittest.TestCase):
                     "mac_address": "AA:BB:CC:DD:EE:01",
                     "ip_address": "192.168.1.10",
                     "hostname": "fresh-host",
-                    "last_observed_at": (now - timedelta(minutes=5)).isoformat(),
+                    "last_observed_at": (now - timedelta(minutes=2)).isoformat(),
                 },
                 {
                     "mac_address": "AA:BB:CC:DD:EE:02",

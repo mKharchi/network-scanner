@@ -495,6 +495,35 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 self.send_data(classification)
                 return
 
+            # 6d. Kismet Wireless Observations & Sensors
+            if path in {"/api/v1/sensors/wifi", "/api/v1/wifi/sensors"}:
+                self.send_data({"items": api_service.list_wifi_sensors()})
+                return
+
+            m = re.match(r"^/api/v1/(?:network/)?devices/([^/]+)/(?:wireless-observations|network-observations)$", path)
+            if m:
+                device_id = urllib.parse.unquote(m.group(1))
+                lookback = get_param("lookback")
+                start = get_param("start")
+                end = get_param("end")
+                limit = get_int_param("limit", 500)
+                include_noise = (get_param("include_noise") or "").lower() in {"1", "true", "yes"}
+                try:
+                    data = api_service.get_device_wireless_observations(
+                        device_id,
+                        start_time=start,
+                        end_time=end,
+                        lookback_minutes=lookback,
+                        limit=limit,
+                        include_noise=include_noise,
+                    )
+                    self.send_data(data)
+                except ValueError as err:
+                    self.send_error_response(404, "NOT_FOUND", str(err))
+                except Exception as err:
+                    self.send_error_response(500, "INTERNAL_ERROR", str(err))
+                return
+
             # 7. DHCP Activity
             if path == "/api/v1/network/dhcp":
                 date_param = get_param("date")
@@ -522,6 +551,24 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     self.send_error_response(404, "NOT_FOUND", f"Alert #{alert_id} not found.")
                     return
                 self.send_data(alert_data)
+                return
+
+            m = re.match(r"^/api/v1/alerts/(\d+)/wireless-investigation$", path)
+            if m:
+                alert_id = int(m.group(1))
+                lookback = get_param("lookback")
+                include_noise = get_param("include_noise") in ("1", "true", "True")
+                limit = get_int_param("limit", 500)
+                inv_data = api_service.get_alert_wireless_investigation(
+                    alert_id,
+                    lookback_minutes=lookback,
+                    include_noise=include_noise,
+                    limit=limit,
+                )
+                if not inv_data:
+                    self.send_error_response(404, "NOT_FOUND", f"Alert #{alert_id} not found.")
+                    return
+                self.send_data(inv_data)
                 return
 
             m = re.match(r"^/api/v1/screenshots/(\d+)/file$", path)
