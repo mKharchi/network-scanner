@@ -1004,6 +1004,82 @@ class ApiEndpointsTestCase(unittest.TestCase):
         self.assertEqual(body["data"]["floor"], 1)
         get_location_layout.assert_called_once_with(1)
 
+    # 12. Resource Protection Settings endpoints
+    @patch("server_components.api_service.get_resource_protection_settings")
+    def test_get_resource_protection_settings_endpoint(self, mock_get_rp):
+        mock_get_rp.return_value = {
+            "enabled": True,
+            "cpu": {"enabled": True, "threshold": 85.0, "sustained_seconds": 30},
+            "memory": {"enabled": True, "threshold": 90.0, "sustained_seconds": 30},
+            "cooldown_seconds": 300,
+            "max_interventions_per_hour": 3,
+        }
+        status, body = self._fetch("/api/v1/settings/resource-protection")
+        self.assertEqual(status, 200)
+        self.assertTrue(body["data"]["enabled"])
+        self.assertEqual(body["data"]["cpu"]["threshold"], 85.0)
+        self.assertEqual(body["data"]["cooldown_seconds"], 300)
+
+    @patch("server_components.server_lib.broadcast_resource_protection_settings")
+    @patch("server_components.api_service.update_resource_protection_settings")
+    def test_update_resource_protection_settings_endpoint(self, mock_update_rp, mock_broadcast):
+        updated_data = {
+            "enabled": True,
+            "cpu": {"enabled": True, "threshold": 80.0, "sustained_seconds": 20},
+            "memory": {"enabled": True, "threshold": 85.0, "sustained_seconds": 20},
+            "cooldown_seconds": 180,
+            "max_interventions_per_hour": 5,
+        }
+        mock_update_rp.return_value = updated_data
+        payload = json.dumps(updated_data).encode("utf-8")
+        req = urllib.request.Request(
+            f"{self.base_url}/api/v1/settings/resource-protection",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="PUT",
+        )
+        with urllib.request.urlopen(req) as resp:
+            self.assertEqual(resp.status, 200)
+            body = json.loads(resp.read().decode("utf-8"))
+        self.assertEqual(body["data"]["cpu"]["threshold"], 80.0)
+        mock_update_rp.assert_called_once()
+        mock_broadcast.assert_called_once_with(updated_data)
+
+    # 13. Forbidden Processes CRUD endpoints
+    @patch("server_components.server_lib.broadcast_forbidden_processes")
+    @patch("server_components.api_service.create_forbidden_process")
+    def test_create_forbidden_process_endpoint(self, mock_create_fp, mock_broadcast):
+        mock_create_fp.return_value = {
+            "id": 10,
+            "process_name": "malware.exe",
+            "severity": "CRITICAL",
+            "enabled": True,
+            "description": "Suspicious binary",
+            "terminate_on_detection": True,
+            "resource_protection_eligible": True,
+        }
+        payload = json.dumps({
+            "process_name": "malware.exe",
+            "severity": "CRITICAL",
+            "enabled": True,
+            "description": "Suspicious binary",
+            "terminate_on_detection": True,
+            "resource_protection_eligible": True,
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            f"{self.base_url}/api/v1/settings/forbidden-processes",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req) as resp:
+            self.assertEqual(resp.status, 201)
+            body = json.loads(resp.read().decode("utf-8"))
+        self.assertEqual(body["data"]["process_name"], "malware.exe")
+        self.assertTrue(body["data"]["terminate_on_detection"])
+        self.assertTrue(body["data"]["resource_protection_eligible"])
+        mock_broadcast.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()

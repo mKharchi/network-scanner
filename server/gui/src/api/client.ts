@@ -184,6 +184,24 @@ export interface ForbiddenProcessRule {
   severity: string;
   enabled: boolean;
   description: string | null;
+  terminate_on_detection?: boolean;
+  resource_protection_eligible?: boolean;
+}
+
+export interface ResourceProtectionSettings {
+  enabled: boolean;
+  cpu: {
+    enabled: boolean;
+    threshold: number;
+    sustained_seconds: number;
+  };
+  memory: {
+    enabled: boolean;
+    threshold: number;
+    sustained_seconds: number;
+  };
+  cooldown_seconds: number;
+  max_interventions_per_hour: number;
 }
 
 export interface ActionProgress {
@@ -1253,12 +1271,7 @@ export const api = {
 
   getForbiddenProcesses: () =>
     get<{
-      items: {
-        process_name: string;
-        severity: string;
-        enabled: boolean;
-        description: string | null;
-      }[];
+      items: ForbiddenProcessRule[];
     }>("/settings/forbidden-processes"),
 
   createForbiddenProcess: (payload: {
@@ -1266,6 +1279,8 @@ export const api = {
     severity: string;
     enabled: boolean;
     description: string | null;
+    terminate_on_detection?: boolean;
+    resource_protection_eligible?: boolean;
   }) => post<ForbiddenProcessRule>("/settings/forbidden-processes", payload),
 
   updateForbiddenProcess: (processName: string, payload: Omit<ForbiddenProcessRule, "process_name">) =>
@@ -1273,6 +1288,12 @@ export const api = {
 
   deleteForbiddenProcess: (processName: string) =>
     mutate<{ deleted: boolean }>("DELETE", `/settings/forbidden-processes/${encodeURIComponent(processName)}`),
+
+  getResourceProtection: () =>
+    get<ResourceProtectionSettings>("/settings/resource-protection"),
+
+  updateResourceProtection: (payload: ResourceProtectionSettings) =>
+    mutate<ResourceProtectionSettings>("PUT", "/settings/resource-protection", payload),
 
   // Client commands
   listClientCommands: (clientId: string) =>

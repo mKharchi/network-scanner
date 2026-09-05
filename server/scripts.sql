@@ -222,7 +222,23 @@ CREATE TABLE IF NOT EXISTS forbidden_processes (
         'CRITICAL'
     ) NOT NULL DEFAULT 'HIGH',
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
-    description TEXT
+    description TEXT,
+    terminate_on_detection BOOLEAN NOT NULL DEFAULT TRUE,
+    resource_protection_eligible BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+CREATE TABLE IF NOT EXISTS resource_protection_settings (
+    id INT PRIMARY KEY DEFAULT 1,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    cpu_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    cpu_threshold DOUBLE NOT NULL DEFAULT 85.0,
+    cpu_sustained_seconds INT NOT NULL DEFAULT 30,
+    memory_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    memory_threshold DOUBLE NOT NULL DEFAULT 90.0,
+    memory_sustained_seconds INT NOT NULL DEFAULT 30,
+    cooldown_seconds INT NOT NULL DEFAULT 300,
+    max_interventions_per_hour INT NOT NULL DEFAULT 3,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS working_hours (

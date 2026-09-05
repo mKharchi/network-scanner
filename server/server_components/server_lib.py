@@ -209,9 +209,14 @@ def get_forbidden_processes():
         conn = get_connection()
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
-            "SELECT process_name, severity, description FROM forbidden_processes WHERE enabled = TRUE"
+            "SELECT process_name, severity, description, terminate_on_detection, resource_protection_eligible "
+            "FROM forbidden_processes WHERE enabled = TRUE"
         )
-        return cursor.fetchall()
+        rows = cursor.fetchall()
+        for r in rows:
+            r["terminate_on_detection"] = bool(r.get("terminate_on_detection", True))
+            r["resource_protection_eligible"] = bool(r.get("resource_protection_eligible", True))
+        return rows
     except Exception as e:
         print(f"Error fetching forbidden processes: {e}")
         return []
@@ -247,6 +252,40 @@ def broadcast_forbidden_processes():
             )
 
     print(f"Pushed forbidden-process policy to {sent} clients ({failed} failed).")
+    return {"sent": sent, "failed": failed}
+
+
+def get_resource_protection_settings():
+    """Retrieve global resource protection configuration settings."""
+    from server_components import api_service
+    return api_service.get_resource_protection_settings()
+
+
+def broadcast_resource_protection_settings():
+    """Push the current resource-protection configuration to every client."""
+    config = get_resource_protection_settings()
+    message = {"type": "RESOURCE_PROTECTION_CONFIG", "data": config}
+    sent = 0
+    failed = 0
+    with clients_lock:
+        connected_clients = list(clients.values())
+
+    for client in connected_clients:
+        conn = client.get("connection")
+        send_lock = client.get("send_lock")
+        if conn is None or send_lock is None:
+            continue
+        try:
+            with send_lock:
+                send_message(conn, message)
+            sent += 1
+        except OSError as error:
+            failed += 1
+            print(
+                f"Could not push resource-protection config to {client.get('client_id', 'unknown')}: {error}"
+            )
+
+    print(f"Pushed resource-protection config to {sent} clients ({failed} failed).")
     return {"sent": sent, "failed": failed}
 
 
@@ -783,7 +822,7 @@ def handle_client_alert(mac, alert_data):
         return False
 
     alert_type = alert_data.get("alert_type")
-    if alert_type not in {"FORBIDDEN_PROCESS", "SECURITY_EVENT"}:
+    if alert_type not in {"FORBIDDEN_PROCESS", "SECURITY_EVENT", "RESOURCE_PROTECTION"}:
         print(
             f"Rejected unsupported alert from {mac}: {alert_type!r}"
         )
@@ -851,6 +890,11 @@ def handle_client_alert(mac, alert_data):
                 f"Forbidden process '{configured_name}' was detected on the client."
             )
             stored_type = "FORBIDDEN_PROCESS"
+        elif alert_type == "RESOURCE_PROTECTION":
+            stored_type = "RESOURCE_PROTECTION"
+            severity = claimed_severity if claimed_severity in ALERT_SEVERITIES else "MEDIUM"
+            title = alert_data.get("title") or "Resource protection event"
+            description = alert_data.get("description") or title
         else:
             stored_type = "SECURITY_EVENT"
             severity = claimed_severity
@@ -1757,6 +1801,14 @@ def receive_client_messages(mac, conn, *, agent_role="service"):
                 handle_package_result(mac, message)
             elif message_type == "HEARTBEAT":
                 _persist_client_heartbeat(mac, message.get("data") or {})
+            elif message_type == "REQUEST":
+                command = message.get("command")
+                if command == "GET_FORBIDDEN_PROCESSES":
+                    fb_list = get_forbidden_processes()
+                    send_message(conn, {"type": "FORBIDDEN_PROCESSES", "data": fb_list})
+                elif command == "GET_RESOURCE_PROTECTION":
+                    rp_config = get_resource_protection_settings()
+                    send_message(conn, {"type": "RESOURCE_PROTECTION_CONFIG", "data": rp_config})
             elif message_type == "RESPONSE":
                 client = get_client_by_mac(mac, agent_role=agent_role)
                 if client and client["connection"] is conn:

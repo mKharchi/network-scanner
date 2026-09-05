@@ -13,6 +13,7 @@ from server_components.server_lib import (
     send_message,
     server_menu,
     get_forbidden_processes,
+    get_resource_protection_settings,
     get_client_observation_scope,
     receive_client_messages,
 )
@@ -70,9 +71,13 @@ def accept_clients(server):
                 )
                 
                 req = receive_message(conn)
-                if req and req.get("type") == "REQUEST" and req.get("command") == "GET_FORBIDDEN_PROCESSES":
-                    fb_list = get_forbidden_processes()
-                    send_message(conn, {"type": "FORBIDDEN_PROCESSES", "data": fb_list})
+                if req and req.get("type") == "REQUEST":
+                    if req.get("command") == "GET_FORBIDDEN_PROCESSES":
+                        fb_list = get_forbidden_processes()
+                        send_message(conn, {"type": "FORBIDDEN_PROCESSES", "data": fb_list})
+                    elif req.get("command") == "GET_RESOURCE_PROTECTION":
+                        rp_config = get_resource_protection_settings()
+                        send_message(conn, {"type": "RESOURCE_PROTECTION_CONFIG", "data": rp_config})
 
                 # From this point on alerts can arrive independently of a
                 # server command, so dedicate one reader to this connection.

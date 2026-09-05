@@ -305,7 +305,58 @@ def _ensure_device_classification_tables(cursor):
             INDEX idx_device_labels_created (created_at)
         )
         """
+def _ensure_forbidden_processes_columns(cursor):
+    """Add terminate_on_detection and resource_protection_eligible to forbidden_processes."""
+    cursor.execute(
+        """
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'forbidden_processes'
+        """
     )
+    existing_columns = {row[0] for row in cursor.fetchall()}
+    columns = {
+        "terminate_on_detection": "BOOLEAN NOT NULL DEFAULT TRUE",
+        "resource_protection_eligible": "BOOLEAN NOT NULL DEFAULT TRUE",
+    }
+    for column_name, definition in columns.items():
+        if column_name not in existing_columns:
+            cursor.execute(f"ALTER TABLE forbidden_processes ADD COLUMN {column_name} {definition}")
+
+
+def _ensure_resource_protection_settings_table(cursor):
+    """Ensure resource_protection_settings table exists and has a default row."""
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS resource_protection_settings (
+            id INT PRIMARY KEY DEFAULT 1,
+            enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            cpu_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            cpu_threshold DOUBLE NOT NULL DEFAULT 85.0,
+            cpu_sustained_seconds INT NOT NULL DEFAULT 30,
+            memory_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            memory_threshold DOUBLE NOT NULL DEFAULT 90.0,
+            memory_sustained_seconds INT NOT NULL DEFAULT 30,
+            cooldown_seconds INT NOT NULL DEFAULT 300,
+            max_interventions_per_hour INT NOT NULL DEFAULT 3,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+        """
+    )
+    cursor.execute("SELECT COUNT(*) FROM resource_protection_settings WHERE id = 1")
+    count_row = cursor.fetchone()
+    count = count_row[0] if count_row else 0
+    if count == 0:
+        cursor.execute(
+            """
+            INSERT INTO resource_protection_settings
+                (id, enabled, cpu_enabled, cpu_threshold, cpu_sustained_seconds,
+                 memory_enabled, memory_threshold, memory_sustained_seconds,
+                 cooldown_seconds, max_interventions_per_hour)
+            VALUES (1, TRUE, TRUE, 85.0, 30, TRUE, 90.0, 30, 300, 3)
+            """
+        )
 
 
 def initiate_db():
@@ -345,6 +396,8 @@ def initiate_db():
         _ensure_observation_spatial_columns(cursor)
         _backfill_observation_sensor_links(cursor)
         _ensure_device_classification_tables(cursor)
+        _ensure_forbidden_processes_columns(cursor)
+        _ensure_resource_protection_settings_table(cursor)
 
         connection.commit()
         try:

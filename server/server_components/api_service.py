@@ -2091,6 +2091,23 @@ def update_client_observation_scope_settings(client_id: str, payload: Dict[str, 
     return {"client_id": client_id, "observation_scope": scope}
 
 
+DEFAULT_RESOURCE_PROTECTION_SETTINGS: Dict[str, Any] = {
+    "enabled": True,
+    "cpu": {
+        "enabled": True,
+        "threshold": 85.0,
+        "sustained_seconds": 30,
+    },
+    "memory": {
+        "enabled": True,
+        "threshold": 90.0,
+        "sustained_seconds": 30,
+    },
+    "cooldown_seconds": 300,
+    "max_interventions_per_hour": 3,
+}
+
+
 def get_forbidden_processes_settings() -> Dict[str, Any]:
     """Retrieve list of configured forbidden process policy rules."""
     conn = get_connection()
@@ -2098,14 +2115,20 @@ def get_forbidden_processes_settings() -> Dict[str, Any]:
     if conn:
         try:
             cursor = conn.cursor(dictionary=True)
-            cursor.execute("SELECT id, process_name, severity, enabled, description FROM forbidden_processes ORDER BY process_name")
+            cursor.execute(
+                "SELECT id, process_name, severity, enabled, description, "
+                "terminate_on_detection, resource_protection_eligible "
+                "FROM forbidden_processes ORDER BY process_name"
+            )
             for r in cursor.fetchall():
                 items.append({
                     "id": r.get("id"),
                     "process_name": r["process_name"],
                     "severity": r["severity"],
                     "enabled": bool(r["enabled"]),
-                    "description": r["description"],
+                    "description": r.get("description"),
+                    "terminate_on_detection": bool(r.get("terminate_on_detection", True)),
+                    "resource_protection_eligible": bool(r.get("resource_protection_eligible", True)),
                 })
         finally:
             conn.close()
@@ -2122,13 +2145,25 @@ def get_forbidden_process(identifier: str) -> Optional[Dict[str, Any]]:
     try:
         cursor = conn.cursor(dictionary=True)
         if identifier.isdigit():
-            cursor.execute("SELECT id, process_name, severity, enabled, description FROM forbidden_processes WHERE id = %s", (int(identifier),))
+            cursor.execute(
+                "SELECT id, process_name, severity, enabled, description, "
+                "terminate_on_detection, resource_protection_eligible "
+                "FROM forbidden_processes WHERE id = %s",
+                (int(identifier),),
+            )
         else:
-            cursor.execute("SELECT id, process_name, severity, enabled, description FROM forbidden_processes WHERE process_name = %s", (identifier.strip().lower(),))
+            cursor.execute(
+                "SELECT id, process_name, severity, enabled, description, "
+                "terminate_on_detection, resource_protection_eligible "
+                "FROM forbidden_processes WHERE process_name = %s",
+                (identifier.strip().lower(),),
+            )
         row = cursor.fetchone()
         if not row:
             return None
         row["enabled"] = bool(row["enabled"])
+        row["terminate_on_detection"] = bool(row.get("terminate_on_detection", True))
+        row["resource_protection_eligible"] = bool(row.get("resource_protection_eligible", True))
         return row
     finally:
         conn.close()
@@ -2162,6 +2197,8 @@ def _validate_forbidden_process_payload(payload: Dict[str, Any], *, require_name
         "severity": severity,
         "enabled": bool(payload.get("enabled", True)),
         "description": description,
+        "terminate_on_detection": bool(payload.get("terminate_on_detection", True)),
+        "resource_protection_eligible": bool(payload.get("resource_protection_eligible", True)),
     }
 
 
@@ -2174,10 +2211,18 @@ def create_forbidden_process(payload: Dict[str, Any]) -> Dict[str, Any]:
         cursor = conn.cursor()
         cursor.execute(
             """
-            INSERT INTO forbidden_processes (process_name, severity, enabled, description)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO forbidden_processes
+                (process_name, severity, enabled, description, terminate_on_detection, resource_protection_eligible)
+            VALUES (%s, %s, %s, %s, %s, %s)
             """,
-            (rule["process_name"], rule["severity"], rule["enabled"], rule["description"]),
+            (
+                rule["process_name"],
+                rule["severity"],
+                rule["enabled"],
+                rule["description"],
+                rule["terminate_on_detection"],
+                rule["resource_protection_eligible"],
+            ),
         )
         conn.commit()
         rule["id"] = cursor.lastrowid
@@ -2212,10 +2257,18 @@ def update_forbidden_process(identifier: str, payload: Dict[str, Any]) -> Option
         cursor.execute(
             f"""
             UPDATE forbidden_processes
-            SET severity = %s, enabled = %s, description = %s
+            SET severity = %s, enabled = %s, description = %s,
+                terminate_on_detection = %s, resource_protection_eligible = %s
             WHERE {lookup_column} = %s
             """,
-            (rule["severity"], rule["enabled"], rule["description"], lookup_value),
+            (
+                rule["severity"],
+                rule["enabled"],
+                rule["description"],
+                rule["terminate_on_detection"],
+                rule["resource_protection_eligible"],
+                lookup_value,
+            ),
         )
         if cursor.rowcount == 0:
             return None
@@ -2240,6 +2293,160 @@ def delete_forbidden_process(identifier: str) -> bool:
         if deleted:
             conn.commit()
         return deleted
+    finally:
+        conn.close()
+
+
+def get_resource_protection_settings() -> Dict[str, Any]:
+    """Retrieve global resource protection configuration settings."""
+    conn = get_connection()
+    if not conn:
+        return dict(DEFAULT_RESOURCE_PROTECTION_SETTINGS)
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT enabled, cpu_enabled, cpu_threshold, cpu_sustained_seconds,
+                   memory_enabled, memory_threshold, memory_sustained_seconds,
+                   cooldown_seconds, max_interventions_per_hour
+            FROM resource_protection_settings
+            WHERE id = 1
+            """
+        )
+        row = cursor.fetchone()
+        if not row:
+            return dict(DEFAULT_RESOURCE_PROTECTION_SETTINGS)
+        return {
+            "enabled": bool(row["enabled"]),
+            "cpu": {
+                "enabled": bool(row["cpu_enabled"]),
+                "threshold": float(row["cpu_threshold"]),
+                "sustained_seconds": int(row["cpu_sustained_seconds"]),
+            },
+            "memory": {
+                "enabled": bool(row["memory_enabled"]),
+                "threshold": float(row["memory_threshold"]),
+                "sustained_seconds": int(row["memory_sustained_seconds"]),
+            },
+            "cooldown_seconds": int(row["cooldown_seconds"]),
+            "max_interventions_per_hour": int(row["max_interventions_per_hour"]),
+        }
+    except Exception:
+        return dict(DEFAULT_RESOURCE_PROTECTION_SETTINGS)
+    finally:
+        conn.close()
+
+
+def _validate_resource_protection_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise ValueError("Payload must be a JSON object.")
+
+    enabled = bool(payload.get("enabled", True))
+    cpu_conf = payload.get("cpu", {})
+    if not isinstance(cpu_conf, dict):
+        raise ValueError("Field 'cpu' must be an object.")
+    cpu_enabled = bool(cpu_conf.get("enabled", True))
+    try:
+        cpu_threshold = float(cpu_conf.get("threshold", 85.0))
+    except (ValueError, TypeError) as exc:
+        raise ValueError("CPU threshold must be a number.") from exc
+    if not (1.0 <= cpu_threshold <= 100.0):
+        raise ValueError("CPU threshold must be between 1 and 100.")
+    try:
+        cpu_sustained = int(cpu_conf.get("sustained_seconds", 30))
+    except (ValueError, TypeError) as exc:
+        raise ValueError("CPU sustained_seconds must be an integer.") from exc
+    if cpu_sustained < 1:
+        raise ValueError("CPU sustained_seconds must be at least 1.")
+
+    mem_conf = payload.get("memory", {})
+    if not isinstance(mem_conf, dict):
+        raise ValueError("Field 'memory' must be an object.")
+    mem_enabled = bool(mem_conf.get("enabled", True))
+    try:
+        mem_threshold = float(mem_conf.get("threshold", 90.0))
+    except (ValueError, TypeError) as exc:
+        raise ValueError("Memory threshold must be a number.") from exc
+    if not (1.0 <= mem_threshold <= 100.0):
+        raise ValueError("Memory threshold must be between 1 and 100.")
+    try:
+        mem_sustained = int(mem_conf.get("sustained_seconds", 30))
+    except (ValueError, TypeError) as exc:
+        raise ValueError("Memory sustained_seconds must be an integer.") from exc
+    if mem_sustained < 1:
+        raise ValueError("Memory sustained_seconds must be at least 1.")
+
+    try:
+        cooldown = int(payload.get("cooldown_seconds", 300))
+    except (ValueError, TypeError) as exc:
+        raise ValueError("cooldown_seconds must be an integer.") from exc
+    if cooldown < 0:
+        raise ValueError("cooldown_seconds must be non-negative.")
+
+    try:
+        max_interventions = int(payload.get("max_interventions_per_hour", 3))
+    except (ValueError, TypeError) as exc:
+        raise ValueError("max_interventions_per_hour must be an integer.") from exc
+    if max_interventions < 1:
+        raise ValueError("max_interventions_per_hour must be at least 1.")
+
+    return {
+        "enabled": enabled,
+        "cpu": {
+            "enabled": cpu_enabled,
+            "threshold": cpu_threshold,
+            "sustained_seconds": cpu_sustained,
+        },
+        "memory": {
+            "enabled": mem_enabled,
+            "threshold": mem_threshold,
+            "sustained_seconds": mem_sustained,
+        },
+        "cooldown_seconds": cooldown,
+        "max_interventions_per_hour": max_interventions,
+    }
+
+
+def update_resource_protection_settings(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate and persist global resource protection configuration."""
+    validated = _validate_resource_protection_payload(payload)
+    conn = get_connection()
+    if not conn:
+        raise RuntimeError("Database connection unavailable.")
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO resource_protection_settings
+                (id, enabled, cpu_enabled, cpu_threshold, cpu_sustained_seconds,
+                 memory_enabled, memory_threshold, memory_sustained_seconds,
+                 cooldown_seconds, max_interventions_per_hour)
+            VALUES (1, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                enabled = VALUES(enabled),
+                cpu_enabled = VALUES(cpu_enabled),
+                cpu_threshold = VALUES(cpu_threshold),
+                cpu_sustained_seconds = VALUES(cpu_sustained_seconds),
+                memory_enabled = VALUES(memory_enabled),
+                memory_threshold = VALUES(memory_threshold),
+                memory_sustained_seconds = VALUES(memory_sustained_seconds),
+                cooldown_seconds = VALUES(cooldown_seconds),
+                max_interventions_per_hour = VALUES(max_interventions_per_hour)
+            """,
+            (
+                validated["enabled"],
+                validated["cpu"]["enabled"],
+                validated["cpu"]["threshold"],
+                validated["cpu"]["sustained_seconds"],
+                validated["memory"]["enabled"],
+                validated["memory"]["threshold"],
+                validated["memory"]["sustained_seconds"],
+                validated["cooldown_seconds"],
+                validated["max_interventions_per_hour"],
+            ),
+        )
+        conn.commit()
+        return validated
     finally:
         conn.close()
 

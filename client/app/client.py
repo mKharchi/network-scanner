@@ -31,7 +31,7 @@ from action_framework import (
     normalize_action_name,
 )
 from process_scanner import scan_for_forbidden_processes
-from process_monitor import ForbiddenProcessMonitor
+from process_monitor import ForbiddenProcessMonitor, ResourceProtectionMonitor
 from quarantine_manager import NetworkQuarantineManager
 from network_state_manager import NetworkStateManager
 from network_neighbour_collector import NetworkNeighbourCollector
@@ -43,8 +43,14 @@ from neighbourhood import (
     get_daily_neighbourhood_path,
     load_daily_neighbourhood,
     normalise_dhcp_observation,
-    update_daily_neighbourhood,
+    persist_raw_dhcp_observation,
+    store_dhcp_neighbourhood_observation,
 )
+from flow_aggregator import FlowAggregator
+from telemetry_packet_writer import TelemetryPacketWriter
+from retention_manager import RetentionManager
+from scope_filter import ScopeFilter
+from sync_manager import sync_pending_telemetry_files
 import threading
 import time
 from datetime import datetime
@@ -79,6 +85,8 @@ FORBIDDEN_PROCESS_SCAN_INTERVAL_SECONDS = max(
     1, int(os.getenv("FORBIDDEN_PROCESS_SCAN_INTERVAL_SECONDS", "600"))
 )
 FORBIDDEN_PROCESS_SCAN_DUMP = STORAGE_DIR / "forbidden_process_scan.json"
+FORBIDDEN_PROCESSES_CACHE_FILE = STORAGE_DIR / "forbidden_processes_cache.json"
+RESOURCE_PROTECTION_CONFIG_FILE = STORAGE_DIR / "resource_protection_config.json"
 LOG = logging.getLogger("client")
 
 socket_lock = threading.Lock()
@@ -87,9 +95,56 @@ network_scan_lock = threading.Lock()
 network_scan_state_lock = threading.Lock()
 active_network_scan_global_id = None
 forbidden_processes = []
+resource_protection_settings = {}
 SCREENSHOT_MAX_RESPONSE_BYTES = max(
     1, int(os.getenv("SCREENSHOT_MAX_RESPONSE_BYTES", str(8 * 1024 * 1024)))
 )
+
+
+def _load_cached_forbidden_processes() -> list:
+    """Load locally cached forbidden process rules for offline autonomous enforcement."""
+    try:
+        if FORBIDDEN_PROCESSES_CACHE_FILE.exists():
+            with open(FORBIDDEN_PROCESSES_CACHE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    return data
+    except Exception as err:
+        LOG.warning("Could not load cached forbidden processes: %s", err)
+    return []
+
+
+def _save_cached_forbidden_processes(rules: list) -> None:
+    """Persist forbidden process rules locally."""
+    try:
+        STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+        with open(FORBIDDEN_PROCESSES_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(rules, f, indent=2)
+    except Exception as err:
+        LOG.warning("Could not save cached forbidden processes: %s", err)
+
+
+def _load_cached_resource_protection_config() -> dict:
+    """Load locally cached resource protection configuration."""
+    try:
+        if RESOURCE_PROTECTION_CONFIG_FILE.exists():
+            with open(RESOURCE_PROTECTION_CONFIG_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+    except Exception as err:
+        LOG.warning("Could not load cached resource protection config: %s", err)
+    return {}
+
+
+def _save_cached_resource_protection_config(config: dict) -> None:
+    """Persist resource protection configuration locally."""
+    try:
+        STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+        with open(RESOURCE_PROTECTION_CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=2)
+    except Exception as err:
+        LOG.warning("Could not save cached resource protection config: %s", err)
 
 
 class _StopEventProxy:
@@ -861,7 +916,14 @@ def start_client(stop_event=None, *, agent_role="service"):
                 daemon=True,
             ).start()
 
+        # Load cached rules and resource protection configuration for autonomous enforcement
+        cached_fb_rules = _load_cached_forbidden_processes()
+        if cached_fb_rules:
+            forbidden_processes = cached_fb_rules
+            _startup_log(f"Loaded {len(cached_fb_rules)} cached forbidden process rules.")
+
         process_monitor = ForbiddenProcessMonitor(
+            rules=forbidden_processes,
             scan_interval_seconds=float(os.getenv("PROCESS_SCAN_INTERVAL_SECONDS", "10.0")),
             escalation_threshold=int(os.getenv("PROCESS_ESCALATION_THRESHOLD", "3")),
             escalation_window_seconds=int(os.getenv("PROCESS_ESCALATION_WINDOW_SECONDS", "120")),
@@ -869,6 +931,21 @@ def start_client(stop_event=None, *, agent_role="service"):
             isolation_callback=_on_escalation_isolate,
             auto_terminate=True,
         )
+        process_monitor.start()
+
+        cached_rp_config = _load_cached_resource_protection_config()
+        if cached_rp_config:
+            resource_protection_settings = cached_rp_config
+            _startup_log("Loaded cached resource protection configuration.")
+
+        resource_protection_monitor = ResourceProtectionMonitor(
+            config=resource_protection_settings or None,
+            scan_interval_seconds=float(os.getenv("RESOURCE_PROTECTION_SCAN_INTERVAL", "5.0")),
+            alert_callback=_on_process_alert,
+            rules_provider=lambda: process_monitor.get_rules(),
+            auto_terminate=True,
+        )
+        resource_protection_monitor.start()
 
         # Start passive network packet observer (independent local telemetry)
         try:
@@ -993,7 +1070,7 @@ def start_client(stop_event=None, *, agent_role="service"):
                             daemon=True,
                         ).start()
 
-                        # Immediately request forbidden processes.
+                        # Immediately request forbidden processes and resource protection settings.
                         if heartbeat_thread is None or not heartbeat_thread.is_alive():
                             heartbeat_thread = threading.Thread(
                                 target=_heartbeat_loop,
@@ -1010,6 +1087,13 @@ def start_client(stop_event=None, *, agent_role="service"):
                                     "command": "GET_FORBIDDEN_PROCESSES",
                                 },
                             )
+                            send_message(
+                                client,
+                                {
+                                    "type": "REQUEST",
+                                    "command": "GET_RESOURCE_PROTECTION",
+                                },
+                            )
                         continue
 
                     if msg_type == "FORBIDDEN_PROCESSES":
@@ -1018,10 +1102,27 @@ def start_client(stop_event=None, *, agent_role="service"):
                         _startup_log(
                             f"Received {len(forbidden_processes)} forbidden processes."
                         )
+                        _save_cached_forbidden_processes(forbidden_processes)
 
                         # Update and start continuous process monitoring
                         process_monitor.set_rules(forbidden_processes)
                         process_monitor.start()
+                        if resource_protection_monitor is not None:
+                            resource_protection_monitor.set_rules(forbidden_processes)
+                            resource_protection_monitor.start()
+
+                    if msg_type == "RESOURCE_PROTECTION_CONFIG":
+                        global resource_protection_settings
+                        resource_protection_settings = message.get("data", {})
+                        _startup_log(
+                            "Received resource protection configuration from server."
+                        )
+                        if isinstance(resource_protection_settings, dict):
+                            _save_cached_resource_protection_config(resource_protection_settings)
+                            if resource_protection_monitor is not None:
+                                resource_protection_monitor.set_config(resource_protection_settings)
+                                resource_protection_monitor.start()
+                        continue
 
                         # Start background daily neighbour snapshot collection so it never blocks command execution
                         threading.Thread(
@@ -1214,6 +1315,11 @@ def start_client(stop_event=None, *, agent_role="service"):
                     process_monitor.stop()
                 except Exception as error:
                     print(f"[PROCESS MONITOR] Could not stop monitor: {error}")
+            if resource_protection_monitor is not None:
+                try:
+                    resource_protection_monitor.stop()
+                except Exception as error:
+                    print(f"[RESOURCE PROTECTION] Could not stop monitor: {error}")
             if dhcp_listener is not None:
                 try:
                     dhcp_listener.stop()
