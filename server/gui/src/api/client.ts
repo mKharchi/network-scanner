@@ -884,6 +884,14 @@ export interface GlobalNeighbourhoodCollection {
   merge_error: string | null;
 }
 
+export interface AlertInvestigationRef {
+  suspect_mac: string;
+  lookback_minutes: number;
+  start_time: string | null;
+  end_time: string | null;
+  investigation_url: string;
+}
+
 export interface Alert {
   id: number;
   client: { id: string; hostname: string } | null;
@@ -895,6 +903,7 @@ export interface Alert {
   title: string;
   description: string;
   activity_log_id: number | null;
+  kismet_investigation?: AlertInvestigationRef | null;
 }
 
 export interface ActivityLogRecord {
@@ -1170,7 +1179,27 @@ export const api = {
       alert: Alert;
       client: ManagedClientSummary | null;
       activity_log: ActivityLogRecord | null;
+      kismet_investigation?: AlertInvestigationRef | null;
     }>(`/alerts/${alertId}`),
+
+  getAlertWirelessInvestigation: (
+    alertId: number,
+    params?: {
+      lookback?: string;
+      include_noise?: boolean;
+      limit?: number;
+    },
+  ) =>
+    get<{
+      alert: Alert;
+      investigation: DeviceWirelessObservationsResponse;
+    }>(`/alerts/${alertId}/wireless-investigation`, {
+      ...(params?.lookback ? { lookback: params.lookback } : {}),
+      ...(params?.include_noise !== undefined
+        ? { include_noise: String(params.include_noise) }
+        : {}),
+      ...(params?.limit ? { limit: String(params.limit) } : {}),
+    }),
 
   updateAlertStatus: (
     alertId: number,
@@ -1746,7 +1775,91 @@ export const api = {
 
   retrainClassificationModel: () =>
     post<any>("/classification/retrain"),
+
+  // ── Kismet Wireless Investigation & Sensors ───────────────────────
+  getDeviceWirelessObservations: (
+    deviceIdOrMac: string | number,
+    params?: {
+      lookback?: string;
+      start?: string;
+      end?: string;
+      include_noise?: boolean;
+      limit?: number;
+    },
+  ) =>
+    get<DeviceWirelessObservationsResponse>(
+      `/devices/${encodeURIComponent(String(deviceIdOrMac))}/wireless-observations`,
+      {
+        ...(params?.lookback ? { lookback: params.lookback } : {}),
+        ...(params?.start ? { start: params.start } : {}),
+        ...(params?.end ? { end: params.end } : {}),
+        ...(params?.include_noise !== undefined
+          ? { include_noise: String(params.include_noise) }
+          : {}),
+        ...(params?.limit ? { limit: String(params.limit) } : {}),
+      },
+    ),
+
+  getWifiSensors: () => get<{ items: WifiSensor[] }>("/sensors/wifi"),
 };
+
+export interface WirelessObservation {
+  timestamp: string;
+  epoch_sec: number;
+  epoch_usec: number;
+  role: "SOURCE" | "TRANSMITTER" | "DESTINATION" | "OBSERVED";
+  source_mac: string;
+  destination_mac: string;
+  transmitter_mac: string;
+  frame_type: string;
+  frame_subtype: string;
+  signal_dbm: number | null;
+  frequency_khz: number | null;
+  channel: number | null;
+  packet_length: number;
+  sensor: string;
+  capture_file: string;
+  packet_hash: string;
+}
+
+export interface WirelessInvestigationSummary {
+  observation_count: number;
+  total_matched_packets: number;
+  avg_signal_dbm: number | null;
+  min_signal_dbm: number | null;
+  max_signal_dbm: number | null;
+  channels: number[];
+  frame_types: Record<string, number>;
+  noise_filtered: boolean;
+}
+
+export interface DeviceWirelessObservationsResponse {
+  device: {
+    mac_address: string;
+    ip_address: string | null;
+    hostname: string | null;
+    vendor: string | null;
+  };
+  query_window: {
+    start: string;
+    end: string;
+    lookback_minutes: number;
+  };
+  summary: WirelessInvestigationSummary;
+  observations: WirelessObservation[];
+}
+
+export interface WifiSensor {
+  sensor_id: string;
+  name: string;
+  interface: string;
+  driver: string;
+  status: "ONLINE" | "OFFLINE";
+  capture_file: string;
+  packet_count: number;
+  first_seen: string | null;
+  last_seen: string | null;
+}
 
 export interface DeviceClassification {
   device_id: number;

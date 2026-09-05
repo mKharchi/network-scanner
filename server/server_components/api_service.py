@@ -1775,8 +1775,22 @@ def list_alerts(
     return items
 
 
+def _extract_suspect_mac(alert_record: Dict[str, Any], client_data: Optional[Dict[str, Any]]) -> Optional[str]:
+    """Extract or resolve the suspect device MAC address from alert or client records."""
+    if client_data and client_data.get("mac_address"):
+        return _format_mac(client_data["mac_address"])
+    
+    import re
+    mac_regex = re.compile(r"([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})")
+    text = f"{alert_record.get('title', '')} {alert_record.get('description', '')}"
+    m = mac_regex.search(text)
+    if m:
+        return _format_mac(m.group(0))
+    return None
+
+
 def get_alert_detail(alert_id: int) -> Optional[Dict[str, Any]]:
-    """Retrieve full details for a single alert."""
+    """Retrieve full details for a single alert, including correlated Kismet investigation references."""
     conn = get_connection()
     if not conn:
         return None
@@ -1807,6 +1821,35 @@ def get_alert_detail(alert_id: int) -> Optional[Dict[str, Any]]:
                 "ip_address": r["ip"],
             }
 
+        suspect_mac = _extract_suspect_mac(r, client_data)
+        detected_dt = r["detected_at"]
+        lookback_mins = int(os.getenv("ALERT_KISMET_LOOKBACK_MINUTES", "15"))
+        
+        investigation_ref = None
+        if suspect_mac:
+            from datetime import timedelta
+            start_iso = None
+            end_iso = None
+            if detected_dt:
+                if isinstance(detected_dt, datetime):
+                    end_dt = detected_dt if detected_dt.tzinfo else detected_dt.replace(tzinfo=timezone.utc)
+                    start_dt = end_dt - timedelta(minutes=lookback_mins)
+                    start_iso = start_dt.isoformat()
+                    end_iso = end_dt.isoformat()
+                elif isinstance(detected_dt, str):
+                    end_iso = detected_dt
+            
+            investigation_ref = {
+                "suspect_mac": suspect_mac,
+                "lookback_minutes": lookback_mins,
+                "start_time": start_iso,
+                "end_time": end_iso,
+                "investigation_url": (
+                    f"/network/devices/{suspect_mac}?tab=investigation&lookback={lookback_mins}m"
+                    + (f"&start={start_iso}&end={end_iso}" if start_iso and end_iso else "")
+                ),
+            }
+
         return {
             "alert": {
                 "id": r["id"],
@@ -1822,9 +1865,11 @@ def get_alert_detail(alert_id: int) -> Optional[Dict[str, Any]]:
                 "title": r["title"] or r["alert_type"],
                 "description": r["description"] or "",
                 "activity_log_id": r["log_id"],
+                "kismet_investigation": investigation_ref,
             },
             "client": client_data,
             "activity_log": {"id": r["log_id"]} if r["log_id"] else None,
+            "kismet_investigation": investigation_ref,
         }
     finally:
         conn.close()
@@ -2861,3 +2906,96 @@ def list_bulk_updates(limit: int = 50) -> List[Dict[str, Any]]:
             },
         })
     return result
+
+
+# ============================================================================
+# KISMET WIRELESS INVESTIGATION API SERVICE FUNCTIONS
+# ============================================================================
+
+def get_device_wireless_observations(
+    device_identifier: Any,
+    *,
+    start_time: Optional[Any] = None,
+    end_time: Optional[Any] = None,
+    lookback_minutes: Optional[Any] = None,
+    limit: int = 500,
+    include_noise: bool = False,
+) -> Dict[str, Any]:
+    """Retrieve time-windowed 802.11 wireless observations and RF telemetry for a device."""
+    from server_components.kismet_service import KismetInvestigationService
+    service = KismetInvestigationService()
+    return service.query_wireless_observations(
+        device_identifier,
+        start_time=start_time,
+        end_time=end_time,
+        lookback_minutes=lookback_minutes,
+        limit=limit,
+        include_noise=include_noise,
+    )
+
+
+def list_wifi_sensors() -> List[Dict[str, Any]]:
+    """List detected passive Kismet Wi-Fi sensors and status."""
+    from server_components.kismet_service import KismetInvestigationService
+    service = KismetInvestigationService()
+    return service.list_sensors()
+
+
+def get_alert_wireless_investigation(
+    alert_id: int,
+    *,
+    lookback_minutes: Optional[Any] = None,
+    limit: int = 500,
+    include_noise: bool = False,
+) -> Optional[Dict[str, Any]]:
+    """Retrieve Kismet wireless observations for the suspect device of an alert within its event lookback window."""
+    detail = get_alert_detail(alert_id)
+    if not detail:
+        return None
+
+    alert_info = detail["alert"]
+    inv_ref = alert_info.get("kismet_investigation")
+    suspect_mac = inv_ref.get("suspect_mac") if inv_ref else None
+
+    if not suspect_mac:
+        return {
+            "alert": alert_info,
+            "error": "No suspect MAC address associated with this alert.",
+            "observations": [],
+            "summary": {
+                "observation_count": 0,
+                "total_matched_packets": 0,
+                "avg_signal_dbm": None,
+                "min_signal_dbm": None,
+                "max_signal_dbm": None,
+                "channels": [],
+                "frame_types": {},
+                "noise_filtered": not include_noise,
+            },
+        }
+
+    lookback = (
+        lookback_minutes
+        or (inv_ref.get("lookback_minutes") if inv_ref else None)
+        or int(os.getenv("ALERT_KISMET_LOOKBACK_MINUTES", "15"))
+    )
+    start_time = inv_ref.get("start_time") if inv_ref else None
+    end_time = inv_ref.get("end_time") if inv_ref else None
+
+    from server_components.kismet_service import KismetInvestigationService
+    service = KismetInvestigationService()
+    obs_result = service.query_wireless_observations(
+        suspect_mac,
+        start_time=start_time,
+        end_time=end_time,
+        lookback_minutes=lookback if not start_time else None,
+        limit=limit,
+        include_noise=include_noise,
+    )
+
+    return {
+        "alert": alert_info,
+        "investigation": obs_result,
+    }
+
+

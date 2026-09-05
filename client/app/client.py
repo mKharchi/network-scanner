@@ -21,6 +21,7 @@ from activity_window_aggregator import ActivityWindowAggregator
 from device_enrichment import DeviceEnrichmentJob
 from flow_query import get_requested_flows
 from flow_aggregator import FlowAggregator
+from retention_manager import RetentionManager
 from scope_filter import ScopeFilter, save_scope_config
 from telemetry_packet_writer import TelemetryPacketWriter
 from action_framework import (
@@ -760,6 +761,7 @@ def start_client(stop_event=None, *, agent_role="service"):
         enrichment_job = None
         flow_aggregator = None
         telemetry_packet_writer = None
+        retention_manager = None
 
         def _on_process_alert(alert):
             send_process_monitor_alert(client, alert)
@@ -905,6 +907,8 @@ def start_client(stop_event=None, *, agent_role="service"):
                     telemetry_packet_writer=telemetry_packet_writer,
                 )
                 packet_observer.start()
+                retention_manager = RetentionManager(storage_root=STORAGE_DIR)
+                retention_manager.start()
         except Exception as e:
             print(f"[PACKET_OBSERVER] Could not start packet observer: {e}", flush=True)
 
@@ -1235,6 +1239,11 @@ def start_client(stop_event=None, *, agent_role="service"):
                     telemetry_packet_writer.stop()
                 except Exception as error:
                     print(f"[TELEMETRY_PACKET_WRITER] Could not stop cleanly: {error}")
+            if retention_manager is not None:
+                try:
+                    retention_manager.stop()
+                except Exception as error:
+                    print(f"[RETENTION] Could not stop cleanly: {error}")
             if background_thread is not None and background_thread.is_alive():
                 background_thread.join(timeout=2)
             if heartbeat_thread is not None and heartbeat_thread.is_alive():

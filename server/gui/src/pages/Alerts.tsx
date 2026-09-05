@@ -366,6 +366,24 @@ export function AlertsPage() {
                   </Link>
                 </div>
               )}
+
+              {(() => {
+                const inv = alertDetailState.data.alert.kismet_investigation || alertDetailState.data.kismet_investigation;
+                const suspectMac = inv?.suspect_mac || alertDetailState.data.client?.mac_address;
+                if (!suspectMac) return null;
+                const targetUrl = inv?.investigation_url || `/network/devices/${encodeURIComponent(suspectMac)}?tab=investigation&lookback=15m`;
+                return (
+                  <div style={{ marginTop: "var(--space-2)" }}>
+                    <Link
+                      to={targetUrl}
+                      className="btn btn--secondary btn--sm"
+                      style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "6px" }}
+                    >
+                      📡 Investigate Wireless Activity (Kismet {inv?.lookback_minutes ? `· ${inv.lookback_minutes}m Lookback` : ""}) →
+                    </Link>
+                  </div>
+                );
+              })()}
             </div>
           ) : null}
         </SectionCard>
