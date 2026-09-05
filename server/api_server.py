@@ -638,11 +638,19 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 self.send_data(fp_data)
                 return
 
+            if path == "/api/v1/settings/resource-protection":
+                rp_data = api_service.get_resource_protection_settings()
+                self.send_data(rp_data)
+                return
+
             m = re.match(r"^/api/v1/settings/forbidden-processes/([^/]+)$", path)
             if m:
                 rule = api_service.get_forbidden_process(urllib.parse.unquote(m.group(1)))
                 if rule is None:
                     self.send_error_response(404, "NOT_FOUND", "Forbidden process rule not found.")
+                    return
+                self.send_data(rule)
+                return
             # 11. Spatial & Rogue Device Triangulation
             if path == "/api/v1/sensors" or path == "/api/sensors":
                 self.send_data({"items": api_service.list_sensors()})
@@ -1312,6 +1320,20 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 return
             server_lib.broadcast_observation_scope(client_id, scope["observation_scope"])
             self.send_data(scope)
+            return
+
+        if path == "/api/v1/settings/resource-protection":
+            payload = self._read_json_payload()
+            if payload is None:
+                self.send_error_response(400, "INVALID_PAYLOAD", "Invalid JSON payload.")
+                return
+            try:
+                updated = api_service.update_resource_protection_settings(payload)
+            except ValueError as exc:
+                self.send_error_response(400, "INVALID_SETTINGS", str(exc))
+                return
+            server_lib.broadcast_resource_protection_settings()
+            self.send_data(updated)
             return
 
         m = re.match(r"^/api/v1/settings/forbidden-processes/([^/]+)$", path)
