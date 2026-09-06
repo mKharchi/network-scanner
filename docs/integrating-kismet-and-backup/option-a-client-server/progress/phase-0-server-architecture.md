@@ -1,0 +1,36 @@
+# Phase 0 — Server-Side Architecture Reassessment
+
+**Status:** COMPLETE — planning-only; runtime verification remains blocked by unavailable target-server access.
+
+**Date:** 2026-09-06
+
+## Decision recorded
+
+The former client-owned Kismet design is abandoned. Kismet is now a Linux-server-owned wireless sensor. Windows clients keep their existing passive discovery, flow, and telemetry duties but have no Kismet process, database, listener, storage, query, transfer, or TCP command.
+
+## Repository findings
+
+- `client/app/kismet_listener.py` is a presumed-local `.kismet` directory poller and does not manage Kismet. Its callback is not wired by `client/app/client.py`.
+- `client/app/client.py` imports, starts, and stops that listener; it has no Kismet query command branch.
+- `GET_KISMET_OBSERVATIONS` is documentation-only; no code implements it.
+- `server/server_components/kismet_service.py` already has the appropriate server ownership and reusable MAC/time/SQLite/Radiotap/noise/normalization logic, but currently includes unverified hard-coded path and pilot assumptions.
+- `server/server_components/api_service.py`, the wireless REST routes, and `WirelessInvestigationPanel.tsx` already provide a server-local investigation API/UI boundary and should be preserved where compatible.
+- Existing `server_lib.py` TCP command-response machinery is not needed for Kismet under the new design.
+- Existing `source_type` conventions include `SERVER_SCAN`, `CLIENT_ARP`, and `CLIENT_DHCP`; Kismet needs independent provenance (`KISMET_SERVER`) rather than a blind merge.
+- `client/app/retention_manager.py` is limited to client JSON telemetry artifacts. It is not a Kismet storage cleaner.
+
+## Linux runtime investigation
+
+No accessible Linux host exists from the current workspace: WSL is not installed and no remote server session is provided. This does not negate the documented Linux pilot. It means actual server Kismet version, service, Wi-Fi interface, monitor mode, storage mount, generated files, and read behavior remain unverified.
+
+## Documents created
+
+- `00-kismet-architecture-decision.md`
+- `01-kismet-server-deployment.md`
+- `02-kismet-storage-and-retention.md`
+- `03-kismet-server-investigation.md`
+- `04-kismet-integration-testing.md`
+
+## Outcome
+
+No source code, TCP protocol, client behavior, database schema, or UI behavior was changed. The next executable phase is real target-server verification, not application implementation.
