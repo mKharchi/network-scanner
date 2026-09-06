@@ -65,6 +65,21 @@ class ClientAlertPersistenceTests(unittest.TestCase):
             [("discord", "HIGH", "Unauthorized chat client")],
         )
 
+    def test_file_activity_events_rejected_as_alerts(self):
+        """Plan §23: Verify server does not persist file events as alerts."""
+        for ev_type in ("FILE_CREATED", "FILE_MODIFIED", "FILE_DELETED", "FILE_RENAMED"):
+            alert_payload = {
+                "alert_type": "SECURITY_EVENT",
+                "event_type": ev_type,
+                "severity": "LOW",
+                "title": f"Activity Event: {ev_type}",
+                "description": "Path: /home/user/doc.txt",
+                "detected_at": "2026-09-06T12:00:00+00:00",
+                "activity_time": "2026-09-06T12:00:00+00:00",
+            }
+            handled = server_lib.handle_client_alert("AA:BB", alert_payload)
+            self.assertFalse(handled)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -601,7 +601,71 @@ def _find_firefox_profiles(home):
     return list(dict.fromkeys(profiles))
 
 
-def get_activity_log(period="1d"):
+def _read_client_events(events_dir: Path, add_func, cutoff: datetime):
+    """Read persisted client events from day-scoped storage and add matching entries."""
+    if not events_dir.exists() or not events_dir.is_dir():
+        return
+
+    try:
+        for event_file in sorted(events_dir.glob("*.json")):
+            try:
+                with event_file.open("r", encoding="utf-8") as fh:
+                    data = json.load(fh)
+                if not isinstance(data, list):
+                    continue
+                for item in data:
+                    if not isinstance(item, dict):
+                        continue
+                    raw_ts = item.get("timestamp")
+                    dt = None
+                    if raw_ts:
+                        try:
+                            clean_ts = raw_ts.replace("Z", "+00:00")
+                            parsed = datetime.fromisoformat(clean_ts)
+                            if parsed.tzinfo is not None:
+                                dt = parsed.astimezone().replace(tzinfo=None)
+                            else:
+                                dt = parsed
+                        except Exception:
+                            try:
+                                dt = datetime.strptime(raw_ts, "%Y-%m-%d %H:%M:%S")
+                            except Exception:
+                                pass
+
+                    if dt is not None:
+                        if dt < cutoff:
+                            continue
+                        time_str = dt.strftime("%Y-%m-%d %H:%M:%S")
+                    else:
+                        time_str = "Unknown"
+
+                    ev_type = item.get("event_type", "EVENT")
+                    path = item.get("path")
+                    app = item.get("application")
+                    detail = path or app or str(item.get("details") or "")
+
+                    extra = {}
+                    if path:
+                        extra["path"] = path
+                        try:
+                            extra["filename"] = Path(path).name
+                        except Exception:
+                            pass
+                    if ev_type:
+                        extra["event_type"] = ev_type
+                    if item.get("source"):
+                        extra["source"] = item["source"]
+                    if item.get("user"):
+                        extra["user"] = item["user"]
+
+                    add_func(time_str, ev_type, detail, **extra)
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+
+def get_activity_log(period="1d", storage_dir=None):
     """
     Collect user activity and filter to the requested period.
 
@@ -637,7 +701,7 @@ def get_activity_log(period="1d"):
     # Helper used by every activity source
     # ------------------------------------------------------------
 
-    def add(time_str, entry_type, detail):
+    def add(time_str, entry_type, detail, **kwargs):
 
         if time_str not in ("Unknown", "Recent"):
 
@@ -650,13 +714,15 @@ def get_activity_log(period="1d"):
             except (ValueError, TypeError):
                 time_str = "Unknown"
 
-        activity.append(
-            {
-                "time": time_str,
-                "type": entry_type,
-                "detail": detail,
-            }
-        )
+        entry = {
+            "time": time_str,
+            "type": entry_type,
+            "detail": detail,
+        }
+        for k, v in kwargs.items():
+            if v is not None:
+                entry[k] = v
+        activity.append(entry)
 
     # ============================================================
     # LINUX
@@ -866,6 +932,18 @@ def get_activity_log(period="1d"):
             pass
 
     # ============================================================
+    # CLIENT PERSISTED EVENTS (File activity, apps, lifecycle)
+    # ============================================================
+
+    client_root = Path(__file__).resolve().parent.parent
+    events_dir = (
+        (Path(storage_dir) / "events")
+        if storage_dir is not None
+        else (Path(os.environ.get("STORAGE_DIR", client_root / "storage")) / "events")
+    )
+    _read_client_events(events_dir, add, cutoff)
+
+    # ============================================================
     # SORT
     # ============================================================
 
@@ -1011,7 +1089,12 @@ def _handle_update_location(message, **_context):
 
 
 def _handle_get_activity_log(message, **_context):
-    period = message.get("args", "1d")
+    args = message.get("args")
+    period = "1d"
+    if isinstance(args, dict):
+        period = args.get("period", "1d")
+    elif isinstance(args, str) and args.strip():
+        period = args.strip()
     return get_activity_log(period)
 
 
