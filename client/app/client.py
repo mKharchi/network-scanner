@@ -67,6 +67,14 @@ from neighbourhood import (
     update_daily_neighbourhood,
 )
 from dotenv import load_dotenv
+from diagnostics import (
+    log_startup_diagnostics,
+    check_storage_permissions,
+    component_log,
+    CLIENT_CORE,
+)
+from event_monitor import EventMonitor
+from kismet_listener import KismetListener
 
 
 def _load_env_file(path):
@@ -800,6 +808,12 @@ def start_client(stop_event=None, *, agent_role="service"):
         f"Client starting with server target {SERVER_IP}:{SERVER_PORT}; role={agent_role}."
     )
 
+    # Phase 0 — Startup diagnostics and storage permission check
+    log_startup_diagnostics(LOG)
+    storage_status = check_storage_permissions(STORAGE_DIR, logger=LOG)
+    if not storage_status.get("writable"):
+        LOG.warning("[CLIENT_CORE] Storage directory is NOT writable: %s", STORAGE_DIR)
+
     quarantine_manager = NetworkQuarantineManager(
         server_ip=SERVER_IP,
         server_port=SERVER_PORT,
@@ -815,6 +829,7 @@ def start_client(stop_event=None, *, agent_role="service"):
         heartbeat_thread = None
         dhcp_listener = None
         passive_protocol_listener = None
+        kismet_listener = None
         packet_observer = None
         process_monitor = None
         sync_manager = None
@@ -823,9 +838,33 @@ def start_client(stop_event=None, *, agent_role="service"):
         flow_aggregator = None
         telemetry_packet_writer = None
         retention_manager = None
+        event_monitor = None
 
         def _on_process_alert(alert):
             send_process_monitor_alert(client, alert)
+
+        def _on_activity_event(event):
+            send_alerts(
+                client,
+                [
+                    {
+                        "type": "ALERT",
+                        "alert": {
+                            "alert_type": "SECURITY_EVENT",
+                            "event_type": event.get("event_type"),
+                            "severity": "LOW",
+                            "title": f"Activity Event: {event.get('event_type')}",
+                            "description": (
+                                f"App: {event.get('application') or 'N/A'}; "
+                                f"Path: {event.get('path') or 'N/A'}"
+                            ),
+                            "detected_at": event.get("timestamp"),
+                            "activity_time": event.get("timestamp"),
+                        },
+                    }
+                ],
+                "event-monitor",
+            )
 
         def _on_quarantine_event(event):
             send_alerts(
@@ -992,6 +1031,12 @@ def start_client(stop_event=None, *, agent_role="service"):
                 packet_observer.start()
                 retention_manager = RetentionManager(storage_root=STORAGE_DIR)
                 retention_manager.start()
+                event_monitor = EventMonitor(
+                    client_id=telemetry_client_id,
+                    monitored_directories=[CLIENT_DIR],
+                    event_callback=_on_activity_event,
+                )
+                event_monitor.start()
         except Exception as e:
             print(f"[PACKET_OBSERVER] Could not start packet observer: {e}", flush=True)
 
@@ -1095,6 +1140,13 @@ def start_client(stop_event=None, *, agent_role="service"):
                     print(
                         f"[PASSIVE LISTENER] Could not start listener: {error}"
                     )
+
+                try:
+                    if kismet_listener is None:
+                        kismet_listener = KismetListener()
+                        kismet_listener.start()
+                except Exception as error:
+                    print(f"[KISMET] Could not start listener: {error}")
 
             # --------------------------------------------------------
             # Register
@@ -1341,6 +1393,11 @@ def start_client(stop_event=None, *, agent_role="service"):
                     passive_protocol_listener.stop()
                 except Exception as error:
                     print(f"[PASSIVE LISTENER] Could not stop listener cleanly: {error}")
+            if kismet_listener is not None:
+                try:
+                    kismet_listener.stop()
+                except Exception as error:
+                    print(f"[KISMET] Could not stop listener cleanly: {error}")
             if packet_observer is not None:
                 try:
                     packet_observer.stop()
@@ -1361,6 +1418,11 @@ def start_client(stop_event=None, *, agent_role="service"):
                     retention_manager.stop()
                 except Exception as error:
                     print(f"[RETENTION] Could not stop cleanly: {error}")
+            if event_monitor is not None:
+                try:
+                    event_monitor.stop()
+                except Exception as error:
+                    print(f"[EVENT_MONITOR] Could not stop cleanly: {error}")
             if background_thread is not None and background_thread.is_alive():
                 background_thread.join(timeout=2)
             if heartbeat_thread is not None and heartbeat_thread.is_alive():

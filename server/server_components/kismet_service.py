@@ -287,17 +287,25 @@ class KismetInvestigationService:
             raise ValueError(f"No valid MAC address found for device '{device_identifier}'.")
 
         # Resolve time bounds
+        # Resolve time bounds (Plan §5.3, §5.4)
         end_dt = parse_iso_or_epoch(end_time) or datetime.now(timezone.utc)
         start_dt = parse_iso_or_epoch(start_time)
+        has_time_filter = True
         if start_dt is None:
-            mins = parse_lookback_to_minutes(lookback_minutes, default=DEFAULT_LOOKBACK_MINUTES)
-            start_dt = end_dt - timedelta(minutes=mins)
+            if lookback_minutes is not None and str(lookback_minutes).strip().lower() in ("all", "none", "unlimited"):
+                has_time_filter = False
+            else:
+                mins = parse_lookback_to_minutes(lookback_minutes, default=DEFAULT_LOOKBACK_MINUTES)
+                start_dt = end_dt - timedelta(minutes=mins)
 
-        if start_dt >= end_dt:
-            raise ValueError("start_time must be earlier than end_time")
+        start_epoch = None
+        end_epoch = None
+        if has_time_filter and start_dt is not None:
+            if start_dt >= end_dt:
+                raise ValueError("start_time must be earlier than end_time")
+            start_epoch = int(start_dt.timestamp())
+            end_epoch = int(end_dt.timestamp())
 
-        start_epoch = int(start_dt.timestamp())
-        end_epoch = int(end_dt.timestamp())
         limit = min(MAX_OBSERVATION_LIMIT, max(1, int(limit)))
 
         db_files = self.find_kismet_database_files()
@@ -321,9 +329,8 @@ class KismetInvestigationService:
                 """
                 params: List[Any] = [target_mac, target_mac, target_mac]
 
-                # Note: if start_epoch/end_epoch span the database timeframe, we apply time filter.
-                # If capture is historical, we allow match within database bounds if lookback was default.
-                if start_time is not None or end_time is not None:
+                # Apply time filtering so 15m lookback does not return yesterday's packets (Plan §5.3, §5.4)
+                if has_time_filter and start_epoch is not None and end_epoch is not None:
                     query += " AND ts_sec >= ? AND ts_sec <= ?"
                     params.extend([start_epoch, end_epoch])
 
@@ -443,9 +450,9 @@ class KismetInvestigationService:
         return {
             "device": device,
             "query_window": {
-                "start": start_dt.isoformat(),
+                "start": start_dt.isoformat() if start_dt else "unbounded",
                 "end": end_dt.isoformat(),
-                "lookback_minutes": round((end_dt - start_dt).total_seconds() / 60.0, 1),
+                "lookback_minutes": round((end_dt - start_dt).total_seconds() / 60.0, 1) if start_dt else None,
             },
             "summary": {
                 "observation_count": len(observations),

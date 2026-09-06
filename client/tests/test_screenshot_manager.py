@@ -13,7 +13,9 @@ sys.path.insert(0, str(CLIENT_DIRECTORY))
 
 from screenshot_manager import (  # noqa: E402
     ScreenshotManager,
+    SessionTopology,
     build_screenshot_filename,
+    get_session_topology,
     sanitize_device_name,
     screenshot_capture_enabled,
 )
@@ -104,6 +106,63 @@ class ScreenshotManagerTests(unittest.TestCase):
             manager.cleanup_stale_files()
 
             self.assertEqual([path.name for path in temp_dir.glob("*.png")], ["extra.png"])
+
+    def test_session_topology_diagnostics(self):
+        topology = get_session_topology()
+        self.assertIsInstance(topology, SessionTopology)
+        self.assertTrue(len(topology.agent_user) > 0)
+        d = topology.to_dict()
+        self.assertIn("agent_user", d)
+        self.assertIn("can_capture", d)
+        self.assertIn("reason", d)
+
+    def test_session_0_service_capture_blocked(self):
+        # Case B (Plan §4.1): Agent is running in Session 0 (service), user is in Session 1
+        service_topology = SessionTopology(
+            agent_user="SYSTEM",
+            agent_session_id=0,
+            active_session_id=1,
+            interactive_user="alice",
+            window_station="WinSta0",
+            desktop_name="Default",
+            is_active_session=False,
+            can_capture=False,
+            reason="Agent running in Session 0 (service); active console is Session 1 (alice). Desktop capture requires an interactive user-session agent.",
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            manager = ScreenshotManager(
+                temp_dir=directory,
+                image_grabber=lambda **k: FakeImage(),
+                topology_provider=lambda: service_topology,
+            )
+            with self.assertRaises(RuntimeError) as ctx:
+                manager.capture()
+            self.assertIn("Session 0", str(ctx.exception))
+            self.assertIn("alice", str(ctx.exception))
+
+    def test_session_matching_capture_succeeds(self):
+        # Case A (Plan §4.1): Same user, same interactive session
+        interactive_topology = SessionTopology(
+            agent_user="alice",
+            agent_session_id=1,
+            active_session_id=1,
+            interactive_user="alice",
+            window_station="WinSta0",
+            desktop_name="Default",
+            is_active_session=True,
+            can_capture=True,
+            reason="Session matches active console desktop.",
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            manager = ScreenshotManager(
+                temp_dir=directory,
+                image_grabber=lambda **k: FakeImage(),
+                topology_provider=lambda: interactive_topology,
+            )
+            result = manager.capture(command_id="test-cmd")
+            self.assertTrue(result.path.is_file())
 
 
 if __name__ == "__main__":

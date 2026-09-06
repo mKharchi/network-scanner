@@ -27,9 +27,11 @@ This keeps the v2 telemetry tree fully separate from the V1
 from __future__ import annotations
 
 import json
+import logging
 import os
 import tempfile
 import threading
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -136,6 +138,51 @@ def atomic_write_json(target_path: Path, data: Any) -> None:
                 pass
 
 
+_STORAGE_LOG = logging.getLogger("telemetry_storage")
+
+
+def atomic_write_json_with_retry(
+    target_path: Path,
+    data: Any,
+    *,
+    max_retries: int = 3,
+    base_delay: float = 0.1,
+    logger: Optional[logging.Logger] = None,
+) -> bool:
+    """Write JSON with controlled retry on transient ``OSError`` failures.
+
+    Uses exponential backoff (``base_delay * 2 ** attempt``) between retries.
+    Returns ``True`` on success or ``False`` if all attempts are exhausted.
+    """
+    log = logger or _STORAGE_LOG
+    for attempt in range(max_retries + 1):
+        try:
+            atomic_write_json(target_path, data)
+            return True
+        except OSError as error:
+            if attempt < max_retries:
+                delay = base_delay * (2 ** attempt)
+                log.warning(
+                    "[PERSISTENCE] Retry %d/%d for %s: %s (%s) — waiting %.2fs",
+                    attempt + 1,
+                    max_retries,
+                    target_path,
+                    type(error).__name__,
+                    error,
+                    delay,
+                )
+                time.sleep(delay)
+            else:
+                log.error(
+                    "[PERSISTENCE] All %d retries exhausted for %s: %s (%s)",
+                    max_retries,
+                    target_path,
+                    type(error).__name__,
+                    error,
+                )
+    return False
+
+
 def read_json(path: Path, default: Any = None) -> Any:
     """Best-effort JSON read; returns ``default`` on any I/O or parse error."""
     try:
@@ -202,7 +249,8 @@ class RotatingJSONAppendStore:
                     if not isinstance(existing, list):
                         existing = []
             existing.extend(records)
-            atomic_write_json(self.base_path, existing)
+            if not atomic_write_json_with_retry(self.base_path, existing):
+                raise OSError(f"Persistence failed after retries: {self.base_path}")
 
     def read_all(self) -> List[Dict[str, Any]]:
         """Return all records in the *active* file only (not rotated siblings)."""
