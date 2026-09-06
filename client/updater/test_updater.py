@@ -127,6 +127,51 @@ class UpdaterTests(unittest.TestCase):
         self.assertTrue(result["rolled_back"])
         self.assertTrue((self.app / "old.txt").exists())
 
+    def test_update_state_machine_records_progress(self):
+        self.write_package(make_package({"version.json": b'{"version":"2.0.0"}'}))
+        result = updater.apply_update(
+            self.package,
+            client_root=self.root,
+            stop_client=lambda: None,
+            start_client=lambda: None,
+        )
+        self.assertEqual(result["status"], "COMPLETED")
+        state_file = self.root / "storage" / "updates" / "current_state.json"
+        self.assertTrue(state_file.is_file())
+        state_data = json.loads(state_file.read_text(encoding="utf-8"))
+        self.assertEqual(state_data["state"], updater.STATE_UPDATE_CONFIRMED)
+        self.assertEqual(state_data["version"], "2.0.0")
+
+    def test_version_mismatch_rolls_back(self):
+        # Manifest claims 2.0.0, but version.json in package has 2.1.0
+        self.write_package(make_package({"version.json": b'{"version":"2.1.0"}'}, version="2.0.0"))
+        result = updater.apply_update(
+            self.package,
+            client_root=self.root,
+            stop_client=lambda: None,
+            start_client=lambda: None,
+        )
+        self.assertEqual(result["status"], "UPDATE_FAILED")
+        self.assertTrue(result["rolled_back"])
+        self.assertEqual(json.loads((self.app / "version.json").read_text())["version"], "1.0.0")
+
+    def test_clean_startup_exit_is_not_treated_as_crash(self):
+        class CleanExitProcess:
+            def __init__(self):
+                self.pid = 4321
+                self.returncode = 0
+            def poll(self):
+                return 0
+
+        proc = updater._start_application(
+            self.app,
+            Path(updater.sys.executable),
+            lambda *a, **k: CleanExitProcess(),
+            timeout=1.0,
+        )
+        self.assertEqual(proc.returncode, 0)
+
 
 if __name__ == "__main__":
     unittest.main()
+

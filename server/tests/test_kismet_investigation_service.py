@@ -135,6 +135,27 @@ class KismetInvestigationServiceTests(unittest.TestCase):
         self.assertNotIn("ACK", subtypes)
         self.assertIn("QoS Data", subtypes)
 
+    def test_time_filter_excludes_out_of_window_records(self):
+        # Plan §5.3/§5.4: Test time filter bounds strictly exclude out-of-window records
+        # Database packets are at epoch 1788612000, 1788612010, 1788612020.
+        # 1. Querying a 15m window outside database timeframe returns 0 records
+        out_of_window = self.service.query_wireless_observations(
+            "AA:BB:CC:DD:EE:01",
+            start_time=1788620000,
+            end_time=1788620900,
+        )
+        self.assertEqual(out_of_window["summary"]["observation_count"], 0)
+        self.assertEqual(len(out_of_window["observations"]), 0)
+
+        # 2. Querying a window matching only the first packet returns exactly 1 record
+        first_only = self.service.query_wireless_observations(
+            "AA:BB:CC:DD:EE:01",
+            start_time=1788611990,
+            end_time=1788612005,
+        )
+        self.assertEqual(first_only["summary"]["observation_count"], 1)
+        self.assertEqual(first_only["observations"][0]["epoch_sec"], 1788612000)
+
     def test_list_wifi_sensors(self):
         sensors = self.service.list_sensors()
         self.assertEqual(len(sensors), 1)

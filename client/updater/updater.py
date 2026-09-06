@@ -1,8 +1,10 @@
 """Standalone client application updater with backup and rollback."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import hashlib
 import json
+import logging
 import os
 from pathlib import Path
 import shutil
@@ -22,6 +24,50 @@ FAILURE_REASONS = {
     "APPLICATION_START_FAILED",
     "ROLLBACK",
 }
+
+# Update state machine states (Plan §3.3)
+STATE_IDLE = "IDLE"
+STATE_PACKAGE_VALIDATING = "PACKAGE_VALIDATING"
+STATE_PACKAGE_VALIDATED = "PACKAGE_VALIDATED"
+STATE_CLIENT_STOPPING = "CLIENT_STOPPING"
+STATE_CLIENT_STOPPED = "CLIENT_STOPPED"
+STATE_BACKUP_CREATED = "BACKUP_CREATED"
+STATE_FILES_REPLACED = "FILES_REPLACED"
+STATE_DEPENDENCIES_INSTALLING = "DEPENDENCIES_INSTALLING"
+STATE_CLIENT_STARTING = "CLIENT_STARTING"
+STATE_VERSION_VERIFYING = "VERSION_VERIFYING"
+STATE_UPDATE_CONFIRMED = "UPDATE_CONFIRMED"
+
+# Failure states
+STATE_VALIDATION_FAILED = "VALIDATION_FAILED"
+STATE_STOP_FAILED = "STOP_FAILED"
+STATE_FILE_REPLACEMENT_FAILED = "FILE_REPLACEMENT_FAILED"
+STATE_DEPENDENCY_FAILED = "DEPENDENCY_FAILED"
+STATE_START_FAILED = "START_FAILED"
+STATE_VERSION_MISMATCH = "VERSION_MISMATCH"
+STATE_ROLLBACK_COMPLETED = "ROLLBACK_COMPLETED"
+STATE_ROLLBACK_FAILED = "ROLLBACK_FAILED"
+
+
+def record_update_state(client_root: Path, state: str, details: Optional[Dict[str, Any]] = None) -> None:
+    """Persist the current update lifecycle state machine position to disk (Plan §3.3)."""
+    try:
+        state_dir = client_root / "storage" / "updates"
+        state_dir.mkdir(parents=True, exist_ok=True)
+        state_file = state_dir / "current_state.json"
+        payload = {
+            "state": state,
+            "timestamp": time.time(),
+            "iso_time": datetime.now(timezone.utc).isoformat(),
+            **(details or {}),
+        }
+        temp_file = state_file.with_suffix(".tmp")
+        with temp_file.open("w", encoding="utf-8") as fh:
+            json.dump(payload, fh, indent=2)
+        os.replace(temp_file, state_file)
+    except Exception as err:
+        logging.getLogger("updater").debug("Could not record update state %s: %s", state, err)
+
 
 
 def _inside(path: Path, root: Path) -> bool:
@@ -172,6 +218,12 @@ def _start_application(
     if python_executable is None or not python_executable.is_file():
         raise RuntimeError(f"No Python interpreter is available to start the client: {python_executable}")
 
+    log = logging.getLogger("updater")
+    log.info(
+        "[UPDATER] Starting client: executable=%s app_root=%s timeout=%.1f",
+        python_executable, app_root, timeout,
+    )
+
     process = launcher(
         [str(python_executable), str(app_root / "client.py")],
         cwd=str(app_root),
@@ -184,9 +236,28 @@ def _start_application(
         while time.monotonic() < deadline:
             if process.poll() is not None:
                 if process.returncode != 0:
-                    raise RuntimeError("client exited during startup")
+                    # Genuine crash — the client failed to start.
+                    raise RuntimeError(
+                        f"client process exited with code {process.returncode} "
+                        f"during startup (pid={process.pid})"
+                    )
+                # Exit code 0 within timeout — the client spawned a child or
+                # completed startup normally.  This is NOT a failure.
+                log.info(
+                    "[UPDATER] Client process exited cleanly (code 0, pid=%d) "
+                    "within startup window — treating as successful launch.",
+                    process.pid,
+                )
                 break
             time.sleep(0.1)
+        else:
+            # Process still running after timeout — also fine: the client is
+            # still initialising.
+            log.info(
+                "[UPDATER] Client process still running after %.1fs "
+                "(pid=%d) — treating as successful launch.",
+                timeout, process.pid,
+            )
     return process
 
 
@@ -211,6 +282,7 @@ def apply_update(
     try:
         if not package_path.is_file() or package_path.suffix.lower() != ".zip":
             raise ValueError("update package must be a zip file")
+        record_update_state(root, STATE_PACKAGE_VALIDATING, {"package": str(package_path)})
         safe_extract(package_path, staged_root)
         manifest = _read_json(staged_root / "manifest.json")
         _validate_manifest(manifest)
@@ -218,6 +290,7 @@ def apply_update(
         if not staged_app.is_dir():
             raise ValueError("package app directory is missing")
         _verify_hashes(staged_app, manifest["file_hashes"])
+        record_update_state(root, STATE_PACKAGE_VALIDATED, {"version": manifest["version"]})
 
         old_version = "unknown"
         version_file = app_root / "version.json"
@@ -226,36 +299,74 @@ def apply_update(
         backup_root = history_root / old_version
         history_root.mkdir(parents=True, exist_ok=True)
 
+        record_update_state(root, STATE_CLIENT_STOPPING)
         stop_client()
+        record_update_state(root, STATE_CLIENT_STOPPED)
+
         _copy_tree(app_root, backup_root)
+        record_update_state(root, STATE_BACKUP_CREATED, {"backup_version": old_version})
+
         _copy_tree(staged_app, app_root)
+        record_update_state(root, STATE_FILES_REPLACED)
+
         python_executable = _resolve_python(root)
+        record_update_state(root, STATE_DEPENDENCIES_INSTALLING)
         _install_dependencies(app_root, python_executable, runner)
+
+        record_update_state(root, STATE_CLIENT_STARTING)
         if start_client:
             start_client()
         else:
             _start_application(app_root, python_executable, subprocess.Popen, startup_timeout)
+
+        # Version verification on disk (Plan §3.4)
+        record_update_state(root, STATE_VERSION_VERIFYING)
+        new_version_file = app_root / "version.json"
+        if new_version_file.is_file():
+            installed_version = str(_read_json(new_version_file).get("version") or "unknown")
+            if installed_version != "unknown" and installed_version != manifest["version"]:
+                raise ValueError(
+                    f"Installed version {installed_version} does not match manifest version {manifest['version']}"
+                )
+
+        record_update_state(root, STATE_UPDATE_CONFIRMED, {"version": manifest["version"], "old_version": old_version})
         return {"status": "COMPLETED", "version": manifest["version"], "old_version": old_version}
     except ValueError as error:
         reason = "VERSION_INVALID" if "version" in str(error).lower() or "updater" in str(error).lower() else "INVALID_PACKAGE"
-        return _rollback_result(reason, str(error), app_root, backup_root, start_client)
+        record_update_state(root, STATE_VALIDATION_FAILED, {"reason": reason, "error": str(error)})
+        return _rollback_result(reason, str(error), app_root, backup_root, start_client, root)
     except (DependencyInstallError, subprocess.CalledProcessError) as error:
-        return _rollback_result("DEPENDENCY_INSTALL_FAILED", str(error), app_root, backup_root, start_client)
+        record_update_state(root, STATE_DEPENDENCY_FAILED, {"error": str(error)})
+        return _rollback_result("DEPENDENCY_INSTALL_FAILED", str(error), app_root, backup_root, start_client, root)
     except Exception as error:
-        return _rollback_result("APPLICATION_START_FAILED", str(error), app_root, backup_root, start_client)
+        record_update_state(root, STATE_START_FAILED, {"error": str(error)})
+        return _rollback_result("APPLICATION_START_FAILED", str(error), app_root, backup_root, start_client, root)
     finally:
         shutil.rmtree(staged_root, ignore_errors=True)
 
 
-def _rollback_result(reason: str, error: str, app_root: Path, backup_root: Optional[Path], start_client: Optional[Callable[[], Any]]) -> Dict[str, Any]:
+def _rollback_result(
+    reason: str,
+    error: str,
+    app_root: Path,
+    backup_root: Optional[Path],
+    start_client: Optional[Callable[[], Any]],
+    client_root: Optional[Path] = None,
+) -> Dict[str, Any]:
     if backup_root and backup_root.is_dir():
         try:
             _copy_tree(backup_root, app_root)
             if start_client:
                 start_client()
+            if client_root:
+                record_update_state(client_root, STATE_ROLLBACK_COMPLETED, {"reason": reason, "error": error})
             return {"status": "UPDATE_FAILED", "reason": reason, "error": error, "rolled_back": True}
         except Exception as rollback_error:
+            if client_root:
+                record_update_state(client_root, STATE_ROLLBACK_FAILED, {"rollback_error": str(rollback_error)})
             return {"status": "UPDATE_FAILED", "reason": "ROLLBACK", "error": f"{error}; rollback failed: {rollback_error}", "rolled_back": False}
+    if client_root:
+        record_update_state(client_root, STATE_ROLLBACK_FAILED, {"error": error})
     return {"status": "UPDATE_FAILED", "reason": reason, "error": error, "rolled_back": False}
 
 

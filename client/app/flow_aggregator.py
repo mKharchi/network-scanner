@@ -16,9 +16,11 @@ details beyond calling into ``telemetry_storage.RotatingJSONAppendStore``.
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from telemetry_storage import RotatingJSONAppendStore, get_flows_path
@@ -310,7 +312,36 @@ class FlowAggregator:
         try:
             self._store_for_today().append(record)
         except OSError as error:
-            LOG.warning("[FLOW_AGGREGATOR] Could not persist finalized flow: %s", error)
+            # Phase 1.1 — detailed diagnostics for persistence failures
+            flow_id = record.get("flow_id", "unknown")
+            try:
+                target_path = str(self._store_for_today().base_path)
+            except Exception:
+                target_path = "unknown"
+            try:
+                current_user = os.getlogin()
+            except OSError:
+                current_user = "unknown"
+            root_path = Path(str(self._root)) if self._root else None
+            storage_exists = root_path.exists() if root_path else "default"
+            storage_writable = (
+                os.access(str(root_path), os.W_OK)
+                if root_path and root_path.exists()
+                else "unknown"
+            )
+            LOG.warning(
+                "[FLOW_AGGREGATOR] Could not persist finalized flow: "
+                "flow_id=%s target=%s error_type=%s error=%s "
+                "user=%s pid=%d storage_exists=%s storage_writable=%s",
+                flow_id,
+                target_path,
+                type(error).__name__,
+                error,
+                current_user,
+                os.getpid(),
+                storage_exists,
+                storage_writable,
+            )
 
     def sweep_idle_flows(self) -> int:
         """Finalize and persist all flows idle longer than the configured timeout."""
