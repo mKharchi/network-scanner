@@ -161,10 +161,15 @@ class KismetInvestigationService:
         elif configured_dirs:
             self.capture_dirs = [Path(p.strip()) for p in configured_dirs.split(",") if p.strip()]
         else:
+            server_root = Path(__file__).resolve().parents[1]
+            repo_root = Path(__file__).resolve().parents[2]
             self.capture_dirs = [
                 Path("/home/adonis/kismet"),
                 Path("/home/adonis"),
-                Path(__file__).resolve().parents[1] / "storage" / "kismet",
+                server_root / "storage" / "kismet",
+                repo_root / "client" / "storage" / "kismet",
+                repo_root / "storage" / "kismet",
+                Path("/var/log/kismet"),
             ]
         self.fallback_scan_dir = Path(fallback_scan_dir or (Path(__file__).resolve().parents[1] / "storage" / "network_scans"))
 
@@ -321,11 +326,11 @@ class KismetInvestigationService:
                 con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
                 cur = con.cursor()
 
-                # Optimized query matching sourcemac, destmac, or transmac
+                # Optimized query matching sourcemac, destmac, or transmac (case-insensitive for Kismet databases)
                 query = """
                 SELECT ts_sec, ts_usec, phyname, sourcemac, destmac, transmac, signal, frequency, packet_len, datasource, dlt, packet, hash
                 FROM packets
-                WHERE (sourcemac = ? OR destmac = ? OR transmac = ?)
+                WHERE (sourcemac = ? COLLATE NOCASE OR destmac = ? COLLATE NOCASE OR transmac = ? COLLATE NOCASE)
                 """
                 params: List[Any] = [target_mac, target_mac, target_mac]
 

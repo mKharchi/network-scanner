@@ -20,6 +20,7 @@ interface WirelessInvestigationPanelProps {
 }
 
 const LOOKBACK_OPTIONS = [
+  { label: 'All Available Captures', value: 'all' },
   { label: 'Last 15 Minutes (Default)', value: '15m' },
   { label: 'Last 30 Minutes', value: '30m' },
   { label: 'Last 1 Hour', value: '1h' },
