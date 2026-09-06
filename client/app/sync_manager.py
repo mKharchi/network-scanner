@@ -161,6 +161,12 @@ class SyncManager:
         self._ack_results: Dict[str, Dict[str, Any]] = {}
         self._workers: Dict[str, threading.Thread] = {}
 
+    def set_client_id(self, client_id: str) -> None:
+        """Update client_id with the authoritative registered server identity."""
+        if str(client_id).strip():
+            with self._lock:
+                self.client_id = str(client_id).strip()
+
     @property
     def _state_root(self) -> Path:
         root = self._root or (Path(__file__).resolve().parent.parent / "storage" / "network_telemetry")

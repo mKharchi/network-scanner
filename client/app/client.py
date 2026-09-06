@@ -36,6 +36,7 @@ from client_lib import (
     send_message,
     get_activity_log,
     get_mac,
+    get_canonical_client_id,
 )
 from sync_manager import SyncManager, SYNC_ACK_TYPE, SYNC_NACK_TYPE
 from activity_window_aggregator import ActivityWindowAggregator
@@ -1007,7 +1008,7 @@ def start_client(stop_event=None, *, agent_role="service"):
 
             obs_iface = os.getenv("PACKET_OBSERVER_INTERFACE") or os.getenv("DHCP_LISTEN_INTERFACE") or detected_iface
             if packet_observer is None:
-                telemetry_client_id = os.getenv("CLIENT_ID") or _snapshot_client_mac() or "unknown-client"
+                telemetry_client_id = get_canonical_client_id()
                 # v2 §6/§7.2/§7.3: scope filter, Flow Aggregator, and the v2
                 # per-protocol packet writer all consume the same normalized
                 # observation stream already produced for V1 storage. Scope
@@ -1056,7 +1057,7 @@ def start_client(stop_event=None, *, agent_role="service"):
 
             _startup_log(f"Connected to server {SERVER_IP}:{SERVER_PORT}.")
 
-            observer_client_id = os.getenv("CLIENT_ID") or _snapshot_client_mac() or "unknown-client"
+            observer_client_id = get_canonical_client_id()
 
             def _send_telemetry_message(message):
                 with socket_lock:
@@ -1071,7 +1072,7 @@ def start_client(stop_event=None, *, agent_role="service"):
             )
 
             def _ensure_background_services():
-                nonlocal background_thread, dhcp_listener, passive_protocol_listener
+                nonlocal background_thread, dhcp_listener, passive_protocol_listener, kismet_listener
                 nonlocal enrichment_job, activity_aggregator
 
                 # Start background daily neighbour snapshot collection so it never blocks command execution
@@ -1143,10 +1144,13 @@ def start_client(stop_event=None, *, agent_role="service"):
 
                 try:
                     if kismet_listener is None:
+                        _startup_log("[KISMET] Initializing listener...")
                         kismet_listener = KismetListener()
+                        _startup_log("[KISMET] Configuration loaded.")
                         kismet_listener.start()
+                        _startup_log("[KISMET] Listener started.")
                 except Exception as error:
-                    print(f"[KISMET] Could not start listener: {error}")
+                    print(f"[KISMET] Failed to create listener: {error}")
 
             # --------------------------------------------------------
             # Register
@@ -1177,11 +1181,28 @@ def start_client(stop_event=None, *, agent_role="service"):
 
                     # Silently acknowledge registration confirmation
                     if msg_type == "REGISTERED":
+                        server_client_id = message.get("client_id")
                         assigned_scope = message.get("observation_scope")
                         if isinstance(assigned_scope, list):
-                            save_scope_config(assigned_scope)
+                            try:
+                                save_scope_config(assigned_scope)
+                            except Exception as scope_err:
+                                LOG.warning("[SCOPE_FILTER] Could not persist scope config: %s", scope_err)
                             if scope_filter is not None:
                                 scope_filter.set_scope(assigned_scope)
+
+                        if server_client_id:
+                            _startup_log(
+                                f"[CLIENT_IDENTITY] Confirmed registered client_id: {server_client_id}"
+                            )
+                            if sync_manager is not None:
+                                sync_manager.set_client_id(server_client_id)
+                            if flow_aggregator is not None:
+                                flow_aggregator.observer_client_id = server_client_id
+                            if packet_observer is not None:
+                                packet_observer.observer_client_id = server_client_id
+                            if event_monitor is not None:
+                                event_monitor.client_id = server_client_id
 
                         if sync_manager is not None:
                             sync_manager.retry_pending()
@@ -1262,12 +1283,17 @@ def start_client(stop_event=None, *, agent_role="service"):
                     if msg_type in ("SEED_ACK", "SEED_NACK"):
                         if msg_type == "SEED_NACK":
                             LOG.warning("[TELEMETRY_SEED] Server rejected initial device seed: %s", message.get("reason"))
+                        else:
+                            LOG.info("[TELEMETRY_SEED] Server accepted initial device seed (client_id=%s).", message.get("client_id"))
                         continue
 
                     if msg_type == "SCOPE_ASSIGNED":
                         assigned_scope = message.get("observation_scope")
                         if isinstance(assigned_scope, list):
-                            save_scope_config(assigned_scope)
+                            try:
+                                save_scope_config(assigned_scope)
+                            except Exception as scope_err:
+                                LOG.warning("[SCOPE_FILTER] Could not persist scope config: %s", scope_err)
                             if scope_filter is not None:
                                 scope_filter.set_scope(assigned_scope)
                         else:
@@ -1350,8 +1376,8 @@ def start_client(stop_event=None, *, agent_role="service"):
                 except json.JSONDecodeError:
                     _startup_log("Received invalid JSON.")
 
-                except (ConnectionResetError, BrokenPipeError, OSError):
-                    _startup_log("Connection with server lost.")
+                except (ConnectionResetError, BrokenPipeError, OSError) as err:
+                    _startup_log(f"Connection with server lost: {err}")
                     break
 
         except KeyboardInterrupt:
@@ -1397,7 +1423,9 @@ def start_client(stop_event=None, *, agent_role="service"):
                 try:
                     kismet_listener.stop()
                 except Exception as error:
-                    print(f"[KISMET] Could not stop listener cleanly: {error}")
+                    print(f"[KISMET] Listener cleanup failed: {error}")
+            else:
+                LOG.debug("[KISMET] Listener cleanup skipped: listener was never created")
             if packet_observer is not None:
                 try:
                     packet_observer.stop()

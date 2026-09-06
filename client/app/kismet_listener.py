@@ -32,6 +32,14 @@ KISMET_RECONNECTING = "KISMET_RECONNECTING"
 KISMET_ERROR = "KISMET_ERROR"
 KISMET_STOPPED = "KISMET_STOPPED"
 
+# Lifecycle states (Plan Phase 5)
+STATE_NOT_STARTED = "NOT_STARTED"
+STATE_STARTING = "STARTING"
+STATE_RUNNING = "RUNNING"
+STATE_FAILED = "FAILED"
+STATE_STOPPING = "STOPPING"
+STATE_STOPPED = "STOPPED"
+
 
 @dataclass
 class KismetObservation:
@@ -66,6 +74,7 @@ class KismetListener:
         self.observation_callback = observation_callback
         self.sensor_id = sensor_id
 
+        self._state = STATE_NOT_STARTED
         self._status = "initialized"
         self._connected = False
         self._last_event: Optional[str] = None
@@ -80,6 +89,12 @@ class KismetListener:
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
 
+    @property
+    def state(self) -> str:
+        """Return the current lifecycle state."""
+        with self._lock:
+            return self._state
+
     def _log_lifecycle(self, event: str, **context: Any) -> None:
         """Structured component lifecycle logging (Plan §5.1)."""
         parts = [f"[KISMET] {event}"]
@@ -92,6 +107,7 @@ class KismetListener:
         with self._lock:
             return {
                 "listener": "kismet",
+                "state": self._state,
                 "status": self._status,
                 "connected": self._connected,
                 "last_event": self._last_event,
@@ -190,38 +206,65 @@ class KismetListener:
         return observations
 
     def start(self) -> None:
-        """Start the Kismet background poller."""
-        if self._thread and self._thread.is_alive():
-            return
-
-        self._log_lifecycle(KISMET_LISTENER_STARTING)
+        """Start the Kismet background poller (idempotent per Plan Phase 5)."""
         with self._lock:
+            if self._state in (STATE_STARTING, STATE_RUNNING) or (
+                self._thread and self._thread.is_alive()
+            ):
+                LOG.debug("[KISMET] Listener already in state %s; start ignored", self._state)
+                return
+
+            self._log_lifecycle(KISMET_LISTENER_STARTING)
+            self._state = STATE_STARTING
             self._status = "starting"
             self._last_processed_timestamp = int(time.time()) - 60
 
-        self._stop_event.clear()
-        self._thread = threading.Thread(
-            target=self._run_loop,
-            daemon=True,
-            name="kismet-listener-loop",
-        )
-        self._thread.start()
+        try:
+            self._stop_event.clear()
+            self._thread = threading.Thread(
+                target=self._run_loop,
+                daemon=True,
+                name="kismet-listener-loop",
+            )
+            self._thread.start()
+        except Exception as err:
+            with self._lock:
+                self._state = STATE_FAILED
+                self._status = "failed"
+                self._last_error = str(err)
+            self._log_lifecycle(KISMET_ERROR, error=str(err), state=STATE_FAILED)
+            raise
 
     def stop(self) -> None:
-        """Stop the Kismet background poller."""
+        """Stop the Kismet background poller (idempotent per Plan Phase 5)."""
+        with self._lock:
+            if self._state in (STATE_STOPPING, STATE_STOPPED) and not (
+                self._thread and self._thread.is_alive()
+            ):
+                return
+            self._state = STATE_STOPPING
+            self._status = "stopping"
+
         if self._thread:
             self._stop_event.set()
             self._thread.join(timeout=3.0)
             self._thread = None
-            with self._lock:
-                self._status = "stopped"
-                self._connected = False
-            self._log_lifecycle(KISMET_STOPPED)
+
+        with self._lock:
+            self._state = STATE_STOPPED
+            self._status = "stopped"
+            self._connected = False
+        self._log_lifecycle(KISMET_STOPPED)
 
     def _run_loop(self) -> None:
         active_db: Optional[Path] = None
+        has_logged_connecting = False
         while not self._stop_event.wait(self.poll_interval):
             try:
+                if not has_logged_connecting:
+                    LOG.info("[KISMET] Connecting to Kismet database directory: %s", self.kismet_db_dir)
+                    has_logged_connecting = True
+
                 latest_db = self.find_latest_database()
                 if latest_db is None:
                     if self._connected:
@@ -236,6 +279,7 @@ class KismetListener:
                     with self._lock:
                         self._connected = True
                         self._status = "active"
+                        self._state = STATE_RUNNING
                     self._log_lifecycle(KISMET_CONNECTED, database=latest_db.name)
                     self._log_lifecycle(KISMET_LISTENING)
 

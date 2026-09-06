@@ -123,6 +123,61 @@ class KismetListenerUnitTests(unittest.TestCase):
         self.assertEqual(health_after["status"], "stopped")
         self.assertFalse(health_after["connected"])
 
+    def test_idempotent_start_does_not_create_duplicate_thread(self):
+        listener = KismetListener(
+            kismet_db_dir=self.kismet_dir,
+            poll_interval_seconds=0.1,
+        )
+        listener.start()
+        thread_1 = listener._thread
+        self.assertIsNotNone(thread_1)
+
+        # Second start() call should be a no-op and keep existing thread
+        listener.start()
+        self.assertIs(listener._thread, thread_1)
+        listener.stop()
+
+    def test_idempotent_stop_can_be_called_multiple_times(self):
+        listener = KismetListener(
+            kismet_db_dir=self.kismet_dir,
+            poll_interval_seconds=0.1,
+        )
+        listener.start()
+        listener.stop()
+        # Second stop() call must not raise any error
+        listener.stop()
+        self.assertEqual(listener.get_health()["status"], "stopped")
+
+    def test_lifecycle_states_and_health(self):
+        from kismet_listener import STATE_NOT_STARTED, STATE_RUNNING, STATE_STOPPED
+        listener = KismetListener(kismet_db_dir=self.kismet_dir, poll_interval_seconds=0.05)
+        self.assertEqual(listener.state, STATE_NOT_STARTED)
+        self.assertEqual(listener.get_health()["state"], STATE_NOT_STARTED)
+
+        listener.start()
+        time.sleep(0.15)
+        self.assertEqual(listener.state, STATE_RUNNING)
+        self.assertEqual(listener.get_health()["state"], STATE_RUNNING)
+
+        listener.stop()
+        self.assertEqual(listener.state, STATE_STOPPED)
+        self.assertEqual(listener.get_health()["state"], STATE_STOPPED)
+
+    def test_reconnection_when_database_appears(self):
+        empty_dir = self.test_dir / "empty_kismet"
+        empty_dir.mkdir()
+        listener = KismetListener(kismet_db_dir=empty_dir, poll_interval_seconds=0.05)
+        listener.start()
+        time.sleep(0.1)
+        self.assertFalse(listener.get_health()["connected"])
+
+        # Now create database in directory
+        new_db = empty_dir / "capture.kismet"
+        self._init_sqlite_kismet_db(new_db)
+        time.sleep(0.15)
+        self.assertTrue(listener.get_health()["connected"])
+        listener.stop()
+
 
 if __name__ == "__main__":
     unittest.main()

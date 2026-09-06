@@ -1451,8 +1451,8 @@ def handle_telemetry_sync(mac, payload, *, sender=None):
     """
     from server_components.telemetry_merge import merge_telemetry_delta
 
-    client = get_client_by_mac(mac)
-    sender = sender or client
+    client = sender or get_client_by_mac(mac) or get_client_by_mac(mac, agent_role="interactive")
+    sender = client
     registered_client_id = sender.get("client_id") if sender else _client_id_for_mac(mac)
     window_id = payload.get("window_id") if isinstance(payload, dict) else None
     result = None
@@ -1461,6 +1461,10 @@ def handle_telemetry_sync(mac, payload, *, sender=None):
     if valid and registered_client_id and payload.get("client_id") != registered_client_id:
         valid = False
         reason = "Payload client_id does not match the registered connection"
+        print(
+            f"[TELEMETRY_SYNC] Rejected: payload client_id={payload.get('client_id')!r} "
+            f"does not match registered client_id={registered_client_id!r}"
+        )
     if valid:
         try:
             result = merge_telemetry_delta(payload)
@@ -1495,8 +1499,8 @@ def handle_telemetry_seed(mac, payload, *, sender=None):
     """Merge a registration-time device-only v2 inventory seed."""
     from server_components.telemetry_merge import merge_telemetry_seed
 
-    client = get_client_by_mac(mac)
-    sender = sender or client
+    client = sender or get_client_by_mac(mac) or get_client_by_mac(mac, agent_role="interactive")
+    sender = client
     registered_client_id = sender.get("client_id") if sender else _client_id_for_mac(mac)
     valid = isinstance(payload, dict)
     result = None
@@ -1504,6 +1508,10 @@ def handle_telemetry_seed(mac, payload, *, sender=None):
     if valid and registered_client_id and payload.get("client_id") != registered_client_id:
         valid = False
         reason = "Payload client_id does not match the registered connection"
+        print(
+            f"[TELEMETRY_SEED] Rejected: payload client_id={payload.get('client_id')!r} "
+            f"does not match registered client_id={registered_client_id!r}"
+        )
     if valid:
         try:
             result = merge_telemetry_seed(payload)
@@ -1794,9 +1802,11 @@ def receive_client_messages(mac, conn, *, agent_role="service"):
             elif message_type == "NETWORK_NEIGHBOURS":
                 handle_network_neighbour_report(mac, message.get("data"))
             elif message_type == "TELEMETRY_SYNC":
-                handle_telemetry_sync(mac, message.get("data"))
+                client_obj = get_client_by_mac(mac, agent_role=agent_role)
+                handle_telemetry_sync(mac, message.get("data"), sender=client_obj)
             elif message_type == "TELEMETRY_SEED":
-                handle_telemetry_seed(mac, message.get("data"))
+                client_obj = get_client_by_mac(mac, agent_role=agent_role)
+                handle_telemetry_seed(mac, message.get("data"), sender=client_obj)
             elif message_type == "PACKAGE_RESULT":
                 handle_package_result(mac, message)
             elif message_type == "HEARTBEAT":
