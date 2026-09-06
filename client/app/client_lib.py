@@ -150,6 +150,20 @@ def get_system_info(ip_address=None):
     }
 
 
+def get_canonical_client_id(mac=None):
+    """Return the restart-safe canonical client ID matching the server format."""
+    explicit_id = os.getenv("CLIENT_ID")
+    if explicit_id and explicit_id.strip():
+        return explicit_id.strip()
+    try:
+        raw_mac = mac or get_mac()
+    except Exception:
+        raw_mac = None
+    if raw_mac:
+        return f"client-{raw_mac.replace(':', '').replace('-', '').lower()}"
+    return "unknown-client"
+
+
 # ============================================================
 # NETWORK INFORMATION
 # ============================================================

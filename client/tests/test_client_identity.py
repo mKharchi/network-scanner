@@ -55,6 +55,21 @@ class ClientIdentityTests(unittest.TestCase):
 
         self.assertEqual(registration["data"]["location"], location)
 
+    def test_get_canonical_client_id_formats_mac_correctly(self):
+        client_id = client_lib.get_canonical_client_id("E4:FD:45:BA:8B:96")
+        self.assertEqual(client_id, "client-e4fd45ba8b96")
+
+    def test_get_canonical_client_id_respects_explicit_env_var(self):
+        with patch.dict("os.environ", {"CLIENT_ID": "custom-agent-99"}):
+            client_id = client_lib.get_canonical_client_id("E4:FD:45:BA:8B:96")
+            self.assertEqual(client_id, "custom-agent-99")
+
+    def test_get_canonical_client_id_handles_missing_mac(self):
+        with patch.object(client_lib, "get_mac", side_effect=RuntimeError("no mac")):
+            with patch.dict("os.environ", {}, clear=True):
+                client_id = client_lib.get_canonical_client_id(None)
+                self.assertEqual(client_id, "unknown-client")
+
 
 if __name__ == "__main__":
     unittest.main()
