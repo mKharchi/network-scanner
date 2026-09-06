@@ -37,7 +37,7 @@ from client_lib import (
     get_activity_log,
     get_mac,
 )
-from sync_manager import SyncManager, SYNC_ACK_TYPE, SYNC_NACK_TYPE, sync_pending_telemetry_files
+from sync_manager import SyncManager, SYNC_ACK_TYPE, SYNC_NACK_TYPE
 from activity_window_aggregator import ActivityWindowAggregator
 from device_enrichment import DeviceEnrichmentJob
 from flow_query import get_requested_flows
@@ -64,8 +64,7 @@ from neighbourhood import (
     get_daily_neighbourhood_path,
     load_daily_neighbourhood,
     normalise_dhcp_observation,
-    persist_raw_dhcp_observation,
-    store_dhcp_neighbourhood_observation,
+    update_daily_neighbourhood,
 )
 from dotenv import load_dotenv
 
@@ -792,6 +791,7 @@ def _heartbeat_loop(connection, stop_event):
 
 
 def start_client(stop_event=None, *, agent_role="service"):
+    global forbidden_processes, resource_protection_settings
     if stop_event is None:
         stop_event = threading.Event()
 
@@ -1025,6 +1025,77 @@ def start_client(stop_event=None, *, agent_role="service"):
                 on_window_closed=sync_manager.handle_window_closed,
             )
 
+            def _ensure_background_services():
+                nonlocal background_thread, dhcp_listener, passive_protocol_listener
+                nonlocal enrichment_job, activity_aggregator
+
+                # Start background daily neighbour snapshot collection so it never blocks command execution
+                threading.Thread(
+                    target=collect_daily_network_neighbours,
+                    daemon=True,
+                ).start()
+
+                # Start background scanner
+                if background_thread is None or not background_thread.is_alive():
+                    background_thread = threading.Thread(
+                        target=background_scanner,
+                        args=(client, session_stop_event),
+                        daemon=True,
+                        name="background-scanner",
+                    )
+                    background_thread.start()
+
+                # Select one interface for passive capture services in this session.
+                detected_iface = None
+                try:
+                    from network_neighbour_collector import get_local_network
+
+                    local_net = get_local_network()
+                    if local_net:
+                        detected_iface = local_net.get("interface")
+                except Exception:
+                    pass
+                listen_iface = os.getenv("DHCP_LISTEN_INTERFACE") or detected_iface
+
+                # Start passive DHCP listener (idempotent per session)
+                try:
+                    if dhcp_listener is None:
+
+                        def _on_dhcp_obs(obs):
+                            store_dhcp_neighbourhood_observation(obs)
+
+                        dhcp_listener = DHCPListener(
+                            _on_dhcp_obs,
+                            interface=listen_iface,
+                        )
+                        dhcp_listener.start()
+                except Exception as e:
+                    print(f"[DHCP] Could not start listener: {e}")
+
+                # Start unified passive discovery listener covering DHCP, mDNS, SSDP, LLMNR, NBNS
+                try:
+                    if passive_protocol_listener is None:
+
+                        def _on_passive_dhcp(obs):
+                            store_dhcp_neighbourhood_observation(obs)
+
+                        passive_protocol_listener = PassiveProtocolListener(
+                            interface=listen_iface,
+                            status_callback=_startup_log,
+                            dhcp_callback=_on_passive_dhcp,
+                        )
+                        passive_protocol_listener.start()
+                        enrichment_job = DeviceEnrichmentJob(
+                            device_snapshot_provider=passive_protocol_listener.snapshot_devices,
+                        )
+                        enrichment_job.start()
+                        if activity_aggregator is not None:
+                            activity_aggregator.start()
+                except Exception as error:
+                    print(
+                        f"[PASSIVE LISTENER] Could not start listener: {error}"
+                    )
+
             # --------------------------------------------------------
             # Register
             # --------------------------------------------------------
@@ -1103,7 +1174,6 @@ def start_client(stop_event=None, *, agent_role="service"):
                         continue
 
                     if msg_type == "FORBIDDEN_PROCESSES":
-                        global forbidden_processes
                         forbidden_processes = message.get("data", [])
                         _startup_log(
                             f"Received {len(forbidden_processes)} forbidden processes."
@@ -1116,9 +1186,10 @@ def start_client(stop_event=None, *, agent_role="service"):
                         if resource_protection_monitor is not None:
                             resource_protection_monitor.set_rules(forbidden_processes)
                             resource_protection_monitor.start()
+                        _ensure_background_services()
+                        continue
 
                     if msg_type == "RESOURCE_PROTECTION_CONFIG":
-                        global resource_protection_settings
                         resource_protection_settings = message.get("data", {})
                         _startup_log(
                             "Received resource protection configuration from server."
@@ -1128,73 +1199,7 @@ def start_client(stop_event=None, *, agent_role="service"):
                             if resource_protection_monitor is not None:
                                 resource_protection_monitor.set_config(resource_protection_settings)
                                 resource_protection_monitor.start()
-                        continue
-
-                        # Start background daily neighbour snapshot collection so it never blocks command execution
-                        threading.Thread(
-                            target=collect_daily_network_neighbours,
-                            daemon=True,
-                        ).start()
-
-                        # Start background scanner
-                        if background_thread is None or not background_thread.is_alive():
-                            background_thread = threading.Thread(
-                                target=background_scanner,
-                                args=(client, session_stop_event),
-                                daemon=True,
-                                name="background-scanner",
-                            )
-                            background_thread.start()
-
-                        # Select one interface for passive capture services in this session.
-                        detected_iface = None
-                        try:
-                            from network_neighbour_collector import get_local_network
-
-                            local_net = get_local_network()
-                            if local_net:
-                                detected_iface = local_net.get("interface")
-                        except Exception:
-                            pass
-                        listen_iface = os.getenv("DHCP_LISTEN_INTERFACE") or detected_iface
-
-                        # Start passive DHCP listener (idempotent per session)
-                        try:
-                            if dhcp_listener is None:
-
-                                def _on_dhcp_obs(obs):
-                                    store_dhcp_neighbourhood_observation(obs)
-
-                                dhcp_listener = DHCPListener(
-                                    _on_dhcp_obs,
-                                    interface=listen_iface,
-                                )
-                                dhcp_listener.start()
-                        except Exception as e:
-                            print(f"[DHCP] Could not start listener: {e}")
-
-                        # Start unified passive discovery listener covering DHCP, mDNS, SSDP, LLMNR, NBNS
-                        try:
-                            if passive_protocol_listener is None:
-                                def _on_passive_dhcp(obs):
-                                    store_dhcp_neighbourhood_observation(obs)
-
-                                passive_protocol_listener = PassiveProtocolListener(
-                                    interface=listen_iface,
-                                    status_callback=_startup_log,
-                                    dhcp_callback=_on_passive_dhcp,
-                                )
-                                passive_protocol_listener.start()
-                                enrichment_job = DeviceEnrichmentJob(
-                                    device_snapshot_provider=passive_protocol_listener.snapshot_devices,
-                                )
-                                enrichment_job.start()
-                                if activity_aggregator is not None:
-                                    activity_aggregator.start()
-                        except Exception as error:
-                            print(
-                                f"[PASSIVE LISTENER] Could not start listener: {error}"
-                            )
+                        _ensure_background_services()
                         continue
 
                     if msg_type in (SYNC_ACK_TYPE, SYNC_NACK_TYPE):

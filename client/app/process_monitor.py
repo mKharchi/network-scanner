@@ -562,6 +562,8 @@ class ResourceProtectionMonitor:
         self.termination_timeout = max(0.2, float(termination_timeout_seconds))
         self.alert_callback = alert_callback
         self.rules_provider = rules_provider
+        self._rules_lock = threading.Lock()
+        self._rules: List[Dict[str, Any]] = []
 
         self._config_lock = threading.Lock()
         self._config: Dict[str, Any] = dict(self.DEFAULT_CONFIG)
@@ -620,13 +622,26 @@ class ResourceProtectionMonitor:
         """Set the provider callback for active forbidden/eligible process rules."""
         self.rules_provider = provider
 
+    def set_rules(self, rules: List[Dict[str, Any]]) -> None:
+        """Safely update forbidden/eligible process rules."""
+        with self._rules_lock:
+            self._rules = list(rules) if isinstance(rules, list) else []
+
+    def get_rules(self) -> List[Dict[str, Any]]:
+        """Return a copy of the active rules."""
+        with self._rules_lock:
+            return list(self._rules)
+
     def _get_active_rules(self) -> List[Dict[str, Any]]:
         if self.rules_provider:
             try:
-                return self.rules_provider() or []
+                provider_rules = self.rules_provider()
+                if provider_rules is not None:
+                    return provider_rules
             except Exception as err:
                 LOG.warning("[RESOURCE PROTECTION] Error fetching rules: %s", err)
-        return []
+        with self._rules_lock:
+            return list(self._rules)
 
     def _is_process_eligible(
         self,

@@ -9,7 +9,10 @@ import unittest
 from unittest import mock
 import zipfile
 
-from updater import updater
+try:
+    from updater import updater
+except ImportError:
+    import updater
 
 
 def make_package(app_files, *, version="2.0.0", minimum_updater_version="1.0.0", extra_entries=None):

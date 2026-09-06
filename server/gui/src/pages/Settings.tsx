@@ -53,11 +53,13 @@ export function SettingsPage() {
     refetch: refetchRp,
   } = useFetch<ResourceProtectionSettings>(() => api.getResourceProtection(), []);
 
+  const rpData = rpState.status === 'success' ? rpState.data : undefined;
+
   useEffect(() => {
-    if (rpState.status === 'success' && rpState.data) {
-      setRpSettings(rpState.data);
+    if (rpData) {
+      setRpSettings(rpData);
     }
-  }, [rpState.status, rpState.data]);
+  }, [rpData]);
 
   const isStale =
     whState.status === 'error' ||

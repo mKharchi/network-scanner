@@ -4,6 +4,11 @@
  */
 
 import React, { createContext, useCallback, useContext, useState } from 'react';
+import { FiCheckCircle } from "react-icons/fi";
+import { GoBell } from "react-icons/go";
+import { BsInfoCircle } from 'react-icons/bs';
+import { IoAlertOutline } from 'react-icons/io5';
+import { RxCross1 } from 'react-icons/rx';
 import '../styles/toast.css';
 
 export type ToastSeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO' | 'SUCCESS';
@@ -32,11 +37,6 @@ const ToastContext = createContext<ToastContextValue>({
   addToast: () => '',
   dismissToast: () => {},
 });
-import { FiCheckCircle } from "react-icons/fi";
-import { GoBell } from "react-icons/go";
-import { BsInfoCircle } from 'react-icons/bs';
-import { IoAlertOutline } from 'react-icons/io5';
-import { RxCross1 } from 'react-icons/rx';
 
 const SEVERITY_ICONS: Record<ToastSeverity, string> = {
   CRITICAL: <RxCross1 />as unknown as string,
