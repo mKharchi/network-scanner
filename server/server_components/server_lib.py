@@ -828,6 +828,11 @@ def handle_client_alert(mac, alert_data):
         )
         return False
 
+    # Section 23: Ordinary file activity events must not be treated/stored as alerts
+    if alert_data.get("event_type") in {"FILE_CREATED", "FILE_MODIFIED", "FILE_DELETED", "FILE_RENAMED"}:
+        print(f"Ignored alert for file activity event from {mac}: {alert_data.get('event_type')}")
+        return False
+
     process_name = alert_data.get("process_name")
     if alert_type == "FORBIDDEN_PROCESS" and (
         not isinstance(process_name, str) or not process_name.strip()

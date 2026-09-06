@@ -67,22 +67,47 @@ ALL_EVENT_TYPES = frozenset({
     CLIENT_CONFIG_CHANGED,
 })
 
-# Patterns to ignore to prevent event storms (Plan §2.4)
+# Patterns to ignore to prevent event storms and filter passive monitoring/internal files (Plan §9-§13)
 DEFAULT_IGNORE_PATTERNS = [
+    # Temporary, cache, and editor swap files
     re.compile(r".*\.tmp$", re.IGNORECASE),
     re.compile(r".*\.temp$", re.IGNORECASE),
     re.compile(r".*\.partial$", re.IGNORECASE),
+    re.compile(r".*\.lock$", re.IGNORECASE),
     re.compile(r".*~.*"),
     re.compile(r".*\.swp$", re.IGNORECASE),
     re.compile(r".*\.log$", re.IGNORECASE),
+    re.compile(r".*\.pyc$", re.IGNORECASE),
     re.compile(r".*__pycache__.*"),
     re.compile(r".*\.pytest_cache.*"),
-    re.compile(r".*\.git(/|\\).*", re.IGNORECASE),
-    re.compile(r".*\.venv(/|\\).*", re.IGNORECASE),
+    re.compile(r".*(\.git|\.venv)(/|\\).*", re.IGNORECASE),
     re.compile(r".*AppData[/\\]Local[/\\]Temp.*", re.IGNORECASE),
+    re.compile(r".*logs([/\\].*)?$", re.IGNORECASE),
+    # Passive packet, neighbourhood, and telemetry storage (Plan §9-§12)
+    re.compile(r".*storage[/\\]network_neighbourhood.*", re.IGNORECASE),
     re.compile(r".*storage[/\\]network_telemetry.*", re.IGNORECASE),
+    re.compile(r".*storage[/\\]passive_packets.*", re.IGNORECASE),
+    re.compile(r".*storage[/\\]kismet.*", re.IGNORECASE),
+    re.compile(r".*\.kismet(-[a-z0-9]+)?$", re.IGNORECASE),
+    # Event monitor persistence & internal client state files
     re.compile(r".*storage[/\\]events.*", re.IGNORECASE),
+    re.compile(r".*storage[/\\]sent-files.*", re.IGNORECASE),
+    re.compile(r".*storage[/\\]neighbour_snapshot_state\.json.*", re.IGNORECASE),
+    re.compile(r".*storage[/\\]forbidden_process.*", re.IGNORECASE),
+    re.compile(r".*storage[/\\]reported_alerts\.json.*", re.IGNORECASE),
 ]
+
+
+def is_excluded_path(
+    path: Path | str,
+    ignore_patterns: Optional[List[re.Pattern]] = None,
+) -> bool:
+    """Centralized check for excluded filesystem paths (Plan §10)."""
+    if not path:
+        return False
+    path_str = str(Path(path).resolve()) if isinstance(path, Path) else str(path)
+    patterns = ignore_patterns if ignore_patterns is not None else DEFAULT_IGNORE_PATTERNS
+    return any(p.search(path_str) or p.match(path_str) for p in patterns)
 
 
 @dataclass
@@ -242,7 +267,7 @@ def _scan_directory_state(
             if not entry.is_file():
                 continue
             path_str = str(entry.resolve())
-            if any(p.match(path_str) for p in patterns):
+            if is_excluded_path(path_str, patterns):
                 continue
             try:
                 state[path_str] = entry.stat().st_mtime
@@ -395,6 +420,8 @@ class EventMonitor:
 
                 # Deleted files (Plan §2.3)
                 for deleted_path in old_paths - new_paths:
+                    if is_excluded_path(deleted_path, self.ignore_patterns):
+                        continue
                     events.append(
                         ClientEvent(
                             event_type=FILE_DELETED,
@@ -406,6 +433,8 @@ class EventMonitor:
 
                 # Created files
                 for created_path in new_paths - old_paths:
+                    if is_excluded_path(created_path, self.ignore_patterns):
+                        continue
                     events.append(
                         ClientEvent(
                             event_type=FILE_CREATED,
@@ -417,6 +446,8 @@ class EventMonitor:
 
                 # Modified files
                 for common_path in old_paths & new_paths:
+                    if is_excluded_path(common_path, self.ignore_patterns):
+                        continue
                     if abs(current_files[common_path] - previous_files[common_path]) > 0.001:
                         events.append(
                             ClientEvent(
@@ -433,6 +464,11 @@ class EventMonitor:
 
     def emit_event(self, event: ClientEvent) -> bool:
         """Process, filter, persist, and dispatch a client event."""
+        # 0. Path exclusion check (Plan §10-§13)
+        if event.path and is_excluded_path(event.path, self.ignore_patterns):
+            LOG.debug("[EVENT_MONITOR] Excluded path event dropped: %s", event.path)
+            return False
+
         # 1. Deduplication check
         dedup_key = event.path or event.application or event.event_type
         if self._deduplicator.is_duplicate(event.event_type, dedup_key):

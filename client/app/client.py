@@ -74,7 +74,13 @@ from diagnostics import (
     component_log,
     CLIENT_CORE,
 )
-from event_monitor import EventMonitor
+from event_monitor import (
+    EventMonitor,
+    FILE_CREATED,
+    FILE_MODIFIED,
+    FILE_DELETED,
+    FILE_RENAMED,
+)
 from kismet_listener import KismetListener
 
 
@@ -845,6 +851,18 @@ def start_client(stop_event=None, *, agent_role="service"):
             send_process_monitor_alert(client, alert)
 
         def _on_activity_event(event):
+            ev_type = event.get("event_type")
+            if ev_type in (
+                FILE_CREATED,
+                FILE_MODIFIED,
+                FILE_DELETED,
+                FILE_RENAMED,
+            ):
+                # Section 3 & 7: Ordinary file activity events are log events only.
+                # They are persisted to local event storage and returned via GET_ACTIVITY_LOG.
+                # They must NOT generate real-time alerts.
+                return
+
             send_alerts(
                 client,
                 [
