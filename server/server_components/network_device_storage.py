@@ -103,6 +103,16 @@ def validate_neighbour_report(payload):
         sources = [source for source in sources if source in {"arp", "dhcp"}]
         if sources:
             record["sources"] = list(dict.fromkeys(sources))
+        if "rssi" in neighbour and neighbour["rssi"] is not None:
+            try:
+                rssi_val = int(neighbour["rssi"])
+                if -130 <= rssi_val <= 30:
+                    record["rssi"] = rssi_val
+            except (TypeError, ValueError):
+                pass
+        switch_port = _normalise_metadata(neighbour.get("switch_port"))
+        if switch_port:
+            record["switch_port"] = switch_port
         validated.append(record)
     return validated
 

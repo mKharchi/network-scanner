@@ -216,8 +216,8 @@ export interface ActionProgress {
 export interface ActionTargetStatus {
   client_id?: string;
   status?: string;
-  result?: Record<string, unknown> | any;
-  error?: Record<string, unknown> | any;
+  result?: Record<string, unknown>;
+  error?: Record<string, unknown>;
   started_at?: string | null;
   completed_at?: string | null;
 }
@@ -1909,7 +1909,4 @@ export interface ClassificationStats {
   human_labels_count: number;
   model_version: string;
 }
-
-export const apiClient = api;
-
 
