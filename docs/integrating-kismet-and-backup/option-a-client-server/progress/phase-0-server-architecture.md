@@ -1,6 +1,6 @@
 # Phase 0 — Server-Side Architecture Reassessment
 
-**Status:** COMPLETE — planning-only; runtime verification remains blocked by unavailable target-server access.
+**Status:** COMPLETE — architecture decision recorded; target-server runtime evidence is now partially verified in [phase-0-target-server-evidence.md](phase-0-target-server-evidence.md).
 
 **Date:** 2026-09-06
 
@@ -21,7 +21,7 @@ The former client-owned Kismet design is abandoned. Kismet is now a Linux-server
 
 ## Linux runtime investigation
 
-No accessible Linux host exists from the current workspace: WSL is not installed and no remote server session is provided. This does not negate the documented Linux pilot. It means actual server Kismet version, service, Wi-Fi interface, monitor mode, storage mount, generated files, and read behavior remain unverified.
+The current host is an accessible Ubuntu Linux Kismet host. A separate `wlp0s20f3mon` monitor interface successfully captured real packets while the managed `wlp0s20f3` interface remained connected. The short-run evidence and remaining deployment gaps are recorded in [phase-0-target-server-evidence.md](phase-0-target-server-evidence.md).
 
 ## Documents created
 
@@ -33,4 +33,4 @@ No accessible Linux host exists from the current workspace: WSL is not installed
 
 ## Outcome
 
-No source code, TCP protocol, client behavior, database schema, or UI behavior was changed. The next executable phase is real target-server verification, not application implementation.
+No source code, TCP protocol, client behavior, database schema, or UI behavior was changed. Runtime verification has started, but the application implementation gate remains closed until the longer capture, storage lifecycle, service ownership, API hardening, and retention evidence are complete.

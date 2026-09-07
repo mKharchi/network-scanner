@@ -158,8 +158,16 @@ def start_server():
     except Exception as e:
         print(f"Note: REST API server could not bind to port: {e}")
 
-    # Keep terminal interaction in main thread
-    server_menu()
+    # Keep terminal interaction in manual launches, but allow the complete
+    # server/API process to run under a non-interactive supervisor after boot.
+    interactive = os.getenv("SERVER_INTERACTIVE", "true").strip().lower() in {
+        "1", "true", "yes", "on"
+    }
+    if interactive:
+        server_menu()
+    else:
+        print("Server running in non-interactive supervisor mode.")
+        threading.Event().wait()
 
 
 # ============================================================

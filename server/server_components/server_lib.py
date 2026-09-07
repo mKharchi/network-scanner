@@ -261,9 +261,15 @@ def get_resource_protection_settings():
     return api_service.get_resource_protection_settings()
 
 
-def broadcast_resource_protection_settings():
-    """Push the current resource-protection configuration to every client."""
-    config = get_resource_protection_settings()
+def broadcast_resource_protection_settings(config=None):
+    """Push resource-protection configuration to every connected client.
+
+    Callers that already persisted a validated configuration may pass it
+    directly.  The optional default keeps existing callers compatible by
+    reading the current configuration from storage.
+    """
+    if config is None:
+        config = get_resource_protection_settings()
     message = {"type": "RESOURCE_PROTECTION_CONFIG", "data": config}
     sent = 0
     failed = 0

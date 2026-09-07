@@ -1,19 +1,16 @@
-"""End-to-end startup integration test for Kismet Listener & Telemetry Seed (Plan §3).
+"""End-to-end startup integration test for telemetry seed and client lifecycle.
 
 Verifies:
 1. Client establishes connection and registers.
 2. Server confirms registration with authoritative client_id.
 3. Client seeds devices using the confirmed client_id.
 4. Server accepts TELEMETRY_SEED and returns SEED_ACK.
-5. Kismet listener initializes cleanly (no UnboundLocalError) and idempotently
-   even when background services are ensured multiple times.
-6. Client shuts down cleanly.
+5. Client shuts down cleanly.
 """
 
 import os
 import sys
 import threading
-import time
 import types
 import unittest
 from pathlib import Path
@@ -28,7 +25,6 @@ sys.path.insert(0, str(CLIENT_DIR))
 
 import client as client_module  # noqa: E402
 import client_lib  # noqa: E402
-from kismet_listener import KismetListener, STATE_RUNNING, STATE_STOPPED  # noqa: E402
 
 
 class ClientStartupIntegrationTests(unittest.TestCase):
@@ -118,16 +114,10 @@ class ClientStartupIntegrationTests(unittest.TestCase):
         seed_payload = seed_msgs[0].get("data", {})
         self.assertEqual(seed_payload.get("client_id"), "client-aabbccddee01")
 
-        # 3. Verify Kismet listener was initialized and started without errors
-        kismet_logs = [log for log in startup_logs if "[KISMET]" in log]
-        self.assertTrue(any("Initializing listener" in log for log in kismet_logs))
-        self.assertTrue(any("Listener started" in log for log in kismet_logs))
-
-        # 4. Verify no UnboundLocalError in startup logs
+        # 3. Verify no startup scope/lifecycle error was reported
         self.assertFalse(any("UnboundLocalError" in log for log in startup_logs))
-        self.assertFalse(any("cannot access local variable 'kismet_listener'" in log for log in startup_logs))
 
-        # 5. Verify identity confirmation logged
+        # 4. Verify identity confirmation logged
         identity_logs = [log for log in startup_logs if "[CLIENT_IDENTITY]" in log]
         self.assertTrue(any("client-aabbccddee01" in log for log in identity_logs))
 

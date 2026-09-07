@@ -1,9 +1,7 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   api,
-  type ClientLocation,
-  type ClientLocationHistoryEntry,
   type ClientPassiveNeighbourhood,
   type ClientScreenshot,
   type PhysicalNeighbor,
@@ -122,34 +120,6 @@ export function ClientDetailPage() {
     useState<ClientPassiveNeighbourhood | null>(null);
   const [screenshotLoading, setScreenshotLoading] = useState(false);
   const [quarantineLoading, setQuarantineLoading] = useState(false);
-  const [locations, setLocations] = useState<ClientLocation[]>([]);
-  const [locationLoading, setLocationLoading] = useState(false);
-  const [locationSaving, setLocationSaving] = useState(false);
-  const [assignFloor, setAssignFloor] = useState("");
-  const [assignAisle, setAssignAisle] = useState("");
-  const [assignTable, setAssignTable] = useState("");
-  const [assignColumn, setAssignColumn] = useState("");
-  const [assignPosition, setAssignPosition] = useState("");
-
-  useEffect(() => {
-    let cancelled = false;
-    setLocationLoading(true);
-    api
-      .getLocations({ assignable: true })
-      .then((response) => {
-        if (!cancelled) setLocations(response.items);
-      })
-      .catch(() => {
-        if (!cancelled) setLocations([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLocationLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   // Process management states
   const [processList, setProcessList] = useState<ProcessItem[] | null>(null);
   const [processFilter, setProcessFilter] = useState("");
@@ -168,16 +138,17 @@ export function ClientDetailPage() {
   const [activityPeriod, setActivityPeriod] = useState<"1d" | "1w" | "1m">(
     "1d",
   );
-  const [activeTab, setActiveTab] = useState<
-    "overview" | "network" | "remote" | "security" | "history"
-  >("overview");
+  const [remoteActionMode, setRemoteActionMode] = useState<"update" | "deploy">(
+    "update",
+  );
+  const [activeTab, setActiveTab] = useState<"overview" | "remote" | "history">(
+    "overview",
+  );
 
   const tabs = [
     { id: "overview", label: "Overview" },
-    { id: "network", label: "Network & observations" },
     { id: "remote", label: "Remote actions" },
-    { id: "security", label: "Security & quarantine" },
-    { id: "history", label: "History & diagnostics" },
+    { id: "history", label: "History" },
   ] as const;
 
   const selectTab = (tab: (typeof tabs)[number]["id"]) => {
@@ -215,78 +186,9 @@ export function ClientDetailPage() {
     [clientId],
     ["app:client_status"],
   );
-  const { state: locationHistoryState } = useFetch<{
-    items: ClientLocationHistoryEntry[];
-  }>(clientId ? () => api.getClientLocationHistory(clientId) : null, [
-    clientId,
-  ]);
-  const { state: neighborsState, refetch: refetchNeighbors } = useFetch<{
+  const { state: neighborsState } = useFetch<{
     items: PhysicalNeighbor[];
   }>(clientId ? () => api.getPhysicalNeighbors(clientId) : null, [clientId]);
-
-  const availableSeats = useMemo(
-    () =>
-      locations.filter(
-        (location) =>
-          location.assignable !== false &&
-          (!location.client_id || location.client_id === clientId),
-      ),
-    [locations, clientId],
-  );
-
-  const floorOptions = uniqueNumbers(availableSeats.map((item) => item.floor));
-  const aisleOptions = uniqueNumbers(
-    availableSeats
-      .filter((item) => String(item.floor) === assignFloor)
-      .map((item) => item.aisle),
-  );
-  const tableOptions = uniqueNumbers(
-    availableSeats
-      .filter(
-        (item) =>
-          String(item.floor) === assignFloor &&
-          String(item.aisle) === assignAisle,
-      )
-      .map((item) => item.table),
-  ).filter((table) => {
-    // Floor 1, Aisle 1 only contains Table 2.
-    if (assignFloor === "1" && assignAisle === "1") {
-      return table === 2;
-    }
-
-    return true;
-  });
-  const columnOptions = uniqueNumbers(
-    availableSeats
-      .filter(
-        (item) =>
-          String(item.floor) === assignFloor &&
-          String(item.aisle) === assignAisle &&
-          String(item.table) === assignTable,
-      )
-      .map((item) => item.column ?? item.row),
-  );
-  const positionOptions = uniqueNumbers(
-    availableSeats
-      .filter(
-        (item) =>
-          String(item.floor) === assignFloor &&
-          String(item.aisle) === assignAisle &&
-          String(item.table) === assignTable &&
-          String(item.column ?? item.row) === assignColumn,
-      )
-      .map((item) => item.position),
-  );
-
-  const selectedSeat = availableSeats.find(
-    (item) =>
-      String(item.floor) === assignFloor &&
-      String(item.aisle) === assignAisle &&
-      String(item.table) === assignTable &&
-      String(item.column ?? item.row) === assignColumn &&
-      String(item.position) === assignPosition,
-  );
-  const selectedLocationId = selectedSeat ? String(selectedSeat.id) : "";
 
   const executeCommand = async (command: string, args?: any) => {
     if (!clientId) return;
@@ -300,6 +202,7 @@ export function ClientDetailPage() {
     try {
       const response = await api.runClientCommand(clientId, command, args);
       setCommandResult(response);
+      setActiveTab("history");
 
       if (command === "GET_PROCESSES") {
         const rawData = response?.data;
@@ -364,6 +267,9 @@ export function ClientDetailPage() {
     setNeighbourhoodLoading(true);
     try {
       const result = await api.requestClientNeighbourhood(clientId);
+      setCommandResult(result);
+      setActiveCommand("REQUEST_NEIGHBOURHOOD");
+      setActiveTab("history");
       addToast({
         title: "Neighbourhood collected",
         message: `Received ${result.observations_sent} stored observation(s) from ${c.hostname}.`,
@@ -390,6 +296,7 @@ export function ClientDetailPage() {
     try {
       const result = await api.requestClientPassiveNeighbourhood(clientId);
       setPassiveNeighbourhood(result);
+      setActiveTab("history");
       const protocols = new Set(
         result.observations.map((observation) => observation.protocol),
       );
@@ -419,6 +326,7 @@ export function ClientDetailPage() {
       const result = await api.requestClientScreenshot(clientId);
       setCommandResult(result);
       setActiveCommand("REQUEST_SCREENSHOT");
+      setActiveTab("history");
 
       addToast({
         title: "Screenshot captured",
@@ -444,9 +352,12 @@ export function ClientDetailPage() {
     if (!clientId) return;
     setQuarantineLoading(true);
     try {
-      await api.quarantineClient(clientId, {
+      const result = await api.quarantineClient(clientId, {
         reason: reason.trim() || undefined,
       });
+      setCommandResult(result);
+      setActiveCommand("QUARANTINE");
+      setActiveTab("history");
       addToast({
         title: "Quarantine applied",
         message: `${c.hostname} has been isolated on the network.`,
@@ -473,7 +384,10 @@ export function ClientDetailPage() {
     if (!clientId) return;
     setQuarantineLoading(true);
     try {
-      await api.releaseClientQuarantine(clientId);
+      const result = await api.releaseClientQuarantine(clientId);
+      setCommandResult(result);
+      setActiveCommand("RELEASE_QUARANTINE");
+      setActiveTab("history");
       addToast({
         title: "Quarantine released",
         message: `${c.hostname} network access has been restored.`,
@@ -530,39 +444,6 @@ export function ClientDetailPage() {
   const c = d.client;
   const isOnline = c.connection.state === "ONLINE";
   const isIsolated = c.connection.state === "ISOLATED";
-
-  const assignLocation = async () => {
-    if (!clientId || !selectedLocationId) return;
-    setLocationSaving(true);
-    try {
-      await api.assignClientLocation(clientId, Number(selectedLocationId));
-      addToast({
-        title: "Location assigned",
-        message: `${c.hostname} is now assigned to the selected position.`,
-        severity: "SUCCESS",
-      });
-      setAssignFloor("");
-      setAssignAisle("");
-      setAssignTable("");
-      setAssignColumn("");
-      setAssignPosition("");
-      refetch();
-      refetchNeighbors();
-      api
-        .getLocations({ assignable: true })
-        .then((response) => setLocations(response.items))
-        .catch(() => undefined);
-    } catch (err: any) {
-      addToast({
-        title: "Location assignment failed",
-        message:
-          err?.message || "The selected position may already be occupied.",
-        severity: "CRITICAL",
-      });
-    } finally {
-      setLocationSaving(false);
-    }
-  };
 
   const filteredProcesses = (processList || []).filter((p) => {
     if (!processFilter) return true;
@@ -780,6 +661,18 @@ export function ClientDetailPage() {
                     : `Last seen ${formatRelative(c.connection.last_connected_at)}`}
               </span>
             </div>
+            <div className="client-detail-location">
+              <span className="client-detail-location__label">
+                {c.location ? c.location.label : "Location unassigned"}
+              </span>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => navigate("/locations")}
+              >
+                Change location
+              </Button>
+            </div>
           </div>
         </div>
         <div className="client-detail-alerts">
@@ -813,11 +706,9 @@ export function ClientDetailPage() {
             aria-controls={
               tab.id === "overview"
                 ? "client-panel-overview"
-                : tab.id === "network"
-                  ? "client-panel-network"
-                  : tab.id === "history"
-                    ? "client-panel-history"
-                    : "client-panel-actions"
+                : tab.id === "history"
+                  ? "client-panel-history"
+                  : "client-panel-actions"
             }
             tabIndex={activeTab === tab.id ? 0 : -1}
             onClick={() => selectTab(tab.id)}
@@ -844,151 +735,10 @@ export function ClientDetailPage() {
         role="tabpanel"
         aria-labelledby="client-tab-overview"
         hidden={activeTab !== "overview"}
-        style={{ display: activeTab === "overview" ? "flex" : "none" }}
+        className="client-overview-grid"
+        style={{ display: activeTab === "overview" ? "grid" : "none" }}
       >
-        <SectionCard title="Physical Location">
-          <div style={{ display: "grid", gap: "var(--space-3)" }}>
-            <div
-              style={{
-                color: c.location ? "var(--text)" : "var(--text-muted)",
-              }}
-            >
-              {c.location ? c.location.label : "Location unassigned"}
-            </div>
-            <div
-              style={{
-                display: "flex",
-                gap: "var(--space-3)",
-                alignItems: "end",
-                flexWrap: "wrap",
-              }}
-            >
-              {/**  floor one aisle one only has table two make sure to only display that table and not both  */}
-              <LocationSelect
-                label="Floor"
-                value={assignFloor}
-                options={floorOptions}
-                disabled={locationLoading || locationSaving}
-                onChange={(value) => {
-                  setAssignFloor(value);
-                  setAssignAisle("");
-                  setAssignTable("");
-                  setAssignColumn("");
-                  setAssignPosition("");
-                }}
-              />
-              <LocationSelect
-                label="Aisle"
-                value={assignAisle}
-                options={aisleOptions}
-                disabled={!assignFloor || locationLoading || locationSaving}
-                onChange={(value) => {
-                  setAssignAisle(value);
-                  setAssignTable("");
-                  setAssignColumn("");
-                  setAssignPosition("");
-                }}
-              />
-              <LocationSelect
-                label="Table"
-                value={assignTable}
-                options={tableOptions}
-                disabled={!assignAisle || locationLoading || locationSaving}
-                onChange={(value) => {
-                  setAssignTable(value);
-                  setAssignColumn("");
-                  setAssignPosition("");
-                }}
-              />
-              <LocationSelect
-                label="Column"
-                value={assignColumn}
-                options={columnOptions}
-                disabled={!assignTable || locationLoading || locationSaving}
-                onChange={(value) => {
-                  setAssignColumn(value);
-                  setAssignPosition("");
-                }}
-              />
-              <LocationSelect
-                label="Position"
-                value={assignPosition}
-                options={positionOptions}
-                disabled={!assignColumn || locationLoading || locationSaving}
-                onChange={setAssignPosition}
-              />
-              <Button
-                variant="primary"
-                size="sm"
-                disabled={
-                  !selectedLocationId || locationSaving || locationLoading
-                }
-                onClick={assignLocation}
-              >
-                {locationSaving
-                  ? "Saving…"
-                  : c.location
-                    ? "Change Location"
-                    : "Assign Location"}
-              </Button>
-            </div>
-            {selectedSeat && (
-              <div
-                style={{
-                  fontSize: "var(--font-xs)",
-                  color: "var(--text-muted)",
-                }}
-              >
-                {selectedSeat.label}
-              </div>
-            )}
-          </div>
-          {locationHistoryState.status === "success" &&
-            locationHistoryState.data.items.length > 0 && (
-              <div
-                style={{
-                  marginTop: "var(--space-4)",
-                  borderTop: "1px solid var(--border-subtle)",
-                  paddingTop: "var(--space-3)",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: "var(--font-xs)",
-                    color: "var(--text-muted)",
-                    marginBottom: "var(--space-2)",
-                  }}
-                >
-                  Assignment history
-                </div>
-                <div style={{ display: "grid", gap: "var(--space-2)" }}>
-                  {locationHistoryState.data.items.map((entry) => (
-                    <div
-                      key={entry.id}
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        gap: "var(--space-3)",
-                        fontSize: "var(--font-xs)",
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <span>{entry.location.label}</span>
-                      <span style={{ color: "var(--text-muted)" }}>
-                        {formatDateTime(entry.assigned_at)} ·{" "}
-                        {entry.assigned_by || "Unknown operator"}
-                        {entry.unassigned_at
-                          ? ` · ended ${formatDateTime(entry.unassigned_at)}`
-                          : " · current"}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-        </SectionCard>
-
-        <SectionCard title="Health">
+        <SectionCard title="Health" className="overview-health">
           <div style={{ display: "grid", gap: "var(--space-2)" }}>
             <DetailRow
               label="Status"
@@ -1032,7 +782,10 @@ export function ClientDetailPage() {
         </SectionCard>
 
         {c.location && (
-          <SectionCard title="Physical Neighbors">
+          <SectionCard
+            title="Physical Neighbors"
+            className="overview-neighbors"
+          >
             {neighborsState.status === "error" ? (
               <div
                 style={{
@@ -1104,27 +857,109 @@ export function ClientDetailPage() {
             )}
           </SectionCard>
         )}
+
+        <div
+          style={{
+            display: "contents",
+          }}
+        >
+          <SectionCard title="Identity" className="overview-identity">
+            <div>
+              <DetailRow label="Client ID" value={c.id} mono />
+              <DetailRow label="Hostname" value={c.hostname} />
+              <DetailRow label="IP Address" value={c.ip_address} mono />
+              <DetailRow label="MAC Address" value={c.mac_address} mono />
+              <DetailRow label="Client version" value={c.client_version} mono />
+              <DetailRow
+                label="Version reported"
+                value={formatDateTime(c.client_version_updated_at)}
+              />
+              <DetailRow
+                label="Registered"
+                value={formatDateTime(c.created_at)}
+              />
+              <DetailRow
+                label="Last updated"
+                value={formatDateTime(c.updated_at)}
+              />
+            </div>
+          </SectionCard>
+
+          <SectionCard title="Operating System" className="overview-os">
+            <div>
+              <DetailRow label="System" value={c.os.system} />
+              <DetailRow label="Release" value={c.os.release} />
+              <DetailRow label="Version" value={c.os.version} />
+              <DetailRow label="Arch" value={c.os.machine} />
+            </div>
+          </SectionCard>
+
+          <SectionCard
+            title="Recent Connections"
+            className="overview-connections"
+          >
+            {d.recent_connections.length === 0 ? (
+              <p
+                style={{
+                  fontSize: "var(--font-sm)",
+                  color: "var(--text-muted)",
+                }}
+              >
+                No connection records.
+              </p>
+            ) : (
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "var(--space-3)",
+                }}
+              >
+                {d.recent_connections.slice(0, 8).map((conn, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: "var(--space-2)",
+                      fontSize: "var(--font-xs)",
+                      padding: "var(--space-2)",
+                      background: "var(--surface-muted)",
+                      borderRadius: "var(--radius-sm)",
+                    }}
+                  >
+                    <div>
+                      <span style={{ color: "var(--text-muted)" }}>
+                        Connected{" "}
+                      </span>
+                      {formatDateTime(conn.connected_at)}
+                    </div>
+                    <div>
+                      <span style={{ color: "var(--text-muted)" }}>
+                        Disconnected{" "}
+                      </span>
+                      {conn.disconnected_at ? (
+                        formatDateTime(conn.disconnected_at)
+                      ) : (
+                        <span style={{ color: "var(--success)" }}>Active</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </SectionCard>
+        </div>
       </section>
 
       <section
         id="client-panel-actions"
         role="tabpanel"
-        aria-labelledby={
-          activeTab === "security" ? "client-tab-security" : "client-tab-remote"
-        }
+        aria-labelledby="client-tab-remote"
         aria-label="Client actions"
-        hidden={
-          activeTab !== "remote" &&
-          activeTab !== "network" &&
-          activeTab !== "security"
-        }
+        hidden={activeTab !== "remote"}
         style={{
-          display:
-            activeTab === "remote" ||
-            activeTab === "network" ||
-            activeTab === "security"
-              ? "block"
-              : "none",
+          display: activeTab === "remote" ? "block" : "none",
         }}
       >
         {/* Interactive Command Control Center */}
@@ -1144,13 +979,16 @@ export function ClientDetailPage() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gridTemplateColumns:
+                "minmax(0, 1fr) minmax(0, 1fr) minmax(260px, 0.75fr)",
               gap: "var(--space-4)",
             }}
           >
             <div
               style={{
                 display: activeTab === "remote" ? "grid" : "none",
+                gridColumn: "1",
+                gridRow: "1",
                 gap: "var(--space-2)",
 
                 alignContent: "start",
@@ -1235,7 +1073,9 @@ export function ClientDetailPage() {
 
             <div
               style={{
-                display: activeTab === "network" ? "grid" : "none",
+                display: activeTab === "remote" ? "grid" : "none",
+                gridColumn: "1 / 3",
+                gridRow: "2",
                 gap: "var(--space-2)",
                 alignContent: "start",
               }}
@@ -1305,9 +1145,11 @@ export function ClientDetailPage() {
             <div
               style={{
                 display: activeTab === "remote" ? "grid" : "none",
+                gridColumn: "2",
+                gridRow: "1",
                 gap: "var(--space-2)",
                 alignContent: "start",
-                }}
+              }}
             >
               <span
                 style={{
@@ -1392,52 +1234,127 @@ export function ClientDetailPage() {
                 </Button>
               </div>
             </div>
-            <div style={{
-              display: activeTab === "remote" ? "grid" : "none",
-              gap: "var(--space-4)",
-            }}>
+            <div
+              style={{
+                display: activeTab === "remote" ? "grid" : "none",
+                gridColumn: "3",
+                gridRow: "1 / span 3",
+                gap: "var(--space-3)",
+                alignContent: "start",
+              }}
+            >
               {clientId && (
-                <>
-                  <UpdateClientPanel
-                    targets={[clientId]}
-                    disabled={!isOnline || commandLoading}
-                    onCompleted={() => {
-                      addToast({
-                        title: "Client update complete",
-                        message: `Update applied to ${clientId}. Client will report new version on next heartbeat.`,
-                        severity: "SUCCESS",
-                      });
-                      refetch();
+                <div
+                  style={{
+                    display: "grid",
+                    gap: "var(--space-3)",
+                    padding: "var(--space-3)",
+                    borderRadius: "var(--radius-card)",
+                    background: "var(--surface-card)",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: "0",
+                      paddingBottom: "0",
+                      marginBottom: "-12px",
                     }}
-                  />
-                  <DeployPackagePanel
-                    targets={[clientId]}
-                    disabled={!isOnline || commandLoading}
-                    onCompleted={(action) => {
-                      addToast({
-                        title:
-                          action.status === "SUCCESS"
-                            ? "Package deployed"
-                            : action.status === "PARTIAL_SUCCESS"
-                              ? "Package partially deployed"
-                              : "Package deployment failed",
-                        message: `Action ${action.action_id} finished with status ${action.status}.`,
-                        severity:
-                          action.status === "SUCCESS"
-                            ? "SUCCESS"
-                            : action.status === "PARTIAL_SUCCESS"
-                              ? "HIGH"
-                              : "CRITICAL",
-                      });
+                  >
+                    {[
+                      { id: "update", label: "Update Client" },
+                      { id: "deploy", label: "Deploy Package" },
+                    ].map((tab) => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() =>
+                          setRemoteActionMode(tab.id as "update" | "deploy")
+                        }
+                        style={{
+                          border: "1px solid var(--border)",
+                          borderBottom: 0,
+                          marginLeft: tab.id === "update" ? "0" : "-5px",
+                          borderRadius: "8px 8px 0 0",
+                          zIndex: remoteActionMode === tab.id ? 1 : 0,
+                          background:
+                            remoteActionMode === tab.id
+                              ? "var(--surface-card)"
+                              : "var(--surface-muted)",
+                          color:
+                            remoteActionMode === tab.id
+                              ? "var(--text-primary)"
+                              : "var(--text-secondary)",
+                          padding: "6px 25px",
+                          fontSize: "var(--font-sm)",
+                          fontWeight: remoteActionMode === tab.id ? 600 : 400,
+                          cursor: "pointer",
+                          transition: "all var(--transition-fast)",
+                        }}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div
+                    style={{
+                      display: remoteActionMode === "update" ? "block" : "none",
                     }}
-                  />
-                </>
+                  >
+                    <UpdateClientPanel
+                      targets={[clientId]}
+                      disabled={!isOnline || commandLoading}
+                      onCompleted={() => {
+                        setActiveTab("history");
+                        addToast({
+                          title: "Client update complete",
+                          message: `Update applied to ${clientId}. Client will report new version on next heartbeat.`,
+                          severity: "SUCCESS",
+                        });
+                        refetch();
+                      }}
+                    />
+                  </div>
+
+                  <div
+                    style={{
+                      display: remoteActionMode === "deploy" ? "block" : "none",
+                    }}
+                  >
+                    <DeployPackagePanel
+                      targets={[clientId]}
+                      disabled={!isOnline || commandLoading}
+                      onCompleted={(action) => {
+                        setActiveTab("history");
+                        addToast({
+                          title:
+                            action.status === "SUCCESS"
+                              ? "Package deployed"
+                              : action.status === "PARTIAL_SUCCESS"
+                                ? "Package partially deployed"
+                                : "Package deployment failed",
+                          message: `Action ${action.action_id} finished with status ${action.status}.`,
+                          severity:
+                            action.status === "SUCCESS"
+                              ? "SUCCESS"
+                              : action.status === "PARTIAL_SUCCESS"
+                                ? "HIGH"
+                                : "CRITICAL",
+                        });
+                      }}
+                    />
+                  </div>
+                </div>
               )}
             </div>
 
             <div
               style={{
-                display: activeTab === "security" ? "grid" : "none",
+                display: activeTab === "remote" ? "grid" : "none",
+                gridColumn: "1 / 3",
+                gridRow: "3",
                 gap: "var(--space-2)",
                 alignContent: "start",
               }}
@@ -1536,8 +1453,8 @@ export function ClientDetailPage() {
       <section
         id="client-panel-remote-processes"
         aria-label="Remote process results"
-        hidden={activeTab !== "remote"}
-        style={{ display: activeTab === "remote" ? "block" : "none" }}
+        hidden={activeTab !== "history"}
+        style={{ display: activeTab === "history" ? "block" : "none" }}
       >
         {/* Live Process Explorer & Manager */}
         {processList && (
@@ -1719,9 +1636,9 @@ export function ClientDetailPage() {
       <section
         id="client-panel-network"
         role="tabpanel"
-        aria-labelledby="client-tab-network"
-        hidden={activeTab !== "network"}
-        style={{ display: activeTab === "network" ? "block" : "none" }}
+        aria-labelledby="client-tab-history"
+        hidden={activeTab !== "history"}
+        style={{ display: activeTab === "history" ? "block" : "none" }}
       >
         {passiveNeighbourhood &&
           (() => {
@@ -2108,7 +2025,8 @@ export function ClientDetailPage() {
                           }}
                         >
                           <p style={{ fontSize: "var(--font-xs)" }}>
-                            {shot.filename.slice(0, 24) + (shot.filename.length > 24 ? "…" : "")}
+                            {shot.filename.slice(0, 24) +
+                              (shot.filename.length > 24 ? "…" : "")}
                           </p>
                           <Badge
                             variant={
@@ -2308,93 +2226,6 @@ export function ClientDetailPage() {
             order: 3,
           }}
         >
-          {/* Identity */}
-          <SectionCard title="Identity">
-            <div>
-              <DetailRow label="Client ID" value={c.id} mono />
-              <DetailRow label="Hostname" value={c.hostname} />
-              <DetailRow label="IP Address" value={c.ip_address} mono />
-              <DetailRow label="MAC Address" value={c.mac_address} mono />
-              <DetailRow label="Client version" value={c.client_version} mono />
-              <DetailRow
-                label="Version reported"
-                value={formatDateTime(c.client_version_updated_at)}
-              />
-              <DetailRow
-                label="Registered"
-                value={formatDateTime(c.created_at)}
-              />
-              <DetailRow
-                label="Last updated"
-                value={formatDateTime(c.updated_at)}
-              />
-            </div>
-          </SectionCard>
-
-          {/* Operating system */}
-          <SectionCard title="Operating System">
-            <div>
-              <DetailRow label="System" value={c.os.system} />
-              <DetailRow label="Release" value={c.os.release} />
-              <DetailRow label="Version" value={c.os.version} />
-              <DetailRow label="Arch" value={c.os.machine} />
-            </div>
-          </SectionCard>
-
-          {/* Connection history */}
-          <SectionCard title="Recent Connections">
-            {d.recent_connections.length === 0 ? (
-              <p
-                style={{
-                  fontSize: "var(--font-sm)",
-                  color: "var(--text-muted)",
-                }}
-              >
-                No connection records.
-              </p>
-            ) : (
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "var(--space-3)",
-                }}
-              >
-                {d.recent_connections.slice(0, 8).map((conn, i) => (
-                  <div
-                    key={i}
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
-                      gap: "var(--space-2)",
-                      fontSize: "var(--font-xs)",
-                      padding: "var(--space-2)",
-                      background: "var(--surface-muted)",
-                      borderRadius: "var(--radius-sm)",
-                    }}
-                  >
-                    <div>
-                      <span style={{ color: "var(--text-muted)" }}>
-                        Connected{" "}
-                      </span>
-                      {formatDateTime(conn.connected_at)}
-                    </div>
-                    <div>
-                      <span style={{ color: "var(--text-muted)" }}>
-                        Disconnected{" "}
-                      </span>
-                      {conn.disconnected_at ? (
-                        formatDateTime(conn.disconnected_at)
-                      ) : (
-                        <span style={{ color: "var(--success)" }}>Active</span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </SectionCard>
-
           {/* Latest activity log */}
           {d.latest_activity_log && (
             <SectionCard title="Latest Activity Log">
@@ -2430,60 +2261,6 @@ export function ClientDetailPage() {
         </div>
       </section>
     </div>
-  );
-}
-
-function uniqueNumbers(values: Array<number | null | undefined>): number[] {
-  return Array.from(
-    new Set(values.filter((value): value is number => value != null)),
-  ).sort((left, right) => left - right);
-}
-
-function LocationSelect({
-  label,
-  value,
-  options,
-  disabled,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  options: number[];
-  disabled?: boolean;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label
-      style={{
-        display: "grid",
-        gap: "var(--space-1)",
-        fontSize: "var(--font-xs)",
-        color: "var(--text-muted)",
-      }}
-    >
-      {label}
-      <select
-        aria-label={label}
-        value={value}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-        style={{
-          minWidth: 90,
-          background: "var(--surface)",
-          color: "var(--text)",
-          border: "1px solid var(--border)",
-          borderRadius: "var(--radius-sm)",
-          padding: "var(--space-2)",
-        }}
-      >
-        <option value="">Select</option>
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </select>
-    </label>
   );
 }
 

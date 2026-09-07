@@ -81,7 +81,6 @@ from event_monitor import (
     FILE_DELETED,
     FILE_RENAMED,
 )
-from kismet_listener import KismetListener
 
 
 def _load_env_file(path):
@@ -836,7 +835,6 @@ def start_client(stop_event=None, *, agent_role="service"):
         heartbeat_thread = None
         dhcp_listener = None
         passive_protocol_listener = None
-        kismet_listener = None
         packet_observer = None
         process_monitor = None
         sync_manager = None
@@ -1090,7 +1088,7 @@ def start_client(stop_event=None, *, agent_role="service"):
             )
 
             def _ensure_background_services():
-                nonlocal background_thread, dhcp_listener, passive_protocol_listener, kismet_listener
+                nonlocal background_thread, dhcp_listener, passive_protocol_listener
                 nonlocal enrichment_job, activity_aggregator
 
                 # Start background daily neighbour snapshot collection so it never blocks command execution
@@ -1159,16 +1157,6 @@ def start_client(stop_event=None, *, agent_role="service"):
                     print(
                         f"[PASSIVE LISTENER] Could not start listener: {error}"
                     )
-
-                try:
-                    if kismet_listener is None:
-                        _startup_log("[KISMET] Initializing listener...")
-                        kismet_listener = KismetListener()
-                        _startup_log("[KISMET] Configuration loaded.")
-                        kismet_listener.start()
-                        _startup_log("[KISMET] Listener started.")
-                except Exception as error:
-                    print(f"[KISMET] Failed to create listener: {error}")
 
             # --------------------------------------------------------
             # Register
@@ -1437,13 +1425,6 @@ def start_client(stop_event=None, *, agent_role="service"):
                     passive_protocol_listener.stop()
                 except Exception as error:
                     print(f"[PASSIVE LISTENER] Could not stop listener cleanly: {error}")
-            if kismet_listener is not None:
-                try:
-                    kismet_listener.stop()
-                except Exception as error:
-                    print(f"[KISMET] Listener cleanup failed: {error}")
-            else:
-                LOG.debug("[KISMET] Listener cleanup skipped: listener was never created")
             if packet_observer is not None:
                 try:
                     packet_observer.stop()

@@ -3,6 +3,7 @@ import {
   api,
   type WirelessObservation,
   type DeviceWirelessObservationsResponse,
+  type WifiSensorHealth,
 } from '../api/client';
 import { useFetch } from '../hooks/useFetch';
 import { SectionCard } from './Card';
@@ -21,6 +22,7 @@ interface WirelessInvestigationPanelProps {
 
 const LOOKBACK_OPTIONS = [
   { label: 'All Available Captures', value: 'all' },
+  { label: 'Last 10 Minutes', value: '10m' },
   { label: 'Last 15 Minutes (Default)', value: '15m' },
   { label: 'Last 30 Minutes', value: '30m' },
   { label: 'Last 1 Hour', value: '1h' },
@@ -101,6 +103,18 @@ export function WirelessInvestigationPanel({
     deviceMac ? fetchObservations : null,
     [deviceMac, lookback, customStart, customEnd, includeNoise, limit]
   );
+
+  // Sensor health — fetched once on mount and refreshed every 60s
+  const [sensorHealth, setSensorHealth] = useState<WifiSensorHealth | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const fetchHealth = () => {
+      api.getSensorHealth().then((h) => { if (!cancelled) setSensorHealth(h); }).catch(() => {});
+    };
+    fetchHealth();
+    const id = setInterval(fetchHealth, 60_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
 
   const data: DeviceWirelessObservationsResponse | undefined =
     state.status === 'success' ? state.data : state.status === 'error' ? state.staleData : undefined;
@@ -315,6 +329,51 @@ export function WirelessInvestigationPanel({
 
   return (
     <SectionCard title="Kismet Passive Wireless Investigation">
+      {/* Sensor Health Banner */}
+      {sensorHealth && (() => {
+        const st = sensorHealth.status;
+        const bannerColor = st === 'ONLINE' ? 'var(--color-success)' : st === 'DEGRADED' ? 'var(--color-warning)' : 'var(--color-danger)';
+        const freeGb = sensorHealth.storage.free_bytes != null ? sensorHealth.storage.free_bytes / 1e9 : null;
+        const lowStorage = freeGb !== null && freeGb < 2;
+        return (
+          <div style={{
+            display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 'var(--space-3)',
+            padding: 'var(--space-2) var(--space-3)',
+            marginBottom: 'var(--space-4)',
+            borderRadius: 'var(--radius)',
+            background: 'var(--surface-elevated)',
+            border: `1px solid ${bannerColor}33`,
+            fontSize: 'var(--font-xs)',
+          }}>
+            <Badge variant={st === 'ONLINE' ? 'success' : st === 'DEGRADED' ? 'warning' : 'danger'} dot>
+              {st}
+            </Badge>
+            <span style={{ color: 'var(--text-muted)' }}>
+              Sensor: <strong style={{ color: 'var(--text-primary)' }}>{sensorHealth.sensor}</strong>
+            </span>
+            <span style={{ color: 'var(--text-muted)' }}>
+              Interface: <code style={{ color: 'var(--text-primary)' }}>{sensorHealth.interface.name}</code>
+              {sensorHealth.interface.state ? ` (${sensorHealth.interface.state})` : ''}
+            </span>
+            {sensorHealth.process.running && sensorHealth.process.pid && (
+              <span style={{ color: 'var(--text-muted)' }}>PID&nbsp;<code>{sensorHealth.process.pid}</code></span>
+            )}
+            {sensorHealth.latest_capture.packet_count != null && (
+              <span style={{ color: 'var(--text-muted)' }}>
+                Packets: <strong style={{ color: 'var(--text-primary)' }}>{sensorHealth.latest_capture.packet_count.toLocaleString()}</strong>
+              </span>
+            )}
+            {sensorHealth.latest_capture.last_observation_time && (
+              <span style={{ color: 'var(--text-muted)' }}>
+                Last: <strong style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{sensorHealth.latest_capture.last_observation_time}</strong>
+              </span>
+            )}
+            {lowStorage && (
+              <Badge variant="danger">⚠ Low disk: {freeGb!.toFixed(1)} GB free</Badge>
+            )}
+          </div>
+        );
+      })()}
       {/* Search and Time Range Toolbar */}
       <div
         style={{

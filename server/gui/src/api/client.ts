@@ -1822,6 +1822,8 @@ export const api = {
     ),
 
   getWifiSensors: () => get<{ items: WifiSensor[] }>("/sensors/wifi"),
+
+  getSensorHealth: () => get<WifiSensorHealth>("/sensors/wifi/health"),
 };
 
 export interface WirelessObservation {
@@ -1864,7 +1866,7 @@ export interface DeviceWirelessObservationsResponse {
   query_window: {
     start: string;
     end: string;
-    lookback_minutes: number;
+    lookback_minutes: number | null;
   };
   summary: WirelessInvestigationSummary;
   observations: WirelessObservation[];
@@ -1880,6 +1882,38 @@ export interface WifiSensor {
   packet_count: number;
   first_seen: string | null;
   last_seen: string | null;
+}
+
+export interface WifiSensorHealth {
+  status: "ONLINE" | "DEGRADED" | "OFFLINE";
+  sensor: string;
+  source: string;
+  process: {
+    running: boolean;
+    pid: number | null;
+  };
+  interface: {
+    name: string;
+    exists: boolean;
+    state: string | null;
+  };
+  storage: {
+    capture_dir: string;
+    exists: boolean;
+    total_kismet_files: number;
+    total_kismet_bytes: number;
+    total_kismet_mb: number;
+    free_bytes: number | null;
+    free_mb: number | null;
+    total_bytes: number | null;
+    oldest_file: string | null;
+    newest_file: string | null;
+  };
+  latest_capture: {
+    file: string | null;
+    packet_count: number | null;
+    last_observation_time: string | null;
+  };
 }
 
 export interface DeviceClassification {
@@ -1909,4 +1943,3 @@ export interface ClassificationStats {
   human_labels_count: number;
   model_version: string;
 }
-

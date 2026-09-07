@@ -183,11 +183,6 @@ class EventMonitorUnitTests(unittest.TestCase):
         self.assertTrue(is_excluded_path("/client/storage/passive_packets/2026-09-06.json"))
         self.assertTrue(is_excluded_path("/client/storage/network_telemetry/2026-09-06/packets/dhcp.json"))
 
-        # Kismet databases & journals
-        self.assertTrue(is_excluded_path("/client/storage/kismet/capture.kismet"))
-        self.assertTrue(is_excluded_path("/client/storage/kismet/capture.kismet-wal"))
-        self.assertTrue(is_excluded_path("/var/log/sensor.kismet"))
-
         # Internal client state & event storage
         self.assertTrue(is_excluded_path("/client/storage/events/2026-09-06.json"))
         self.assertTrue(is_excluded_path("/client/storage/sent-files/upload.zip"))
@@ -205,15 +200,13 @@ class EventMonitorUnitTests(unittest.TestCase):
         self.assertFalse(is_excluded_path("/home/user/document.docx"))
         self.assertFalse(is_excluded_path("C:\\Users\\alice\\Desktop\\report.txt"))
 
-    def test_passive_dhcp_and_packet_directories_ignored_by_monitor(self):
+    def test_passive_storage_directories_ignored_by_monitor(self):
         # Create a mock storage hierarchy inside monitored_dir
         storage_dir = self.monitored_dir / "storage"
         dhcp_dir = storage_dir / "network_neighbourhood"
         dhcp_dir.mkdir(parents=True)
         telemetry_dir = storage_dir / "network_telemetry"
         telemetry_dir.mkdir(parents=True)
-        kismet_dir = storage_dir / "kismet"
-        kismet_dir.mkdir(parents=True)
 
         monitor = EventMonitor(
             client_id="test-client",
@@ -226,7 +219,6 @@ class EventMonitorUnitTests(unittest.TestCase):
         # Write high-frequency passive observation & packet files
         (dhcp_dir / "2026-09-06.json").write_text('{"dhcp": "observation"}')
         (telemetry_dir / "packets.json").write_text('{"packets": []}')
-        (kismet_dir / "session.kismet").write_text('sqlite data')
         (storage_dir / "neighbour_snapshot_state.json").write_text('{}')
 
         # Also write a legitimate user file
@@ -480,13 +472,12 @@ class TestFileActivityLoggingPlan(unittest.TestCase):
         self.assertNotEqual(entry["time"], "Unknown")
 
     def test_passive_dhcp_and_telemetry_files_excluded(self):
-        """Plan §9, §18, §19: DHCP observations, telemetry, and Kismet files excluded."""
+        """Plan §9, §18, §19: DHCP observations and telemetry files excluded."""
         neighbourhood_dir = self.monitored_dir / "storage" / "network_neighbourhood"
         telemetry_dir = self.monitored_dir / "storage" / "network_telemetry"
         passive_pkts_dir = self.monitored_dir / "storage" / "passive_packets"
-        kismet_dir = self.monitored_dir / "storage" / "kismet"
 
-        for d in (neighbourhood_dir, telemetry_dir, passive_pkts_dir, kismet_dir):
+        for d in (neighbourhood_dir, telemetry_dir, passive_pkts_dir):
             d.mkdir(parents=True)
 
         monitor = EventMonitor(
@@ -497,12 +488,10 @@ class TestFileActivityLoggingPlan(unittest.TestCase):
         )
         monitor.initialize_baselines()
 
-        # Rapidly write/update passive files (DHCP, Kismet, etc.)
+        # Rapidly write/update passive files.
         (neighbourhood_dir / "dhcp_obs.json").write_text('{"dhcp": "192.168.1.50"}')
         (telemetry_dir / "stream.json").write_text('{"flow": 123}')
         (passive_pkts_dir / "capture.json").write_text('{"packets": 456}')
-        (kismet_dir / "site_survey.kismet").write_text('kismet db bytes')
-        (kismet_dir / "site_survey.kismet-wal").write_text('kismet wal bytes')
 
         # Poll monitor
         events = monitor.check_file_changes()
@@ -511,7 +500,6 @@ class TestFileActivityLoggingPlan(unittest.TestCase):
 
         # Also verify modifications to passive files are ignored
         (neighbourhood_dir / "dhcp_obs.json").write_text('{"dhcp": "192.168.1.51"}')
-        (kismet_dir / "site_survey.kismet").write_text('updated kismet db')
         events = monitor.check_file_changes()
         self.assertEqual(len(events), 0)
 
@@ -647,4 +635,3 @@ class TestFileActivityLoggingPlan(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

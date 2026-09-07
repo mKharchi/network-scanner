@@ -58,7 +58,10 @@ class NetworkDiscoveryTests(unittest.TestCase):
             ),
             stderr="",
         )
-        with patch.object(
+        with patch.dict(
+            "os.environ",
+            {"NETWORK_SCAN_INTERFACE": "", "NETWORK_SCAN_SUBNET": ""},
+        ), patch.object(
             network_discovery.subprocess,
             "run",
             side_effect=[route_result, address_result],
@@ -95,7 +98,13 @@ class NetworkDiscoveryTests(unittest.TestCase):
             ),
             stderr="",
         )
-        with patch.dict("os.environ", {"NETWORK_SCAN_SUBNET": "not-a-network"}), patch.object(
+        with patch.dict(
+            "os.environ",
+            {
+                "NETWORK_SCAN_INTERFACE": "",
+                "NETWORK_SCAN_SUBNET": "not-a-network",
+            },
+        ), patch.object(
             network_discovery.subprocess,
             "run",
             side_effect=[route_result, address_result],

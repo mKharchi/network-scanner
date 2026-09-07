@@ -1,0 +1,24 @@
+# Install as /etc/systemd/system/network-scanner-server.service on the Linux host.
+# This supervises the TCP server and localhost-bound REST API after boot.
+
+[Unit]
+Description=Network Scanner TCP and REST API Server
+Wants=network-online.target mysql.service
+After=network-online.target mysql.service
+
+[Service]
+Type=simple
+User=adonis
+Group=adonis
+WorkingDirectory=/home/adonis/network-scanner/server
+EnvironmentFile=-/home/adonis/network-scanner/server/.env
+Environment=SERVER_INTERACTIVE=false
+ExecStart=/home/adonis/network-scanner/server/.venv/bin/python /home/adonis/network-scanner/server/server.py
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

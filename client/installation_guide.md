@@ -1,3 +1,8 @@
+> **Canonical documentation notice:** The current maintained installation and
+> migration guides are [`docs/project/operations/client-installation.md`](../docs/project/operations/client-installation.md)
+> and [`docs/project/operations/legacy-client-migration.md`](../docs/project/operations/legacy-client-migration.md).
+> This file is retained for compatibility with older deployment notes.
+
 ## Important architecture
 
 The **client PCs do not need**:

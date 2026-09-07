@@ -1,0 +1,103 @@
+.number-input {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.number-input__label {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  flex: 1 1 auto;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.number-input__wrapper {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  max-width: 8rem;
+  min-width: 8rem;
+  overflow: hidden;
+  background: var(--surface-muted);
+  flex-shrink: 0;
+}
+
+.number-input__button {
+  width: 2.75rem;
+  height: 2.18rem;
+  padding: 0 0.4rem;
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.number-input__button:hover {
+  background: rgba(59, 96, 228, 0.08);
+}
+
+.number-input__button:focus-visible,
+.number-input__field:focus-visible {
+  outline: 2px solid rgba(59, 96, 228, 0.3);
+  outline-offset: -2px;
+}
+
+.number-input__button--left {
+  border-right: 1px solid var(--border);
+  border-top-left-radius: 999px;
+  border-bottom-left-radius: 999px;
+  background: var(--surface-muted);
+}
+
+.number-input__button--right {
+  background: var(--surface-muted);
+  border-left: 1px solid var(--border);
+  border-top-right-radius: 999px;
+  border-bottom-right-radius: 999px;
+}
+
+.number-input__button svg {
+  width: 0.75rem;
+  height: 0.5rem;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  fill: none;
+}
+
+.number-input__field {
+  width: 100%;
+  border: none;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-primary);
+  text-align: center;
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding: 0.425rem 0.3rem;
+}
+
+.number-input__field::placeholder {
+  color: var(--text-muted);
+}
+
+.number-input__helper {
+  margin-top: 1rem;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  text-align: center;
+}

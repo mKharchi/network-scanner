@@ -87,8 +87,6 @@ DEFAULT_IGNORE_PATTERNS = [
     re.compile(r".*storage[/\\]network_neighbourhood.*", re.IGNORECASE),
     re.compile(r".*storage[/\\]network_telemetry.*", re.IGNORECASE),
     re.compile(r".*storage[/\\]passive_packets.*", re.IGNORECASE),
-    re.compile(r".*storage[/\\]kismet.*", re.IGNORECASE),
-    re.compile(r".*\.kismet(-[a-z0-9]+)?$", re.IGNORECASE),
     # Event monitor persistence & internal client state files
     re.compile(r".*storage[/\\]events.*", re.IGNORECASE),
     re.compile(r".*storage[/\\]sent-files.*", re.IGNORECASE),
