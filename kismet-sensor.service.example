@@ -1,0 +1,38 @@
+# Development service profile for the current Linux PC.
+# Review User/Group, capabilities, storage, and API settings before production.
+# Install only after copying this file to /etc/systemd/system/kismet-sensor.service.
+
+[Unit]
+Description=Network Scanner Kismet RF Sensor
+Wants=network-online.target
+After=network-online.target NetworkManager.service
+
+[Service]
+Type=simple
+User=kismet
+Group=kismet
+SupplementaryGroups=netdev
+EnvironmentFile=-/home/adonis/network-scanner/server/.env
+WorkingDirectory=/home/adonis/network-scanner
+
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
+NoNewPrivileges=true
+UMask=0007
+
+ExecStartPre=+/usr/bin/rm -f /tmp/.kismet_cap_linux_wifi_interface_lock
+ExecStartPre=/bin/sh -c 'if ! /usr/sbin/ip link show "${KISMET_CAPTURE_INTERFACE}" >/dev/null 2>&1; then /usr/sbin/iw dev "${KISMET_MAIN_INTERFACE}" interface add "${KISMET_CAPTURE_INTERFACE}" type monitor; fi'
+ExecStartPre=/usr/sbin/ip link set ${KISMET_CAPTURE_INTERFACE} up
+ExecStartPre=-/usr/bin/nmcli device set ${KISMET_MAIN_INTERFACE} managed true
+ExecStartPre=/bin/sh -c '/usr/bin/nmcli device set "${KISMET_CAPTURE_INTERFACE}" managed false >/dev/null 2>&1 || true'
+ExecStart=/bin/sh -c 'exec "${KISMET_BINARY}" --confdir "${KISMET_CONF_DIR}" --homedir "${KISMET_HOMEDIR}" --no-ncurses --no-line-wrap -p "${KISMET_CAPTURE_ROOT}" -c "${KISMET_CAPTURE_INTERFACE}"'
+ExecStopPost=-/usr/sbin/iw dev ${KISMET_CAPTURE_INTERFACE} del
+
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+KillSignal=SIGTERM
+ReadWritePaths=/home/adonis/kismet /var/lib/kismet
+
+[Install]
+WantedBy=multi-user.target

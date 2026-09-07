@@ -181,6 +181,105 @@ class KismetInvestigationServiceTests(unittest.TestCase):
         self.assertGreaterEqual(len(sensors), 1)
         self.assertEqual(sensors[0]["driver"], "iwlwifi")
 
+    def test_exact_10_minute_and_microsecond_bounds(self):
+        """Test that packets outside the exact [start, end] window are strictly excluded."""
+        con = sqlite3.connect(self.kismet_db_path)
+        cur = con.cursor()
+        qos_pkt = bytes([0x00, 0x00, 0x04, 0x00, 0x88, 0x01, 0x00, 0x00])
+
+        target = "AA:11:22:33:44:55"
+        # Reference 10m window: [1788700000.500000, 1788700600.500000] (600 seconds)
+        window_start = 1788700000.5
+        window_end = 1788700600.5
+
+        # 1. Just before start (1788700000 sec, 499999 usec -> 1788700000.499999) -> OUT
+        cur.execute("INSERT INTO packets VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (
+            1788700000, 499999, "IEEE802.11", target, "11:22:33:44:55:66", target, 5220000.0, -65, 256, "wlp0s20f3mon", 127, qos_pkt, 201
+        ))
+        # 2. Exactly at start (1788700000 sec, 500000 usec -> 1788700000.5) -> IN
+        cur.execute("INSERT INTO packets VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (
+            1788700000, 500000, "IEEE802.11", target, "11:22:33:44:55:66", target, 5220000.0, -64, 256, "wlp0s20f3mon", 127, qos_pkt, 202
+        ))
+        # 3. Inside window (1788700300 sec, 0 usec -> 1788700300.0) -> IN
+        cur.execute("INSERT INTO packets VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (
+            1788700300, 0, "IEEE802.11", target, "11:22:33:44:55:66", target, 5220000.0, -60, 256, "wlp0s20f3mon", 127, qos_pkt, 203
+        ))
+        # 4. Exactly at end (1788700600 sec, 500000 usec -> 1788700600.5) -> IN
+        cur.execute("INSERT INTO packets VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (
+            1788700600, 500000, "IEEE802.11", target, "11:22:33:44:55:66", target, 5220000.0, -63, 256, "wlp0s20f3mon", 127, qos_pkt, 204
+        ))
+        # 5. Just after end (1788700600 sec, 500001 usec -> 1788700600.500001) -> OUT
+        cur.execute("INSERT INTO packets VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (
+            1788700600, 500001, "IEEE802.11", target, "11:22:33:44:55:66", target, 5220000.0, -68, 256, "wlp0s20f3mon", 127, qos_pkt, 205
+        ))
+        con.commit()
+        con.close()
+
+        res = self.service.query_wireless_observations(
+            target,
+            start_time=window_start,
+            end_time=window_end,
+            include_noise=True,
+        )
+        self.assertEqual(res["summary"]["observation_count"], 3)
+        observed_hashes = [obs["packet_hash"] for obs in res["observations"]]
+        self.assertIn(202, observed_hashes)
+        self.assertIn(203, observed_hashes)
+        self.assertIn(204, observed_hashes)
+        self.assertNotIn(201, observed_hashes)
+        self.assertNotIn(205, observed_hashes)
+
+    def test_kismet_server_provenance_and_metadata(self):
+        res = self.service.query_wireless_observations(
+            "AA:BB:CC:DD:EE:01",
+            start_time=1788610000,
+            end_time=1788615000,
+            include_noise=True,
+        )
+        self.assertEqual(res["status"], "ok")
+        self.assertEqual(res["source"], "KISMET_SERVER")
+        self.assertGreaterEqual(res["capture_files_scanned"], 1)
+        for obs in res["observations"]:
+            self.assertEqual(obs["source"], "KISMET_SERVER")
+            self.assertTrue(obs["sensor"])
+
+    def test_empty_result_success(self):
+        # Unmatched device produces clean empty success (not an error)
+        res = self.service.query_wireless_observations(
+            "00:00:00:00:00:00",
+            start_time=1788610000,
+            end_time=1788615000,
+        )
+        self.assertEqual(res["status"], "ok")
+        self.assertEqual(res["source"], "KISMET_SERVER")
+        self.assertEqual(res["summary"]["observation_count"], 0)
+        self.assertEqual(len(res["observations"]), 0)
+
+    def test_invalid_time_and_limit_inputs_are_rejected(self):
+        with self.assertRaisesRegex(ValueError, "Invalid start_time"):
+            self.service.query_wireless_observations(
+                "AA:BB:CC:DD:EE:01",
+                start_time="not-a-timestamp",
+            )
+        with self.assertRaisesRegex(ValueError, "Invalid end_time"):
+            self.service.query_wireless_observations(
+                "AA:BB:CC:DD:EE:01",
+                end_time="not-a-timestamp",
+            )
+        with self.assertRaisesRegex(ValueError, "limit must be an integer"):
+            self.service.query_wireless_observations(
+                "AA:BB:CC:DD:EE:01",
+                limit="many",
+            )
+
+    def test_sensor_health_reports_source_readability_separately(self):
+        health = self.service.get_sensor_health()
+
+        self.assertIn(health["status"], {"DEGRADED", "OFFLINE"})
+        self.assertTrue(health["source_health"]["readable"])
+        self.assertFalse(health["source_health"]["capture_fresh"])
+        self.assertIn("storage_health", health)
+
 
 class KismetApiEndpointTests(unittest.TestCase):
     @classmethod
@@ -244,7 +343,13 @@ class KismetApiEndpointTests(unittest.TestCase):
             urllib.request.urlopen(req)
         self.assertEqual(err.exception.code, 404)
 
+    def test_rest_invalid_time_range_returns_400(self):
+        url = f"http://127.0.0.1:{self.port}/api/v1/devices/B0:3C:DC:95:39:36/wireless-observations?start=2026-09-06T12:00:00Z&end=2026-09-06T10:00:00Z"
+        req = urllib.request.Request(url, headers={"Accept": "application/json"})
+        with self.assertRaises(urllib.error.HTTPError) as err:
+            urllib.request.urlopen(req)
+        self.assertEqual(err.exception.code, 400)
+
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -2,6 +2,10 @@
 
 A robust, enterprise-ready Python-based network monitoring, device discovery, spatial localization, and endpoint management system with full separation between the Client agent and Server management infrastructure.
 
+For the maintained architecture, functionality reference, installation guides,
+client migration/update procedures, testing, and future roadmap, start with
+[`docs/project/README.md`](docs/project/README.md).
+
 ---
 
 ## Architecture Overview
@@ -374,13 +378,37 @@ Create or configure `server/.env`:
 | `DB_PASSWORD` | `scanner_password` | Database password |
 | `SERVER_HOST` | `0.0.0.0` | IP to bind the TCP listener |
 | `SERVER_PORT` | `5000` | Port for the TCP listener |
-| `API_HOST` | `0.0.0.0` | Bind IP for the REST API |
+| `API_HOST` | `127.0.0.1` | Bind IP for the REST API |
 | `API_PORT` | `8080` | Port for the REST API |
 | `GUI_HOST` | `127.0.0.1` | Bind IP for the static GUI server |
 | `GUI_PORT` | `8080` | Port for the static GUI server |
 | `NETWORK_SCAN_STORAGE_DIR` | `server/storage/network_scans` | Storage path for daily scan JSON files |
 | `NETWORK_CLIENT_OBSERVATION_MAX_AGE_SECONDS` | `3600` | Age threshold for client ARP observations in aggregated scans |
 | `LOG_LEVEL` | `INFO` | Logging threshold (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
+
+### 2a. Server-owned Kismet sensor configuration
+
+Kismet is owned by the Linux server, not by Windows clients. The current
+development host profile is in `server/.env`; use
+`server/kismet_sensor.env.example` as the template when moving the sensor to
+another Linux machine. Set `KISMET_CAPTURE_ROOT`,
+`KISMET_CAPTURE_INTERFACE`, `KISMET_MAIN_INTERFACE`, and `KISMET_BINARY` for
+the target host. Keep `KISMET_CLEANUP_DRY_RUN=true` until the retention policy
+has been approved and tested on that host.
+
+`kismet-sensor.service` is a development systemd template for the
+current machine. It intentionally runs as root because the capture capability
+has not yet been converted to a least-privilege service account; this must be
+resolved before production rollout.
+
+Retention is dry-run by default:
+
+```bash
+python3 scripts/kismet_retention.py
+```
+
+Use `--apply` only after reviewing the dry-run output and approving the target
+retention policy.
 
 ### 3. Installation & Startup
 
@@ -398,6 +426,10 @@ pip install -r requirements.txt
 # Start the TCP monitoring server & REST API
 python server.py
 ```
+
+For a Linux deployment, install `network-scanner-server.service.example` as a
+systemd unit and keep `SERVER_INTERACTIVE=false` so the TCP server and REST API
+start automatically without the operator menu.
 
 ### 4. Running the Operator GUI
 
@@ -469,4 +501,3 @@ To remove the logon task:
 ```powershell
 .\uninstall_user_logon_task.ps1
 ```
-

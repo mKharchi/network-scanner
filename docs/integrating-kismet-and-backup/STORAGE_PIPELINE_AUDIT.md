@@ -39,10 +39,12 @@ This audit investigates the existing packet capture and storage pipeline in the 
 ## Detailed Pipeline Audit Findings
 
 ### 1. Raw Capture Locations
+
 - **V1 Legacy Storage:** `client/storage/passive_packets/YYYY-MM-DD.json`
 - **V2 Protocol Telemetry Storage:** `client/storage/network_telemetry/<YYYY-MM-DD>/packets/<protocol>.json` (e.g. `tcp.json`, `udp.json`, `arp.json`, `mdns.json`, `llmnr.json`, `nbns.json`, `ssdp.json`, `dhcp.json`)
 
 ### 2. File Format & Naming Convention
+
 - **Format:** UTF-8 encoded JSON.
   - V1 format: JSON object `{"date": "YYYY-MM-DD", "observer_client_id": "...", "packet_count": N, "packets": [ ... ]}`.
   - V2 format: JSON array `[ { ... }, { ... } ]` managed by `RotatingJSONAppendStore`.
@@ -51,10 +53,12 @@ This audit investigates the existing packet capture and storage pipeline in the 
   - V2: `<protocol>.json`, rotated on file size threshold (`TELEMETRY_FILE_MAX_BYTES`, default 50 MB) to `<protocol>.1.json`, `<protocol>.2.json`, etc.
 
 ### 3. Writers
+
 - **V1:** `PacketObserver` (`client/app/packet_observer.py`) -> `DailyPacketStorage.record_observation()` (`client/app/packet_storage.py`). Flushed every 5.0 seconds or 50 packets via atomic temp file replacement.
 - **V2:** `PacketObserver` (`client/app/packet_observer.py`) -> `TelemetryPacketWriter.record()` (`client/app/telemetry_packet_writer.py`) using `RotatingJSONAppendStore` (`client/app/telemetry_storage.py`).
 
 ### 4. Readers
+
 - **Live-flush readers only:**
   - `DailyPacketStorage._flush_locked` reads `YYYY-MM-DD.json` during a flush to deserialize the array and append new observations.
   - `RotatingJSONAppendStore.append_many` reads the active file if size is under the rotation threshold to append records.
@@ -66,12 +70,14 @@ This audit investigates the existing packet capture and storage pipeline in the 
   - `flow_query.py` (`client/app/flow_query.py`) only reads `flows.json` and rotated `flows.N.json`.
 
 ### 5. Flow Computation & Scheduled Jobs
+
 - **Flow Aggregator:** In-memory tracking with a sweep thread running every 5 seconds (`DEFAULT_SWEEP_INTERVAL_SECONDS = 5.0`) that finalizes flows idle for ≥ 45 seconds (`DEFAULT_FLOW_IDLE_TIMEOUT_SECONDS = 45.0`) to `flows.json`.
 - **Device Enrichment Job:** Background thread executing every 5 minutes (`DEFAULT_ENRICHMENT_INTERVAL_SECONDS = 300.0`).
 - **Activity Window Aggregator:** Background thread executing every 15 minutes (`DEFAULT_WINDOW_SECONDS = 900.0`), producing per-device 15-minute summaries.
 - **Delta Sync:** Triggered on activity window close (every 15 minutes).
 
 ### 6. Database Persistence
+
 - Server persists:
   - Device inventory & discovery state in `telemetry_devices` and `network_devices`.
   - 15-minute activity summaries in `telemetry_activity_windows` (storing `flow_count`, `packet_count`, `bytes`, `protocols_json`, `ports_json`, `connections_json`, `unique_destinations`).
@@ -79,6 +85,7 @@ This audit investigates the existing packet capture and storage pipeline in the 
 - Full flow details remain on client storage (`flows.json`) and are fetched on demand via the REST API endpoint `GET /api/v1/clients/{client_id}/devices/{mac}/flows?window=...`.
 
 ### 7. Downstream Feature Requirements
+
 - The flow model (`_ActiveFlow` -> `flow.to_record()`) captures 26 key attributes:
   - Identifiers: `flow_id`, `observer_client_id`
   - Timestamps: `first_seen`, `last_seen`, `duration`
@@ -90,11 +97,13 @@ This audit investigates the existing packet capture and storage pipeline in the 
 - This retains all data required by downstream activity aggregation, telemetry sync, and analyst investigations.
 
 ### 8. Failure Behavior & Retry Capabilities
+
 - **Packet Observer -> Flow Aggregator:** Fail-safe `try...except` prevents sniffer crashes if flow aggregation encounters transient errors.
 - **Flow Persistence:** `FlowAggregator` logs warnings on disk errors.
 - **Activity Window / Sync:** `SyncManager` persists pending delta payloads to `storage/network_telemetry/sync_pending/<window_hash>.json` and performs exponential backoff retries with durable state on restart (`retry_pending()`).
 
 ### 9. Storage Size & Growth Rate
+
 - **Current test folder size:** ~0 MB (test environment).
 - **Estimated operational growth rate (active production client @ 50–200 packets/sec):**
   - Raw packet logs (V1/V2): ~2 to 5 GB / day / client.
@@ -106,25 +115,25 @@ This audit investigates the existing packet capture and storage pipeline in the 
 
 ## Formal Audit Questionnaire
 
-| Item | Question | Audit Answer |
-|---|---|---|
-| 1 | Raw capture location | `client/storage/passive_packets/` and `client/storage/network_telemetry/<date>/packets/` |
-| 2 | Raw file format | UTF-8 JSON (V1 root object with `packets` array; V2 raw JSON array) |
-| 3 | Raw file naming convention | `YYYY-MM-DD.json` (V1) / `<protocol>.json`, `<protocol>.<N>.json` (V2) |
-| 4 | Writer | `PacketObserver` (`DailyPacketStorage` and `TelemetryPacketWriter`) |
-| 5 | Reader | Internal flush-append routines only; **no external readers** |
-| 6 | Flow computation job | `FlowAggregator` in-memory real-time streaming pipeline |
-| 7 | Flow interval | 45-second idle timeout, 5-second sweep, 15-minute activity window aggregation |
-| 8 | Database persistence | MySQL `telemetry_activity_windows`, `telemetry_devices`, `network_devices` |
-| 9 | Post-processing readers | None |
-| 10 | Forensic / replay usage | None |
-| 11 | API / UI usage | None (API queries `flows.json` via `flow_query.py`) |
-| 12 | File uploads to server | None (raw packets never sent across network) |
-| 13 | Downstream sufficiency | Flow model fully retains all necessary conversation and protocol metadata |
-| 14 | Failure behavior | In-memory exception handling; durable pending queue in `SyncManager` |
-| 15 | Safe retry ability | Flow aggregation is real-time stream; delta sync is fully durable and idempotent |
-| 16 | Current storage size | Minimal in testbed; unbounded in production without cleanup |
-| 17 | Estimated daily growth | ~2–5 GB/day raw packets per client vs ~15–50 MB/day for flows and activity windows |
+| Item | Question                   | Audit Answer                                                                             |
+| ---- | -------------------------- | ---------------------------------------------------------------------------------------- |
+| 1    | Raw capture location       | `client/storage/passive_packets/` and `client/storage/network_telemetry/<date>/packets/` |
+| 2    | Raw file format            | UTF-8 JSON (V1 root object with `packets` array; V2 raw JSON array)                      |
+| 3    | Raw file naming convention | `YYYY-MM-DD.json` (V1) / `<protocol>.json`, `<protocol>.<N>.json` (V2)                   |
+| 4    | Writer                     | `PacketObserver` (`DailyPacketStorage` and `TelemetryPacketWriter`)                      |
+| 5    | Reader                     | Internal flush-append routines only; **no external readers**                             |
+| 6    | Flow computation job       | `FlowAggregator` in-memory real-time streaming pipeline                                  |
+| 7    | Flow interval              | 45-second idle timeout, 5-second sweep, 15-minute activity window aggregation            |
+| 8    | Database persistence       | MySQL `telemetry_activity_windows`, `telemetry_devices`, `network_devices`               |
+| 9    | Post-processing readers    | None                                                                                     |
+| 10   | Forensic / replay usage    | None                                                                                     |
+| 11   | API / UI usage             | None (API queries `flows.json` via `flow_query.py`)                                      |
+| 12   | File uploads to server     | None (raw packets never sent across network)                                             |
+| 13   | Downstream sufficiency     | Flow model fully retains all necessary conversation and protocol metadata                |
+| 14   | Failure behavior           | In-memory exception handling; durable pending queue in `SyncManager`                     |
+| 15   | Safe retry ability         | Flow aggregation is real-time stream; delta sync is fully durable and idempotent         |
+| 16   | Current storage size       | Minimal in testbed; unbounded in production without cleanup                              |
+| 17   | Estimated daily growth     | ~2–5 GB/day raw packets per client vs ~15–50 MB/day for flows and activity windows       |
 
 ---
 

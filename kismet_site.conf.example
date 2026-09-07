@@ -1,0 +1,9 @@
+# Server-owned Kismet localhost-only web/API binding.
+# Install as /home/adonis/kismet/conf/kismet_site.conf on the Linux sensor.
+
+httpd_bind_address=127.0.0.1
+
+# Keep first-run credential creation available until the administrator creates
+# and verifies the Kismet account. Disable both options afterward.
+# httpd_allow_auth_creation=false
+# httpd_allow_auth_view=false

@@ -2,9 +2,18 @@ import { useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import "../styles/shell.css";
 import { useApiState } from "../hooks/useApiState";
-import { TbActivity, TbCloudNetwork, TbDevices, TbMapPin, TbRadar, TbShieldHeart, TbAdjustmentsHorizontal } from "react-icons/tb";
+import {
+  TbActivity,
+  TbCloudNetwork,
+  TbDevices,
+  TbMapPin,
+  TbRadar,
+  TbShieldHeart,
+  TbAdjustmentsHorizontal,
+} from "react-icons/tb";
 import { FiCpu, FiMenu, FiX } from "react-icons/fi";
 import { HiOutlineSquare3Stack3D } from "react-icons/hi2";
+import { IoSettingsOutline } from "react-icons/io5";
 
 // ── Connection State Indicator ───────────────────────────────────
 export type ApiState = "connected" | "refreshing" | "stale" | "unavailable";
@@ -58,18 +67,43 @@ export function AppShell({
     {
       name: "INTELLIGENCE",
       items: [
-        { label: "Overview", to: "/", icon: <TbRadar size={18} />, exact: true },
-        { label: "Devices", to: "/network/devices", icon: <TbDevices size={18} /> },
-        { label: "Latest Scan", to: "/network/latest", icon: <TbActivity size={18} /> },
-        { label: "Scan History", to: "/network/history", icon: <HiOutlineSquare3Stack3D size={18} /> },
+        {
+          label: "Overview",
+          to: "/",
+          icon: <TbRadar size={18} />,
+          exact: true,
+        },
+        {
+          label: "Devices",
+          to: "/network/devices",
+          icon: <TbDevices size={18} />,
+        },
+        {
+          label: "Latest Scan",
+          to: "/network/latest",
+          icon: <TbActivity size={18} />,
+        },
+        {
+          label: "Scan History",
+          to: "/network/history",
+          icon: <HiOutlineSquare3Stack3D size={18} />,
+        },
         { label: "Clients", to: "/clients", icon: <FiCpu size={18} /> },
-        { label: "Client Localization", to: "/client-localization", icon: <TbMapPin size={18} /> },
+        {
+          label: "Client Localization",
+          to: "/client-localization",
+          icon: <TbMapPin size={18} />,
+        },
       ],
     },
     {
       name: "SPATIAL",
       items: [
-        { label: "Spatial Map", to: "/digital-twin", icon: <TbMapPin size={18} /> },
+        {
+          label: "Spatial Map",
+          to: "/digital-twin",
+          icon: <TbMapPin size={18} />,
+        },
         { label: "Locations", to: "/locations", icon: <TbMapPin size={18} /> },
       ],
     },
@@ -82,13 +116,24 @@ export function AppShell({
           icon: <TbShieldHeart size={18} />,
           badge: newAlertCount,
         },
-        { label: "Rogue Hunter", to: "/rogue-devices", icon: <TbRadar size={18} /> },
-        { label: "Activity Logs", to: "/activity", icon: <TbActivity size={18} /> },
-        { label: "Settings", to: "/settings", icon: <TbAdjustmentsHorizontal size={18} /> },
+        {
+          label: "Rogue Hunter",
+          to: "/rogue-devices",
+          icon: <TbRadar size={18} />,
+        },
+        {
+          label: "Activity Logs",
+          to: "/activity",
+          icon: <TbActivity size={18} />,
+        },
+        {
+          label: "Settings",
+          to: "/settings",
+          icon: <TbAdjustmentsHorizontal size={18} />,
+        },
       ],
     },
   ];
-
 
   return (
     <div className="netwatch-shell">
@@ -123,7 +168,6 @@ export function AppShell({
           {/* Primary Top Nav Links (Desktop) */}
           <nav className="desktop-nav" aria-label="Main Navigation">
             <NavLink
-
               to="/"
               end
               className={({ isActive }) =>
@@ -188,18 +232,16 @@ export function AppShell({
             </NavLink>
 
             <NavLink
-              to="/activity"
+              to="/settings"
               className={({ isActive }) =>
                 `top-nav-link ${isActive ? "top-nav-link--active" : ""}`
               }
             >
-              <TbActivity size={16} />
-              <span>Activity</span>
+              <IoSettingsOutline />
+              <span>Settings</span>
             </NavLink>
           </nav>
         </div>
-
-
       </header>
 
       {/* ── Mobile & Drawer Navigation Overlay ─────────────────────── */}
@@ -210,7 +252,9 @@ export function AppShell({
         />
       )}
 
-      <aside className={`drawer-sidebar ${mobileMenuOpen ? "drawer-sidebar--open" : ""}`}>
+      <aside
+        className={`drawer-sidebar ${mobileMenuOpen ? "drawer-sidebar--open" : ""}`}
+      >
         <div className="drawer-header">
           <div className="brand-logo">
             <div className="brand-icon">
@@ -275,9 +319,7 @@ export function AppShell({
 
       {/* ── Main Viewport Content ─────────────────────────────────── */}
       <main className="netwatch-main">
-        <div className="netwatch-content-container">
-          {children}
-        </div>
+        <div className="netwatch-content-container">{children}</div>
       </main>
     </div>
   );

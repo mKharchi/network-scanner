@@ -23,9 +23,9 @@ The existing `progress/phase-0.md` is also superseded: its client/sensor ownersh
 
 | Component | Status under this decision | Action later |
 | --- | --- | --- |
-| `client/app/kismet_listener.py` | Obsolete client-side poller | Do not delete in planning phase; extract any reusable parsing only after server query contract is verified, then remove listener and tests/imports in a dedicated change. |
-| `client/app/client.py` Kismet creation/cleanup | Obsolete | Remove only with client regression coverage. |
-| `client/app/event_monitor.py` Kismet exclusions | Obsolete once client Kismet paths are removed | Review in the same cleanup change. |
+| `client/app/kismet_listener.py` | Removed obsolete client-side poller | Server-side `KismetInvestigationService` owns capture reads and historical queries. |
+| `client/app/client.py` Kismet creation/cleanup | Removed obsolete lifecycle wiring | Client startup/shutdown retains passive discovery, telemetry, flows, and retention services. |
+| `client/app/event_monitor.py` Kismet exclusions | Removed | Kismet files are server-owned and no longer part of the client storage policy. |
 | `server/server_components/kismet_service.py` | Conceptually correct location | Refactor to a configured server-owned source; retain reusable MAC, time, radiotap, noise-filter, normalization, and summary logic. |
 | API/UI investigation flow | Useful | Preserve its existing REST route, time controls, and response shape unless a verified source contract forces a compatible extension. |
 | `server_lib.py` TCP request/response machinery | Unrelated but useful infrastructure | No Kismet protocol work is required. Do not add Kismet request IDs, queues, commands, or response validation. |

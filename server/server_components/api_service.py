@@ -3148,6 +3148,13 @@ def list_wifi_sensors() -> List[Dict[str, Any]]:
     return service.list_sensors()
 
 
+def get_wifi_sensor_health() -> Dict[str, Any]:
+    """Retrieve operational health, process, interface, and storage status for Kismet."""
+    from server_components.kismet_service import KismetInvestigationService
+    service = KismetInvestigationService()
+    return service.get_sensor_health()
+
+
 def get_alert_wireless_investigation(
     alert_id: int,
     *,

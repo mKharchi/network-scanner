@@ -10,7 +10,6 @@ Implements Phase 4 of docs/integrating-kismet-and-backup/plan.md:
 
 from __future__ import annotations
 
-import glob
 import json
 import logging
 import os
@@ -29,6 +28,7 @@ LOG = logging.getLogger("kismet_service")
 
 DEFAULT_LOOKBACK_MINUTES = 30
 MAX_OBSERVATION_LIMIT = 2000
+DEFAULT_CAPTURE_ROOT = Path("/home/adonis/kismet")
 MAC_RE = re.compile(r"^[0-9A-F]{2}(?::[0-9A-F]{2}){5}$")
 
 # Standard 802.11 frame type mappings
@@ -156,31 +156,27 @@ class KismetInvestigationService:
         fallback_scan_dir: Optional[Path | str] = None,
     ):
         configured_dirs = os.getenv("KISMET_CAPTURE_DIRS")
-        if capture_dirs:
+        if capture_dirs is not None:
             self.capture_dirs = [Path(p) for p in capture_dirs]
         elif configured_dirs:
             self.capture_dirs = [Path(p.strip()) for p in configured_dirs.split(",") if p.strip()]
         else:
-            server_root = Path(__file__).resolve().parents[1]
-            repo_root = Path(__file__).resolve().parents[2]
-            self.capture_dirs = [
-                Path("/home/adonis/kismet"),
-                Path("/home/adonis"),
-                server_root / "storage" / "kismet",
-                repo_root / "client" / "storage" / "kismet",
-                repo_root / "storage" / "kismet",
-                Path("/var/log/kismet"),
-            ]
+            configured_root = os.getenv("KISMET_CAPTURE_ROOT")
+            self.capture_dirs = [Path(configured_root) if configured_root else DEFAULT_CAPTURE_ROOT]
         self.fallback_scan_dir = Path(fallback_scan_dir or (Path(__file__).resolve().parents[1] / "storage" / "network_scans"))
 
     def find_kismet_database_files(self) -> List[Path]:
         """Locate all available .kismet SQLite database files across configured paths."""
         found: List[Path] = []
         for cdir in self.capture_dirs:
-            if cdir.exists() and cdir.is_dir():
-                for kfile in sorted(cdir.glob("*.kismet")):
-                    if kfile.is_file() and kfile not in found:
-                        found.append(kfile)
+            try:
+                if cdir.exists() and cdir.is_dir():
+                    for kfile in cdir.glob("*.kismet"):
+                        if kfile.is_file() and kfile not in found:
+                            found.append(kfile)
+            except OSError as err:
+                LOG.warning("[KISMET] Cannot inspect capture directory %s: %s", cdir, err)
+        found.sort(key=lambda path: path.stat().st_mtime if path.exists() else 0, reverse=True)
         return found
 
     def resolve_device(self, device_identifier: Any) -> Optional[Dict[str, Any]]:
@@ -293,6 +289,11 @@ class KismetInvestigationService:
 
         # Resolve time bounds
         # Resolve time bounds (Plan §5.3, §5.4)
+        if end_time not in (None, "") and parse_iso_or_epoch(end_time) is None:
+            raise ValueError("Invalid end_time; expected UTC ISO-8601 or epoch.")
+        if start_time not in (None, "") and parse_iso_or_epoch(start_time) is None:
+            raise ValueError("Invalid start_time; expected UTC ISO-8601 or epoch.")
+
         end_dt = parse_iso_or_epoch(end_time) or datetime.now(timezone.utc)
         start_dt = parse_iso_or_epoch(start_time)
         has_time_filter = True
@@ -305,13 +306,22 @@ class KismetInvestigationService:
 
         start_epoch = None
         end_epoch = None
+        start_ts = None
+        end_ts = None
         if has_time_filter and start_dt is not None:
             if start_dt >= end_dt:
                 raise ValueError("start_time must be earlier than end_time")
-            start_epoch = int(start_dt.timestamp())
-            end_epoch = int(end_dt.timestamp())
+            start_ts = start_dt.timestamp()
+            end_ts = end_dt.timestamp()
+            start_epoch = int(start_ts)
+            end_epoch = int(end_ts) + 1
 
-        limit = min(MAX_OBSERVATION_LIMIT, max(1, int(limit)))
+        try:
+            if isinstance(limit, bool):
+                raise ValueError
+            limit = min(MAX_OBSERVATION_LIMIT, max(1, int(limit)))
+        except (TypeError, ValueError):
+            raise ValueError("limit must be an integer between 1 and 2000") from None
 
         db_files = self.find_kismet_database_files()
         observations: List[Dict[str, Any]] = []
@@ -320,8 +330,10 @@ class KismetInvestigationService:
         frame_type_counts: Dict[str, int] = {}
         total_matched_packets = 0
 
-        # Query packets from Kismet databases
+        # Query packets from every configured Kismet database. The final sort is
+        # performed after merging files so rotation cannot change chronology.
         for db_path in db_files:
+            con = None
             try:
                 con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
                 cur = con.cursor()
@@ -334,7 +346,7 @@ class KismetInvestigationService:
                 """
                 params: List[Any] = [target_mac, target_mac, target_mac]
 
-                # Apply time filtering so 15m lookback does not return yesterday's packets (Plan §5.3, §5.4)
+                # Apply time filtering so lookback strictly excludes out-of-window packets
                 if has_time_filter and start_epoch is not None and end_epoch is not None:
                     query += " AND ts_sec >= ? AND ts_sec <= ?"
                     params.extend([start_epoch, end_epoch])
@@ -361,6 +373,12 @@ class KismetInvestigationService:
                         pkt_blob,
                         pkt_hash,
                     ) = row
+
+                    # Microsecond-exact boundary enforcement
+                    pkt_ts = ts_sec + (ts_usec / 1_000_000.0 if ts_usec else 0.0)
+                    if has_time_filter and start_ts is not None and end_ts is not None:
+                        if pkt_ts < start_ts or pkt_ts > end_ts:
+                            continue
 
                     # Decode 802.11 frame type from packet bytes if available
                     frame_type = "Data"
@@ -414,7 +432,9 @@ class KismetInvestigationService:
                     elif norm_dst == target_mac:
                         role = "DESTINATION"
 
-                    obs_dt = datetime.fromtimestamp(ts_sec, tz=timezone.utc)
+                    obs_dt = datetime.fromtimestamp(ts_sec, tz=timezone.utc).replace(
+                        microsecond=max(0, min(999999, int(ts_usec or 0)))
+                    )
                     channel = frequency_to_channel(frequency)
 
                     observations.append({
@@ -431,19 +451,27 @@ class KismetInvestigationService:
                         "frequency_khz": frequency,
                         "channel": channel,
                         "packet_length": packet_len,
-                        "sensor": datasource or "kismet-sensor-pilot",
+                        "sensor": datasource or "kismet-server",
+                        "source": "KISMET_SERVER",
                         "capture_file": db_path.name,
                         "packet_hash": pkt_hash,
                     })
 
-                    if len(observations) >= limit:
-                        break
-
-                con.close()
-                if len(observations) >= limit:
-                    break
             except Exception as err:
                 LOG.warning("[KISMET] Error querying %s: %s", db_path, err)
+            finally:
+                if con is not None:
+                    con.close()
+
+        observations.sort(
+            key=lambda item: (
+                item["epoch_sec"],
+                item["epoch_usec"],
+                str(item.get("packet_hash") or ""),
+            ),
+            reverse=True,
+        )
+        observations = observations[:limit]
 
         # Compute summary RF statistics
         avg_rssi = round(sum(signals) / len(signals), 1) if signals else None
@@ -453,7 +481,9 @@ class KismetInvestigationService:
         channels = sorted([frequency_to_channel(f) for f in frequencies_seen if frequency_to_channel(f)])
 
         return {
+            "status": "ok",
             "device": device,
+            "source": "KISMET_SERVER",
             "query_window": {
                 "start": start_dt.isoformat() if start_dt else "unbounded",
                 "end": end_dt.isoformat(),
@@ -470,6 +500,7 @@ class KismetInvestigationService:
                 "noise_filtered": not include_noise,
             },
             "observations": observations,
+            "capture_files_scanned": len(db_files),
         }
 
     def list_sensors(self) -> List[Dict[str, Any]]:
@@ -510,3 +541,118 @@ class KismetInvestigationService:
             except Exception as err:
                 LOG.debug("[KISMET] Sensor info error on %s: %s", db_path, err)
         return sensors
+
+    def get_sensor_health(self) -> Dict[str, Any]:
+        """Check and report health for the local server Kismet sensor (Phase 8)."""
+        process_running = False
+        kismet_pid = None
+        proc_path = Path("/proc")
+        if proc_path.exists() and proc_path.is_dir():
+            try:
+                for entry in proc_path.iterdir():
+                    if entry.name.isdigit():
+                        try:
+                            comm_path = entry / "comm"
+                            if comm_path.exists():
+                                comm = comm_path.read_text(encoding="utf-8", errors="ignore").strip()
+                                if "kismet" in comm.lower():
+                                    process_running = True
+                                    kismet_pid = int(entry.name)
+                                    break
+                        except (OSError, PermissionError):
+                            continue
+            except (OSError, PermissionError):
+                pass
+
+        mon_iface = (
+            os.getenv("KISMET_CAPTURE_INTERFACE")
+            or os.getenv("KISMET_MONITOR_INTERFACE")
+            or "wlp0s20f3mon"
+        )
+        iface_exists = Path(f"/sys/class/net/{mon_iface}").exists()
+        iface_state = "UNKNOWN"
+        if iface_exists:
+            try:
+                oper_path = Path(f"/sys/class/net/{mon_iface}/operstate")
+                if oper_path.exists():
+                    iface_state = oper_path.read_text(encoding="utf-8", errors="ignore").strip().upper()
+            except (OSError, PermissionError):
+                iface_state = "UP"
+
+        from server_components.kismet_retention import KismetRetentionManager
+        primary_dir = self.capture_dirs[0] if self.capture_dirs else None
+        retention_mgr = KismetRetentionManager(primary_dir)
+        storage_metrics = retention_mgr.get_storage_metrics()
+
+        db_files = self.find_kismet_database_files()
+        latest_db = db_files[0] if db_files else None
+        latest_packet_count = 0
+        latest_obs_dt = None
+        source_readable = False
+        if latest_db:
+            con = None
+            try:
+                con = sqlite3.connect(f"file:{latest_db}?mode=ro", uri=True)
+                cur = con.cursor()
+                cur.execute("SELECT max(ts_sec + (ts_usec / 1000000.0)), count(*) FROM packets")
+                row = cur.fetchone()
+                if row:
+                    max_ts, count = row
+                    latest_packet_count = count or 0
+                    if max_ts is not None:
+                        latest_obs_dt = datetime.fromtimestamp(float(max_ts), tz=timezone.utc).isoformat()
+                    source_readable = True
+            except Exception as err:
+                LOG.debug("[KISMET] Health query error on %s: %s", latest_db, err)
+            finally:
+                if con is not None:
+                    con.close()
+
+        stale_seconds = max(1, int(os.getenv("KISMET_HEALTH_STALE_SECONDS", "300")))
+        capture_fresh = False
+        if latest_obs_dt:
+            latest_dt = parse_iso_or_epoch(latest_obs_dt)
+            capture_fresh = bool(
+                latest_dt and (datetime.now(timezone.utc) - latest_dt).total_seconds() <= stale_seconds
+            )
+
+        storage_available = bool(storage_metrics.get("exists"))
+        if process_running and iface_exists and source_readable and storage_available and capture_fresh:
+            status = "ONLINE"
+        elif process_running or iface_exists or db_files:
+            status = "DEGRADED"
+        else:
+            status = "OFFLINE"
+
+        return {
+            "status": status,
+            "sensor": "kismet-server",
+            "source": "KISMET_SERVER",
+            "process": {
+                "running": process_running,
+                "pid": kismet_pid,
+            },
+            "interface": {
+                "name": mon_iface,
+                "exists": iface_exists,
+                "state": iface_state,
+            },
+            "source_health": {
+                "readable": source_readable,
+                "capture_fresh": capture_fresh,
+                "stale_after_seconds": stale_seconds,
+            },
+            "storage_health": {
+                "available": storage_available,
+                "free_space_ok": (
+                    storage_metrics.get("free_bytes") is None
+                    or storage_metrics.get("free_bytes", 0) >= int(os.getenv("KISMET_MIN_FREE_BYTES", "0"))
+                ),
+            },
+            "storage": storage_metrics,
+            "latest_capture": {
+                "file": latest_db.name if latest_db else None,
+                "packet_count": latest_packet_count,
+                "last_observation_time": latest_obs_dt,
+            },
+        }

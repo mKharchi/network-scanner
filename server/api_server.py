@@ -496,6 +496,10 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 return
 
             # 6d. Kismet Wireless Observations & Sensors
+            if path in {"/api/v1/sensors/wifi/health", "/api/v1/wifi/sensors/health"}:
+                self.send_data(api_service.get_wifi_sensor_health())
+                return
+
             if path in {"/api/v1/sensors/wifi", "/api/v1/wifi/sensors"}:
                 self.send_data({"items": api_service.list_wifi_sensors()})
                 return
@@ -519,7 +523,10 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     )
                     self.send_data(data)
                 except ValueError as err:
-                    self.send_error_response(404, "NOT_FOUND", str(err))
+                    if "start_time must be earlier than end_time" in str(err):
+                        self.send_error_response(400, "BAD_REQUEST", str(err))
+                    else:
+                        self.send_error_response(404, "NOT_FOUND", str(err))
                 except Exception as err:
                     self.send_error_response(500, "INTERNAL_ERROR", str(err))
                 return
@@ -1332,7 +1339,7 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
             except ValueError as exc:
                 self.send_error_response(400, "INVALID_SETTINGS", str(exc))
                 return
-            server_lib.broadcast_resource_protection_settings()
+            server_lib.broadcast_resource_protection_settings(updated)
             self.send_data(updated)
             return
 

@@ -1,10 +1,21 @@
 # Phase 8 — Server Kismet Health and Recovery
 
-**Status:** PENDING
+**Status:** IN PROGRESS — health endpoint and source-freshness checks implemented; supervisor/recovery verification remains.
 
 ## Objective
 
 Expose operational health for the externally supervised server sensor.
+
+## Current implementation evidence
+
+- `GET /api/v1/sensors/wifi/health` exposes process, interface, source-readability, capture-freshness, storage, and latest-capture fields.
+- The UI health banner displays sensor state, interface, packet count, last observation time, and low-storage warnings.
+- Focused service and REST tests pass; the real-capture runner reports health as `DEGRADED` when Kismet is stopped even though historical files remain.
+
+## Remaining work
+
+- Verify health against the approved service supervisor, adapter disappearance, storage outage, restart, and reboot scenarios.
+- Move interface/process assumptions to deployment configuration and document health thresholds.
 
 ## Requirements
 
