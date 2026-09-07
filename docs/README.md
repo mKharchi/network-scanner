@@ -2,6 +2,17 @@
 
 Welcome to the documentation for the Network Monitoring & Passive Scanner system.
 
+## Current canonical documentation
+
+Start with the [project documentation set](project/README.md). It is the
+maintained operator/developer guide for the current implementation and links
+to architecture, functionality, installation, client migration/update, testing,
+and future planning pages.
+
+The phase plans and feature folders below are retained as design history and
+implementation evidence. When an older plan conflicts with the current code,
+prefer `docs/project/`, the source files, and the test suite.
+
 ## Directory Structure
 
 ```text
