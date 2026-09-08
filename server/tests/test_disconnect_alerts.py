@@ -14,7 +14,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-
 SERVER_DIRECTORY = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SERVER_DIRECTORY))
 
@@ -75,7 +74,9 @@ class DisconnectAlertTests(unittest.TestCase):
         token = object()
         server_lib.pending_disconnect_checks[client["mac"]] = token
         server_lib.ping_client = lambda ip: True
-        server_lib.has_arp_neighbour = lambda ip: self.fail("ARP fallback should not run")
+        server_lib.has_arp_neighbour = lambda ip: self.fail(
+            "ARP fallback should not run"
+        )
         agent_alerts = []
         server_lib.create_agent_stopped_alert = lambda snapshot: (
             agent_alerts.append(snapshot) or True
@@ -93,14 +94,18 @@ class DisconnectAlertTests(unittest.TestCase):
         server_lib.ping_client = lambda ip: False
         server_lib.has_arp_neighbour = lambda ip: False
         agent_alerts = []
-        server_lib.create_agent_stopped_alert = lambda snapshot: agent_alerts.append(snapshot)
+        server_lib.create_agent_stopped_alert = lambda snapshot: agent_alerts.append(
+            snapshot
+        )
 
         server_lib.verify_client_disconnect(client["mac"], client, token)
 
         self.assertEqual(agent_alerts, [])
         self.assertNotIn(client["mac"], server_lib.pending_disconnect_checks)
 
-    def test_arp_neighbour_fallback_creates_agent_stopped_alert_when_ping_is_blocked(self):
+    def test_arp_neighbour_fallback_creates_agent_stopped_alert_when_ping_is_blocked(
+        self,
+    ):
         client = self.client()
         token = object()
         server_lib.pending_disconnect_checks[client["mac"]] = token
@@ -144,7 +149,9 @@ class DisconnectAlertTests(unittest.TestCase):
         self.assertNotIn(client["mac"], server_lib.pending_disconnect_checks)
 
     def test_reachability_ping_sends_exactly_two_packets(self):
-        with patch.object(server_lib.platform, "system", return_value="Linux"), patch.object(
+        with patch.object(
+            server_lib.platform, "system", return_value="Linux"
+        ), patch.object(
             server_lib.subprocess,
             "run",
             return_value=SimpleNamespace(returncode=0),
@@ -156,6 +163,25 @@ class DisconnectAlertTests(unittest.TestCase):
             run.call_args.kwargs["timeout"],
             (server_lib.DISCONNECT_PING_TIMEOUT_SECONDS * 2) + 1,
         )
+
+    def test_arp_neighbour_accepts_linux_state_list(self):
+        result = SimpleNamespace(
+            returncode=0,
+            stdout='[{"dst": "172.16.1.10", "lladdr": "aa:bb:cc:dd:ee:ff", "state": ["REACHABLE"]}]',
+        )
+        with patch.object(
+            server_lib.platform, "system", return_value="Linux"
+        ), patch.object(server_lib.subprocess, "run", return_value=result):
+            self.assertTrue(server_lib.has_arp_neighbour("172.16.1.10"))
+
+        result.stdout = (
+            '[{"dst": "172.16.1.10", "lladdr": "aa:bb:cc:dd:ee:ff", '
+            '"state": ["FAILED"]}]'
+        )
+        with patch.object(
+            server_lib.platform, "system", return_value="Linux"
+        ), patch.object(server_lib.subprocess, "run", return_value=result):
+            self.assertFalse(server_lib.has_arp_neighbour("172.16.1.10"))
 
 
 if __name__ == "__main__":

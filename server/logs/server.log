@@ -1,0 +1,50 @@
+[INFO] 2026-09-08 11:28:10 server_components.network_device_classification: Matched 9 registered client(s) from 463 discovered MAC address(es).
+[INFO] 2026-09-08 11:28:10 server_components.network_device_classification: Device classification completed: 9 managed, 454 unmanaged, 0 unknown.
+[INFO] 2026-09-08 11:28:10 server_components.network_device_classification: Matched 9 registered client(s) from 463 discovered MAC address(es).
+[INFO] 2026-09-08 11:28:10 server_components.network_device_classification: Device classification completed: 9 managed, 454 unmanaged, 0 unknown.
+[INFO] 2026-09-08 11:28:10 server_components.network_device_classification: Matched 9 registered client(s) from 463 discovered MAC address(es).
+[INFO] 2026-09-08 11:28:10 server_components.network_device_classification: Device classification completed: 9 managed, 454 unmanaged, 0 unknown.
+[INFO] 2026-09-08 11:28:10 server_components.network_device_classification: Matched 9 registered client(s) from 463 discovered MAC address(es).
+[INFO] 2026-09-08 11:28:10 server_components.network_device_classification: Device classification completed: 9 managed, 454 unmanaged, 0 unknown.
+[INFO] 2026-09-08 11:29:22 server_components.network_device_classification: Matched 9 registered client(s) from 463 discovered MAC address(es).
+[INFO] 2026-09-08 11:29:22 server_components.network_device_classification: Device classification completed: 9 managed, 454 unmanaged, 0 unknown.
+[INFO] 2026-09-08 11:29:22 server_components.network_device_classification: Matched 9 registered client(s) from 463 discovered MAC address(es).
+[INFO] 2026-09-08 11:29:22 server_components.network_device_classification: Device classification completed: 9 managed, 454 unmanaged, 0 unknown.
+[INFO] 2026-09-08 11:29:42 server_components.global_network_scan: Collection neighbourhood-20260908102942-bfc478aa started: eligible_clients=3 bucket_size=5 request_timeout=12.0s.
+[INFO] 2026-09-08 11:29:42 server_components.global_network_scan: Collection neighbourhood-20260908102942-bfc478aa bucket 1/1 started: clients=3.
+[INFO] 2026-09-08 11:29:42 server_components.network_device_storage: Stored 36 client neighbourhood device(s) from E4:FD:45:BB:36:81 (0 ARP, 36 DHCP source rows).
+[INFO] 2026-09-08 11:29:42 server_components.network_discovery: Network aggregation started from client neighbour reports.
+[INFO] 2026-09-08 11:29:42 server_components.network_device_storage: Stored 8 client neighbourhood device(s) from E4:FD:45:BB:33:89 (3 ARP, 5 DHCP source rows).
+[INFO] 2026-09-08 11:29:42 server_components.network_discovery: Network aggregation started from client neighbour reports.
+[INFO] 2026-09-08 11:29:42 server_components.network_device_storage: Loaded 962 recent client ARP/DHCP observation(s).
+[INFO] 2026-09-08 11:29:42 server_components.network_device_storage: Stored 23 client neighbourhood device(s) from E4:FD:45:BA:86:05 (8 ARP, 15 DHCP source rows).
+[INFO] 2026-09-08 11:29:42 server_components.network_discovery: Network aggregation started from client neighbour reports.
+[INFO] 2026-09-08 11:29:42 server_components.network_discovery: Client discovery reports merged with 463 previous device(s): 962 observation(s), 463 unique device(s).
+[INFO] 2026-09-08 11:29:42 server_components.network_device_classification: Matched 9 registered client(s) from 463 discovered MAC address(es).
+[INFO] 2026-09-08 11:29:42 server_components.network_device_classification: Device classification completed: 9 managed, 454 unmanaged, 0 unknown.
+[INFO] 2026-09-08 11:29:42 server_components.network_discovery: Network aggregation completed: 463 devices discovered
+[INFO] 2026-09-08 11:29:42 server_components.network_device_storage: Loaded 963 recent client ARP/DHCP observation(s).
+[INFO] 2026-09-08 11:29:42 server_components.network_discovery: Client discovery reports merged with 463 previous device(s): 963 observation(s), 463 unique device(s).
+[INFO] 2026-09-08 11:29:42 server_components.network_discovery: Network scan result saved to /home/adonis/network-scanner/server/storage/network_scans/network_scan_2026-09-08.json
+[INFO] 2026-09-08 11:29:42 server_components.network_device_storage: Loaded 963 recent client ARP/DHCP observation(s).
+[INFO] 2026-09-08 11:29:42 server_components.global_network_scan: Collection neighbourhood-20260908102942-bfc478aa client client-e4fd45bb3681 responded: observations=36.
+[INFO] 2026-09-08 11:29:42 server_components.network_discovery: Client discovery reports merged with 463 previous device(s): 963 observation(s), 463 unique device(s).
+[INFO] 2026-09-08 11:29:42 server_components.network_device_classification: Matched 9 registered client(s) from 463 discovered MAC address(es).
+[INFO] 2026-09-08 11:29:42 server_components.network_device_classification: Device classification completed: 9 managed, 454 unmanaged, 0 unknown.
+[INFO] 2026-09-08 11:29:42 server_components.network_discovery: Network aggregation completed: 463 devices discovered
+[INFO] 2026-09-08 11:29:42 server_components.network_device_classification: Matched 9 registered client(s) from 463 discovered MAC address(es).
+[INFO] 2026-09-08 11:29:42 server_components.network_device_classification: Device classification completed: 9 managed, 454 unmanaged, 0 unknown.
+[INFO] 2026-09-08 11:29:42 server_components.network_discovery: Network aggregation completed: 463 devices discovered
+[INFO] 2026-09-08 11:29:42 server_components.network_discovery: Network scan result saved to /home/adonis/network-scanner/server/storage/network_scans/network_scan_2026-09-08.json
+[INFO] 2026-09-08 11:29:42 server_components.global_network_scan: Collection neighbourhood-20260908102942-bfc478aa client client-e4fd45bb3389 responded: observations=8.
+[INFO] 2026-09-08 11:29:42 server_components.network_discovery: Network scan result saved to /home/adonis/network-scanner/server/storage/network_scans/network_scan_2026-09-08.json
+[INFO] 2026-09-08 11:29:43 server_components.global_network_scan: Collection neighbourhood-20260908102942-bfc478aa client client-e4fd45ba8605 responded: observations=23.
+[INFO] 2026-09-08 11:29:43 server_components.global_network_scan: Collection neighbourhood-20260908102942-bfc478aa bucket 1/1 completed.
+[INFO] 2026-09-08 11:29:43 server_components.network_discovery: Network aggregation started from client neighbour reports.
+[INFO] 2026-09-08 11:29:43 server_components.network_device_storage: Loaded 963 recent client ARP/DHCP observation(s).
+[INFO] 2026-09-08 11:29:43 server_components.network_discovery: Client discovery reports merged with 463 previous device(s): 963 observation(s), 463 unique device(s).
+[INFO] 2026-09-08 11:29:43 server_components.network_device_classification: Matched 9 registered client(s) from 463 discovered MAC address(es).
+[INFO] 2026-09-08 11:29:43 server_components.network_device_classification: Device classification completed: 9 managed, 454 unmanaged, 0 unknown.
+[INFO] 2026-09-08 11:29:43 server_components.network_discovery: Network aggregation completed: 463 devices discovered
+[INFO] 2026-09-08 11:29:43 server_components.network_discovery: Network scan result saved to /home/adonis/network-scanner/server/storage/network_scans/network_scan_2026-09-08.json
+[INFO] 2026-09-08 11:29:43 server_components.global_network_scan: Collection neighbourhood-20260908102942-bfc478aa completed: status=COMPLETED requested=3 succeeded=3 failed=0 timed_out=0 devices=463 buckets=1.

@@ -215,7 +215,9 @@ def get_forbidden_processes():
         rows = cursor.fetchall()
         for r in rows:
             r["terminate_on_detection"] = bool(r.get("terminate_on_detection", True))
-            r["resource_protection_eligible"] = bool(r.get("resource_protection_eligible", True))
+            r["resource_protection_eligible"] = bool(
+                r.get("resource_protection_eligible", True)
+            )
         return rows
     except Exception as e:
         print(f"Error fetching forbidden processes: {e}")
@@ -258,6 +260,7 @@ def broadcast_forbidden_processes():
 def get_resource_protection_settings():
     """Retrieve global resource protection configuration settings."""
     from server_components import api_service
+
     return api_service.get_resource_protection_settings()
 
 
@@ -321,9 +324,15 @@ def get_client_observation_scope(client_id):
         if conn is None:
             return []
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT observation_scope FROM clients WHERE client_id = %s", (client_id,))
+        cursor.execute(
+            "SELECT observation_scope FROM clients WHERE client_id = %s", (client_id,)
+        )
         row = cursor.fetchone()
-        raw_scope = row.get("observation_scope") if isinstance(row, dict) else (row[0] if row else None)
+        raw_scope = (
+            row.get("observation_scope")
+            if isinstance(row, dict)
+            else (row[0] if row else None)
+        )
         if not raw_scope:
             return []
         parsed = json.loads(raw_scope) if isinstance(raw_scope, str) else raw_scope
@@ -373,14 +382,19 @@ def set_client_observation_scope(client_id, observation_scope):
 def broadcast_observation_scope(client_id, observation_scope=None):
     """Push one client's validated scope to its live connection, if present."""
     scope = _normalise_observation_scope(
-        observation_scope if observation_scope is not None else get_client_observation_scope(client_id)
+        observation_scope
+        if observation_scope is not None
+        else get_client_observation_scope(client_id)
     )
     client = get_client(client_id)
     if not client or not client.get("connection") or not client.get("send_lock"):
         return {"sent": 0, "failed": 0, "observation_scope": scope}
     try:
         with client["send_lock"]:
-            send_message(client["connection"], {"type": "SCOPE_ASSIGNED", "observation_scope": scope})
+            send_message(
+                client["connection"],
+                {"type": "SCOPE_ASSIGNED", "observation_scope": scope},
+            )
         return {"sent": 1, "failed": 0, "observation_scope": scope}
     except OSError as error:
         print(f"Could not push observation scope to {client_id}: {error}")
@@ -754,10 +768,19 @@ def has_arp_neighbour(ip):
         if result.returncode != 0:
             return False
         neighbours = json.loads(result.stdout)
+
+        def is_reachable(neighbour):
+            state = neighbour.get("state")
+            if isinstance(state, list):
+                return not any(
+                    value in {"FAILED", "INCOMPLETE", "NOARP"} for value in state
+                )
+            return state not in {"FAILED", "INCOMPLETE", "NOARP"}
+
         return any(
             neighbour.get("dst") == address
             and neighbour.get("lladdr")
-            and neighbour.get("state") not in {"FAILED", "INCOMPLETE", "NOARP"}
+            and is_reachable(neighbour)
             for neighbour in neighbours
             if isinstance(neighbour, dict)
         )
@@ -829,14 +852,19 @@ def handle_client_alert(mac, alert_data):
 
     alert_type = alert_data.get("alert_type")
     if alert_type not in {"FORBIDDEN_PROCESS", "SECURITY_EVENT", "RESOURCE_PROTECTION"}:
-        print(
-            f"Rejected unsupported alert from {mac}: {alert_type!r}"
-        )
+        print(f"Rejected unsupported alert from {mac}: {alert_type!r}")
         return False
 
     # Section 23: Ordinary file activity events must not be treated/stored as alerts
-    if alert_data.get("event_type") in {"FILE_CREATED", "FILE_MODIFIED", "FILE_DELETED", "FILE_RENAMED"}:
-        print(f"Ignored alert for file activity event from {mac}: {alert_data.get('event_type')}")
+    if alert_data.get("event_type") in {
+        "FILE_CREATED",
+        "FILE_MODIFIED",
+        "FILE_DELETED",
+        "FILE_RENAMED",
+    }:
+        print(
+            f"Ignored alert for file activity event from {mac}: {alert_data.get('event_type')}"
+        )
         return False
 
     process_name = alert_data.get("process_name")
@@ -894,16 +922,27 @@ def handle_client_alert(mac, alert_data):
 
             configured_name, severity, configured_description = forbidden_process
             if severity not in ALERT_SEVERITIES:
-                print(f"Rejected alert from {mac}: invalid configured severity {severity!r}.")
+                print(
+                    f"Rejected alert from {mac}: invalid configured severity {severity!r}."
+                )
                 return False
-            title = alert_data.get("title") or f"Forbidden process detected: {configured_name}"
-            description = alert_data.get("description") or configured_description or (
-                f"Forbidden process '{configured_name}' was detected on the client."
+            title = (
+                alert_data.get("title")
+                or f"Forbidden process detected: {configured_name}"
+            )
+            description = (
+                alert_data.get("description")
+                or configured_description
+                or (
+                    f"Forbidden process '{configured_name}' was detected on the client."
+                )
             )
             stored_type = "FORBIDDEN_PROCESS"
         elif alert_type == "RESOURCE_PROTECTION":
             stored_type = "RESOURCE_PROTECTION"
-            severity = claimed_severity if claimed_severity in ALERT_SEVERITIES else "MEDIUM"
+            severity = (
+                claimed_severity if claimed_severity in ALERT_SEVERITIES else "MEDIUM"
+            )
             title = alert_data.get("title") or "Resource protection event"
             description = alert_data.get("description") or title
         else:
@@ -994,8 +1033,16 @@ def handle_package_result(mac, message):
                 (
                     target_status,
                     datetime.now(timezone.utc).replace(tzinfo=None),
-                    json.dumps(message, cls=DecimalJSONEncoder) if target_status == "SUCCESS" else None,
-                    json.dumps(message, cls=DecimalJSONEncoder) if target_status == "FAILED" else None,
+                    (
+                        json.dumps(message, cls=DecimalJSONEncoder)
+                        if target_status == "SUCCESS"
+                        else None
+                    ),
+                    (
+                        json.dumps(message, cls=DecimalJSONEncoder)
+                        if target_status == "FAILED"
+                        else None
+                    ),
                     action_id,
                     client_id or "",
                 ),
@@ -1012,7 +1059,9 @@ def handle_package_result(mac, message):
     # Broadcast update to connected GUI clients via SSE
     try:
         from server_components import event_broadcaster
-        from server_components.action_framework import summarize_action_progress_from_statuses
+        from server_components.action_framework import (
+            summarize_action_progress_from_statuses,
+        )
 
         progress = None
         progress_conn = get_connection()
@@ -1051,7 +1100,9 @@ def handle_package_result(mac, message):
 
     # Wake up the deploy thread waiting for this specific client connection
     with _PACKAGE_RESULT_LOCK:
-        waiter = _PACKAGE_RESULT_NOTIFIERS.get(_package_result_waiter_key(action_id, mac))
+        waiter = _PACKAGE_RESULT_NOTIFIERS.get(
+            _package_result_waiter_key(action_id, mac)
+        )
         if waiter:
             try:
                 waiter.put_nowait(message)
@@ -1183,7 +1234,17 @@ def update_client_db(mac, client_id, hostname, ip, os_info, client_version=None)
                 client_version_updated_at=CURRENT_TIMESTAMP,
                 updated_at=CURRENT_TIMESTAMP
         """,
-            (client_id, hostname, ip, mac, system, release, version, machine, client_version),
+            (
+                client_id,
+                hostname,
+                ip,
+                mac,
+                system,
+                release,
+                version,
+                machine,
+                client_version,
+            ),
         )
 
         conn.commit()
@@ -1462,14 +1523,24 @@ def handle_telemetry_sync(mac, payload, *, sender=None):
     """
     from server_components.telemetry_merge import merge_telemetry_delta
 
-    client = sender or get_client_by_mac(mac) or get_client_by_mac(mac, agent_role="interactive")
+    client = (
+        sender
+        or get_client_by_mac(mac)
+        or get_client_by_mac(mac, agent_role="interactive")
+    )
     sender = client
-    registered_client_id = sender.get("client_id") if sender else _client_id_for_mac(mac)
+    registered_client_id = (
+        sender.get("client_id") if sender else _client_id_for_mac(mac)
+    )
     window_id = payload.get("window_id") if isinstance(payload, dict) else None
     result = None
     reason = None
     valid = isinstance(payload, dict)
-    if valid and registered_client_id and payload.get("client_id") != registered_client_id:
+    if (
+        valid
+        and registered_client_id
+        and payload.get("client_id") != registered_client_id
+    ):
         valid = False
         reason = "Payload client_id does not match the registered connection"
         print(
@@ -1510,13 +1581,23 @@ def handle_telemetry_seed(mac, payload, *, sender=None):
     """Merge a registration-time device-only v2 inventory seed."""
     from server_components.telemetry_merge import merge_telemetry_seed
 
-    client = sender or get_client_by_mac(mac) or get_client_by_mac(mac, agent_role="interactive")
+    client = (
+        sender
+        or get_client_by_mac(mac)
+        or get_client_by_mac(mac, agent_role="interactive")
+    )
     sender = client
-    registered_client_id = sender.get("client_id") if sender else _client_id_for_mac(mac)
+    registered_client_id = (
+        sender.get("client_id") if sender else _client_id_for_mac(mac)
+    )
     valid = isinstance(payload, dict)
     result = None
     reason = None
-    if valid and registered_client_id and payload.get("client_id") != registered_client_id:
+    if (
+        valid
+        and registered_client_id
+        and payload.get("client_id") != registered_client_id
+    ):
         valid = False
         reason = "Payload client_id does not match the registered connection"
         print(
@@ -1829,7 +1910,9 @@ def receive_client_messages(mac, conn, *, agent_role="service"):
                     send_message(conn, {"type": "FORBIDDEN_PROCESSES", "data": fb_list})
                 elif command == "GET_RESOURCE_PROTECTION":
                     rp_config = get_resource_protection_settings()
-                    send_message(conn, {"type": "RESOURCE_PROTECTION_CONFIG", "data": rp_config})
+                    send_message(
+                        conn, {"type": "RESOURCE_PROTECTION_CONFIG", "data": rp_config}
+                    )
             elif message_type == "RESPONSE":
                 client = get_client_by_mac(mac, agent_role=agent_role)
                 if client and client["connection"] is conn:
@@ -2091,7 +2174,9 @@ def request_client_screenshot(client_id, *, timeout=None, requested_by=None):
     )
     if result.get("status") != "ok":
         message = result.get("message", "Screenshot request failed.")
-        status = "client_timeout" if "timed out" in message.lower() else "client_unavailable"
+        status = (
+            "client_timeout" if "timed out" in message.lower() else "client_unavailable"
+        )
         return {
             "status": status,
             "client_id": client_id,
@@ -2104,7 +2189,11 @@ def request_client_screenshot(client_id, *, timeout=None, requested_by=None):
         return {
             "status": "client_error",
             "client_id": client_id,
-            "message": data.get("message", "Client could not capture a screenshot.") if isinstance(data, dict) else "Client returned an invalid screenshot response.",
+            "message": (
+                data.get("message", "Client could not capture a screenshot.")
+                if isinstance(data, dict)
+                else "Client returned an invalid screenshot response."
+            ),
         }
 
     try:
@@ -2113,7 +2202,11 @@ def request_client_screenshot(client_id, *, timeout=None, requested_by=None):
         metadata = store_screenshot(client_id, data)
         _persist_screenshot_metadata(client_id, metadata, requested_by=requested_by)
     except Exception as error:
-        return {"status": "storage_error", "client_id": client_id, "message": str(error)}
+        return {
+            "status": "storage_error",
+            "client_id": client_id,
+            "message": str(error),
+        }
 
     return {
         "status": "completed",
@@ -2197,9 +2290,18 @@ def request_client_telemetry_flows(client_id, device_mac, window_id, *, timeout=
     if result.get("status") != "ok":
         message = result.get("message", "Client flow query failed.")
         if "timed out" in message.lower():
-            return {"status": "client_timeout", "client_id": client_id, "timeout_seconds": timeout, "message": message}
+            return {
+                "status": "client_timeout",
+                "client_id": client_id,
+                "timeout_seconds": timeout,
+                "message": message,
+            }
         if "not connected" in message.lower():
-            return {"status": "client_unavailable", "client_id": client_id, "message": message}
+            return {
+                "status": "client_unavailable",
+                "client_id": client_id,
+                "message": message,
+            }
         return {"status": "client_error", "client_id": client_id, "message": message}
 
     data = result.get("data")
@@ -2209,7 +2311,11 @@ def request_client_telemetry_flows(client_id, device_mac, window_id, *, timeout=
         or data.get("window_id") != window_id
         or not isinstance(data.get("flows"), list)
     ):
-        return {"status": "client_error", "client_id": client_id, "message": "Client returned an invalid flow response."}
+        return {
+            "status": "client_error",
+            "client_id": client_id,
+            "message": "Client returned an invalid flow response.",
+        }
     return {
         "status": "completed",
         "client_id": client_id,
@@ -2281,19 +2387,20 @@ def request_client_passive_neighbourhood(client_id, *, timeout=None):
     from .passive_neighbourhood_storage import (
         append_passive_neighbourhood_snapshot,
     )
+
     try:
         storage_path = append_passive_neighbourhood_snapshot(
-        client_id=client_id,
-        reporter=data["reporter"],
-        observed_at=data["observed_at"],
-        observations=observations,
-    )
+            client_id=client_id,
+            reporter=data["reporter"],
+            observed_at=data["observed_at"],
+            observations=observations,
+        )
     except Exception:
         return {
-                    "status": "storage_error",
-                    "client_id": client_id,
-                    "message": "Failed to store passive neighbourhood snapshot.",
-                }
+            "status": "storage_error",
+            "client_id": client_id,
+            "message": "Failed to store passive neighbourhood snapshot.",
+        }
         storage_path = None
     return {
         "status": "completed",
@@ -2306,7 +2413,12 @@ def request_client_passive_neighbourhood(client_id, *, timeout=None):
     }
 
 
-def quarantine_client(client_id, reason="Administrator requested network quarantine", duration_minutes=60, timeout=10.0):
+def quarantine_client(
+    client_id,
+    reason="Administrator requested network quarantine",
+    duration_minutes=60,
+    timeout=10.0,
+):
     """Dispatch QUARANTINE_CLIENT over the existing management connection."""
     cmd_id = f"cmd-quarantine-{int(time.time() * 1000)}"
     client = get_client(client_id)
@@ -2321,7 +2433,9 @@ def quarantine_client(client_id, reason="Administrator requested network quarant
         "duration_minutes": duration_minutes,
         "command_id": cmd_id,
     }
-    result = execute_client_command(client_id, "QUARANTINE_CLIENT", args=args, timeout=timeout)
+    result = execute_client_command(
+        client_id, "QUARANTINE_CLIENT", args=args, timeout=timeout
+    )
     if result.get("status") == "ok":
         with clients_lock:
             client_quarantine_status[client_id] = {
@@ -2343,7 +2457,9 @@ def quarantine_client(client_id, reason="Administrator requested network quarant
     return result
 
 
-def release_client_quarantine(client_id, reason="Administrator released network quarantine", timeout=10.0):
+def release_client_quarantine(
+    client_id, reason="Administrator released network quarantine", timeout=10.0
+):
     """Dispatch RELEASE_CLIENT over the existing management connection."""
     cmd_id = f"cmd-release-{int(time.time() * 1000)}"
     client = get_client(client_id)
@@ -2356,7 +2472,9 @@ def release_client_quarantine(client_id, reason="Administrator released network 
         "reason": reason,
         "command_id": cmd_id,
     }
-    result = execute_client_command(client_id, "RELEASE_CLIENT", args=args, timeout=timeout)
+    result = execute_client_command(
+        client_id, "RELEASE_CLIENT", args=args, timeout=timeout
+    )
     if result.get("status") == "ok":
         with clients_lock:
             client_quarantine_status.pop(client_id, None)
@@ -2395,7 +2513,10 @@ def isolate_client(
     with clients_lock:
         current_client = clients.get(client["mac"])
         if current_client is not client:
-            return {"status": "error", "message": f"Client '{client_id}' is not connected."}
+            return {
+                "status": "error",
+                "message": f"Client '{client_id}' is not connected.",
+            }
         client["disconnect_expected"] = True
         client["disconnect_reason"] = "DEVICE_ISOLATION"
         device_isolation_status[client_id] = {
@@ -2460,7 +2581,10 @@ def get_device_isolation_status(client_id):
             return {"status": "ok", "data": status.copy()}
     return {
         "status": "ok",
-        "data": {"status": "NOT_REQUESTED", "client_connected": get_client(client_id) is not None},
+        "data": {
+            "status": "NOT_REQUESTED",
+            "client_connected": get_client(client_id) is not None,
+        },
     }
 
 

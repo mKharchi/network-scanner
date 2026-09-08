@@ -40,7 +40,6 @@ docs/
 └── passive protocol listener/
     ├── next-step-plan.md                                      # Multi-phase unified passive discovery engine plan
     ├── observation-contract.md                                # Passive observation schema & deduplication rules
-    ├── original-implementation-plan.md                        # Original protocol listener plan
     ├── plan.md                                                # Tactical protocol implementation plan
     ├── progress.md                                            # Progress updates for passive scanner phases
     ├── protocol-support.md                                    # Protocol research (mDNS, SSDP, LLMNR, NBNS, DHCP)
@@ -51,7 +50,7 @@ docs/
 
 ## Key Modules & Guides
 
-* **[Unified Passive Discovery Scanner](passive%20protocol%20listener/unified-passive-discovery-implementation.md)**: Full architecture and implementation details for multi-protocol passive discovery (DHCP, mDNS, SSDP, LLMNR, NBNS) and unified device correlation.
-* **[Passive Observation Contract](passive%20protocol%20listener/observation-contract.md)**: Standard observation schema, priority hierarchies, and bounds.
-* **[GUI Design System & Contracts](gui/)**: Specifications for the React/Vite dashboard, components, and real-time SSE stream.
-* **[Global Neighbourhood Collection](neighborhood%20collect%20orchestration/)**: Multi-client orchestration, rate limiting, and merge algorithms.
+- **[Unified Passive Discovery Scanner](passive%20protocol%20listener/unified-passive-discovery-implementation.md)**: Full architecture and implementation details for multi-protocol passive discovery (DHCP, mDNS, SSDP, LLMNR, NBNS) and unified device correlation.
+- **[Passive Observation Contract](passive%20protocol%20listener/observation-contract.md)**: Standard observation schema, priority hierarchies, and bounds.
+- **[GUI Design System & Contracts](gui/)**: Specifications for the React/Vite dashboard, components, and real-time SSE stream.
+- **[Global Neighbourhood Collection](neighborhood%20collect%20orchestration/)**: Multi-client orchestration, rate limiting, and merge algorithms.

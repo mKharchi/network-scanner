@@ -110,7 +110,9 @@ def get_client_version() -> str:
 
 def send_pending_update_results(connection) -> int:
     """Report durable updater results after the client reconnects."""
-    results_dir = Path(__file__).resolve().parent.parent / "storage" / "updates" / "results"
+    results_dir = (
+        Path(__file__).resolve().parent.parent / "storage" / "updates" / "results"
+    )
     if not results_dir.is_dir():
         return 0
 
@@ -134,8 +136,6 @@ def send_pending_update_results(connection) -> int:
         except (OSError, ValueError, TypeError):
             continue
     return sent
-
-
 
 
 def get_system_info(ip_address=None):
@@ -287,12 +287,26 @@ def get_disk_info():
 # ============================================================
 
 
+def _normalize_process_cpu_percent(value):
+    """Convert psutil's multi-core process percentage to a 0-100 scale."""
+    if not isinstance(value, (int, float)):
+        return value
+
+    logical_cpu_count = psutil.cpu_count() or 1
+    return max(0.0, min(100.0, value / logical_cpu_count))
+
+
 def get_processes():
     processes = []
-    for process in psutil.process_iter(["pid", "name", "username", "status"]):
+    for process in psutil.process_iter(
+        ["pid", "name", "username", "status", "cpu_percent", "memory_percent"]
+    ):
         try:
             if process.info["status"] == psutil.STATUS_ZOMBIE:
                 continue
+            process.info["cpu_percent"] = _normalize_process_cpu_percent(
+                process.info.get("cpu_percent")
+            )
             processes.append(process.info)
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
@@ -1014,19 +1028,36 @@ def _handle_power_action(message, *, action_type, **_context):
     try:
         delay = max(1, min(int(args.get("delay_seconds", 5)), 60))
     except (TypeError, ValueError):
-        return {"status": "error", "message": "delay_seconds must be an integer between 1 and 60."}
+        return {
+            "status": "error",
+            "message": "delay_seconds must be an integer between 1 and 60.",
+        }
 
     system = platform.system()
     if system == "Windows":
-        command = ["shutdown", "/s" if action_type == ActionType.SHUTDOWN.value else "/r", "/t", str(delay)]
+        command = [
+            "shutdown",
+            "/s" if action_type == ActionType.SHUTDOWN.value else "/r",
+            "/t",
+            str(delay),
+        ]
     elif system in {"Linux", "Darwin"}:
-        command = ["shutdown", "-h" if action_type == ActionType.SHUTDOWN.value else "-r", f"+{max(1, delay // 60)}"]
+        command = [
+            "shutdown",
+            "-h" if action_type == ActionType.SHUTDOWN.value else "-r",
+            f"+{max(1, delay // 60)}",
+        ]
     else:
-        return {"status": "error", "message": f"Power actions are not supported on {system}."}
+        return {
+            "status": "error",
+            "message": f"Power actions are not supported on {system}.",
+        }
 
     def run_power_command():
         try:
-            subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.Popen(
+                command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
         except (OSError, ValueError) as error:
             print(f"[ACTION] Could not schedule {action_type}: {error}")
 
@@ -1042,11 +1073,15 @@ def _handle_power_action(message, *, action_type, **_context):
 
 
 def _handle_shutdown(message, **context):
-    return _handle_power_action(message, action_type=ActionType.SHUTDOWN.value, **context)
+    return _handle_power_action(
+        message, action_type=ActionType.SHUTDOWN.value, **context
+    )
 
 
 def _handle_restart(message, **context):
-    return _handle_power_action(message, action_type=ActionType.RESTART.value, **context)
+    return _handle_power_action(
+        message, action_type=ActionType.RESTART.value, **context
+    )
 
 
 def _handle_refresh_health(_message, **_context):
@@ -1075,9 +1110,15 @@ def _handle_collect_diagnostics(_message, **_context):
 
 def _handle_update_location(message, **_context):
     location = message.get("args")
-    if not isinstance(location, dict) or not location.get("id") or not location.get("label"):
+    if (
+        not isinstance(location, dict)
+        or not location.get("id")
+        or not location.get("label")
+    ):
         return {"status": "error", "message": "A valid location object is required."}
-    location_path = Path(__file__).resolve().parent.parent / "storage" / "client_location.json"
+    location_path = (
+        Path(__file__).resolve().parent.parent / "storage" / "client_location.json"
+    )
     temporary_path = f"{location_path}.tmp"
     try:
         with open(temporary_path, "w", encoding="utf-8") as location_file:
@@ -1147,18 +1188,25 @@ def _handle_isolate_device(message, *, network_state_manager=None, **_context):
     return {"status": "error", "message": "Network state manager is not initialized"}
 
 
-def _handle_get_device_isolation_status(_message, *, network_state_manager=None, **_context):
+def _handle_get_device_isolation_status(
+    _message, *, network_state_manager=None, **_context
+):
     if network_state_manager:
         return {"status": "ok", "data": network_state_manager.get_lifecycle_state()}
     return {"status": "error", "message": "Network state manager is not initialized"}
 
 
-def _handle_update_forbidden_process_policy(message, *, process_monitor=None, **_context):
+def _handle_update_forbidden_process_policy(
+    message, *, process_monitor=None, **_context
+):
     rules = message.get("args", [])
     if process_monitor and isinstance(rules, list):
         process_monitor.set_rules(rules)
         return {"status": "ok", "rules_loaded": len(rules)}
-    return {"status": "error", "message": "Process monitor not initialized or invalid rules format"}
+    return {
+        "status": "error",
+        "message": "Process monitor not initialized or invalid rules format",
+    }
 
 
 def _handle_ping(_message, **_context):
@@ -1344,10 +1392,15 @@ def _safe_file_name(value: Any, fallback: str) -> str:
 def _handle_deploy_package_init(message, **_context):
     args = message.get("args") if isinstance(message.get("args"), dict) else {}
     action_id = message.get("action_id") or args.get("action_id")
-    package_id = _safe_file_name(args.get("package_id") or action_id, str(action_id or "package"))
+    package_id = _safe_file_name(
+        args.get("package_id") or action_id, str(action_id or "package")
+    )
     operation = str(args.get("operation") or "DEPLOY_PACKAGE").strip().upper()
     if operation not in {"DEPLOY_PACKAGE", "SEND_FILE", "UPDATE_CLIENT"}:
-        return {"status": "error", "message": f"Unsupported package operation: {operation}"}
+        return {
+            "status": "error",
+            "message": f"Unsupported package operation: {operation}",
+        }
     sha256 = args.get("sha256")
     total_size = args.get("total_size", 0)
     chunk_size = args.get("chunk_size", 131072)
@@ -1435,7 +1488,11 @@ def _handle_deploy_package_init(message, **_context):
 def process_package_chunk(message):
     """Process an incoming PACKAGE_CHUNK frame, write directly to disk, and extract safely."""
     if not isinstance(message, dict):
-        return {"type": "PACKAGE_RESULT", "status": "FAILED", "error": "Invalid message format"}
+        return {
+            "type": "PACKAGE_RESULT",
+            "status": "FAILED",
+            "error": "Invalid message format",
+        }
 
     action_id = message.get("action_id")
     seq = message.get("seq")
@@ -1487,8 +1544,12 @@ def process_package_chunk(message):
                         # Spawn the updater subprocess in the background
                         # Get client_root from the final_path (which is storage/updates/incoming)
                         # Navigate: pkg.zip -> incoming -> updates -> storage -> client
-                        client_root = final_path.parent.parent.parent.parent  # Go up 4 levels to client root
-                        spawn_result = _spawn_updater_subprocess(final_path, client_root, action_id)
+                        client_root = (
+                            final_path.parent.parent.parent.parent
+                        )  # Go up 4 levels to client root
+                        spawn_result = _spawn_updater_subprocess(
+                            final_path, client_root, action_id
+                        )
                         result["updater_spawn_status"] = spawn_result.get("status")
                         if spawn_result.get("status") == "ok":
                             result["updater_pid"] = spawn_result.get("updater_pid")
@@ -1508,12 +1569,17 @@ def process_package_chunk(message):
                         }
 
                     # Deploy packages are extracted into staging and atomically swapped.
-                    staging_extract_dir = _package_state()["staging"] / f"{package_id}_{uuid.uuid4().hex[:8]}"
+                    staging_extract_dir = (
+                        _package_state()["staging"]
+                        / f"{package_id}_{uuid.uuid4().hex[:8]}"
+                    )
                     shutil.rmtree(staging_extract_dir, ignore_errors=True)
                     staging_extract_dir.mkdir(parents=True, exist_ok=True)
                     try:
                         safe_extract(final_path, staging_extract_dir)
-                        atomic_swap_directory(staging_extract_dir, _package_state()["current"])
+                        atomic_swap_directory(
+                            staging_extract_dir, _package_state()["current"]
+                        )
                         return {
                             "type": "PACKAGE_RESULT",
                             "action_id": action_id,
@@ -1573,30 +1639,30 @@ def _spawn_updater_subprocess(
     action_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Spawn the updater as a subprocess to apply a staged package.
-    
+
     This runs asynchronously; the subprocess continues even if the main client
     exits or is stopped. Returns immediately with status 'UPDATER_SPAWNED' or an error.
     """
     import subprocess
     import sys
-    
+
     try:
         staged_path = Path(staged_package_path).resolve()
         client_root_path = Path(client_root).resolve()
         updater_path = client_root_path / "updater" / "updater.py"
-        
+
         if not staged_path.is_file():
             return {
                 "status": "error",
                 "message": f"Staged package not found: {staged_path}",
             }
-        
+
         if not updater_path.is_file():
             return {
                 "status": "error",
                 "message": f"Updater not found: {updater_path}",
             }
-        
+
         # Use subprocess.Popen to spawn the updater in the background.
         # The updater will handle stopping the client, replacing app/, and restarting.
         # We pass the staged package path and client_root as arguments.
@@ -1607,13 +1673,13 @@ def _spawn_updater_subprocess(
                 str(updater_path),
                 str(staged_path),
                 str(client_root_path),
-                *( [str(action_id)] if action_id else [] ),
+                *([str(action_id)] if action_id else []),
             ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True,  # Detach from parent on Unix; on Windows this is ignored
         )
-        
+
         return {
             "status": "ok",
             "message": "Updater spawned successfully",
@@ -1638,11 +1704,15 @@ ACTION_MANAGER.register(ActionType.START_PROCESS.value, _handle_start_process)
 ACTION_MANAGER.register(ActionType.SHUTDOWN.value, _handle_shutdown)
 ACTION_MANAGER.register(ActionType.RESTART.value, _handle_restart)
 ACTION_MANAGER.register(ActionType.REFRESH_HEALTH.value, _handle_refresh_health)
-ACTION_MANAGER.register(ActionType.COLLECT_DIAGNOSTICS.value, _handle_collect_diagnostics)
+ACTION_MANAGER.register(
+    ActionType.COLLECT_DIAGNOSTICS.value, _handle_collect_diagnostics
+)
 ACTION_MANAGER.register(ActionType.GET_ACTIVITY_LOG.value, _handle_get_activity_log)
 ACTION_MANAGER.register(ActionType.QUARANTINE_CLIENT.value, _handle_quarantine_client)
 ACTION_MANAGER.register(ActionType.RELEASE_CLIENT.value, _handle_release_client)
-ACTION_MANAGER.register(ActionType.GET_QUARANTINE_STATUS.value, _handle_get_quarantine_status)
+ACTION_MANAGER.register(
+    ActionType.GET_QUARANTINE_STATUS.value, _handle_get_quarantine_status
+)
 ACTION_MANAGER.register(ActionType.ISOLATE_DEVICE.value, _handle_isolate_device)
 ACTION_MANAGER.register(
     ActionType.GET_DEVICE_ISOLATION_STATUS.value,
@@ -1703,7 +1773,9 @@ def handle_command(
 
 def load_client_location():
     """Load the last server-assigned physical location, if one is cached."""
-    location_path = Path(__file__).resolve().parent.parent / "storage" / "client_location.json"
+    location_path = (
+        Path(__file__).resolve().parent.parent / "storage" / "client_location.json"
+    )
     try:
         with open(location_path, "r", encoding="utf-8") as location_file:
             location = json.load(location_file)
