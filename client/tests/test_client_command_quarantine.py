@@ -5,11 +5,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-
 CLIENT_DIRECTORY = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(CLIENT_DIRECTORY))
 
-from client_lib import handle_command  # noqa: E402
+from client_lib import get_processes, handle_command  # noqa: E402
 
 
 class ClientCommandQuarantineTests(unittest.TestCase):
@@ -85,7 +84,9 @@ class ClientCommandQuarantineTests(unittest.TestCase):
             "status": "ok",
             "state": "ISOLATED",
         }
-        self.network_state_manager.get_lifecycle_state.return_value = {"state": "ISOLATED"}
+        self.network_state_manager.get_lifecycle_state.return_value = {
+            "state": "ISOLATED"
+        }
 
         isolate = handle_command(
             {"command": "ISOLATE_DEVICE", "args": {"reason": "Security response"}},
@@ -101,6 +102,46 @@ class ClientCommandQuarantineTests(unittest.TestCase):
         self.network_state_manager.isolate_static_ip.assert_called_once_with(
             reason="Security response", enabled=True
         )
+
+    @patch("client_lib.psutil.cpu_count", return_value=1)
+    def test_get_processes_includes_cpu_and_memory_usage(self, _cpu_count):
+        process = MagicMock()
+        process.info = {
+            "pid": 123,
+            "name": "worker.exe",
+            "username": "adonis",
+            "status": "running",
+            "cpu_percent": 12.5,
+            "memory_percent": 3.75,
+        }
+
+        with patch(
+            "client_lib.psutil.process_iter", return_value=[process]
+        ) as process_iter:
+            result = get_processes()
+
+        self.assertEqual(result[0]["cpu_percent"], 12.5)
+        self.assertEqual(result[0]["memory_percent"], 3.75)
+        process_iter.assert_called_once_with(
+            ["pid", "name", "username", "status", "cpu_percent", "memory_percent"]
+        )
+
+    @patch("client_lib.psutil.cpu_count", return_value=8)
+    def test_get_processes_normalizes_multi_core_cpu_percent(self, _cpu_count):
+        process = MagicMock()
+        process.info = {
+            "pid": 4,
+            "name": "System Idle Process",
+            "username": "NT AUTHORITY\\SYSTEM",
+            "status": "running",
+            "cpu_percent": 1119.6,
+            "memory_percent": 0.1,
+        }
+
+        with patch("client_lib.psutil.process_iter", return_value=[process]):
+            result = get_processes()
+
+        self.assertEqual(result[0]["cpu_percent"], 100.0)
 
     def test_device_isolation_fails_cleanly_without_a_manager(self):
         result = handle_command({"command": "ISOLATE_DEVICE"})
@@ -128,7 +169,9 @@ class ClientCommandQuarantineTests(unittest.TestCase):
     @patch("client_lib.psutil.cpu_percent", return_value=12.5)
     @patch("client_lib.psutil.virtual_memory")
     @patch("client_lib.psutil.disk_usage")
-    def test_refresh_health_returns_standard_health_snapshot(self, disk_usage, virtual_memory, cpu_percent):
+    def test_refresh_health_returns_standard_health_snapshot(
+        self, disk_usage, virtual_memory, cpu_percent
+    ):
         virtual_memory.return_value.percent = 34.0
         disk_usage.return_value.percent = 45.0
 
@@ -143,10 +186,20 @@ class ClientCommandQuarantineTests(unittest.TestCase):
     @patch("client_lib.psutil.cpu_percent", return_value=12.5)
     @patch("client_lib.psutil.virtual_memory")
     @patch("client_lib.psutil.disk_usage")
-    def test_refresh_health_includes_cached_location_in_telemetry(self, disk_usage, virtual_memory, cpu_percent):
+    def test_refresh_health_includes_cached_location_in_telemetry(
+        self, disk_usage, virtual_memory, cpu_percent
+    ):
         virtual_memory.return_value.percent = 34.0
         disk_usage.return_value.percent = 45.0
-        location = {"id": 4, "floor": 1, "aisle": 2, "table": 1, "row": 2, "position": 4, "label": "F1-A2-T1-R2-P4"}
+        location = {
+            "id": 4,
+            "floor": 1,
+            "aisle": 2,
+            "table": 1,
+            "row": 2,
+            "position": 4,
+            "label": "F1-A2-T1-R2-P4",
+        }
 
         with patch("client_lib.load_client_location", return_value=location):
             result = handle_command({"command": "REFRESH_HEALTH"})

@@ -14,13 +14,17 @@ import socket
 import subprocess
 import xml.etree.ElementTree as element_tree
 from datetime import datetime, timezone
+from pathlib import Path
+from logging.handlers import RotatingFileHandler
 
-from server_components.network_scan_storage import load_latest_network_scan, store_network_scan
+from server_components.network_scan_storage import (
+    load_latest_network_scan,
+    store_network_scan,
+)
 from server_components.network_device_classification import classify_devices
 from server_components.network_device_storage import (
     get_recent_client_neighbour_observations,
 )
-
 
 LOGGER = logging.getLogger(__name__)
 DEFAULT_OUI_DATABASE = "/usr/share/arp-scan/ieee-oui.txt"
@@ -37,12 +41,43 @@ def configure_logging():
     """Make discovery logs visible in both server and standalone execution."""
     level_name = os.getenv("LOG_LEVEL", "INFO").upper()
     level = getattr(logging, level_name, logging.INFO)
+    log_dir = Path(__file__).resolve().parents[1] / "storage" / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / "server.log"
+    handlers = [logging.StreamHandler()]
+    try:
+        handlers.append(
+            RotatingFileHandler(
+                log_file,
+                maxBytes=10 * 1024 * 1024,
+                backupCount=5,
+                encoding="utf-8",
+            )
+        )
+    except OSError:
+        fallback_log_dir = Path(__file__).resolve().parents[1] / "logs"
+        fallback_log_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            handlers.append(
+                RotatingFileHandler(
+                    fallback_log_dir / "server.log",
+                    maxBytes=10 * 1024 * 1024,
+                    backupCount=5,
+                    encoding="utf-8",
+                )
+            )
+            log_file = fallback_log_dir / "server.log"
+        except OSError:
+            pass
     logging.basicConfig(
         level=level,
         format="[%(levelname)s] %(asctime)s %(name)s: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
+        handlers=handlers,
     )
     logging.getLogger().setLevel(level)
+    if len(handlers) == 1:
+        LOGGER.warning("Server log file is not writable: %s", log_file)
 
 
 def _read_timeout():
@@ -69,7 +104,9 @@ def _run_ip_command(arguments):
             check=False,
         )
     except FileNotFoundError as error:
-        raise NetworkDiscoveryError("The Linux 'ip' command is not available.") from error
+        raise NetworkDiscoveryError(
+            "The Linux 'ip' command is not available."
+        ) from error
     except subprocess.TimeoutExpired as error:
         raise NetworkDiscoveryError(
             "Timed out while reading the local network configuration."
@@ -143,9 +180,7 @@ def get_local_network():
     local_ip = ipv4_address.get("local")
     prefix_length = ipv4_address.get("prefixlen")
     try:
-        detected_network = ipaddress.ip_interface(
-            f"{local_ip}/{prefix_length}"
-        ).network
+        detected_network = ipaddress.ip_interface(f"{local_ip}/{prefix_length}").network
     except ValueError as error:
         raise NetworkDiscoveryError(
             f"Interface {interface!r} has an invalid IPv4 configuration."
@@ -253,7 +288,7 @@ def _normalise_mac_address(mac_address):
     compact = mac_address.replace(":", "").replace("-", "").upper()
     if len(compact) != 12 or any(char not in "0123456789ABCDEF" for char in compact):
         return None
-    return ":".join(compact[index:index + 2] for index in range(0, 12, 2))
+    return ":".join(compact[index : index + 2] for index in range(0, 12, 2))
 
 
 def _arp_discover(network, interface, timeout_seconds):
@@ -355,7 +390,7 @@ def get_os_detection_targets():
             continue
         if address.version == 4 and str(address) not in targets:
             targets.append(str(address))
-    return targets[:_read_os_target_limit()]
+    return targets[: _read_os_target_limit()]
 
 
 def _empty_os_result():
@@ -645,7 +680,6 @@ def merge_discovery_sources(
     return list(devices_by_mac.values())
 
 
-
 def _persist_scan_devices_to_database(devices):
     """Upsert scan-discovered devices into ``network_devices`` and observations.
 
@@ -764,9 +798,7 @@ def merge_and_persist_client_neighbourhood(*, context_overrides=None):
 
 def run_manual_scan(*, context_overrides=None):
     """Compatibility alias for client-neighbourhood merge and persistence."""
-    return merge_and_persist_client_neighbourhood(
-        context_overrides=context_overrides
-    )
+    return merge_and_persist_client_neighbourhood(context_overrides=context_overrides)
 
 
 def run_active_scan():
@@ -784,7 +816,9 @@ def run_active_scan():
     try:
         server_devices = discover_devices()
     except Exception as error:
-        LOGGER.warning("Server ARP discovery failed, proceeding with empty server list: %s", error)
+        LOGGER.warning(
+            "Server ARP discovery failed, proceeding with empty server list: %s", error
+        )
         server_devices = []
 
     # 2. Merge with recent client neighbour observations
@@ -888,15 +922,21 @@ def run_global_neighbourhood_storage_flush():
             process_network_scan=False,
         )
         data = response.get("data") if isinstance(response.get("data"), dict) else {}
-        status = "ok" if response.get("status") == "ok" and data.get("status") == "ok" else "error"
-        client_results.append({
-            "client_id": client_id,
-            "hostname": client.get("hostname"),
-            "mac": client.get("mac"),
-            "status": status,
-            "deleted_count": data.get("deleted_count"),
-            "message": response.get("message"),
-        })
+        status = (
+            "ok"
+            if response.get("status") == "ok" and data.get("status") == "ok"
+            else "error"
+        )
+        client_results.append(
+            {
+                "client_id": client_id,
+                "hostname": client.get("hostname"),
+                "mac": client.get("mac"),
+                "status": status,
+                "deleted_count": data.get("deleted_count"),
+                "message": response.get("message"),
+            }
+        )
 
     server_flush = flush_network_scan_storage()
     succeeded = sum(1 for item in client_results if item.get("status") == "ok")
