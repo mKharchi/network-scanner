@@ -362,13 +362,19 @@ class KismetMLExtractor:
     each accepted capture so a dataset can prove the local schema it used.
     """
 
-    def __init__(self, capture_files: Iterable[Path | str]):
+    def __init__(self, capture_files: Iterable[Path | str], *, max_observations: Optional[int] = None):
         self.capture_files = [Path(item) for item in capture_files]
+        if max_observations is not None and max_observations <= 0:
+            raise ValueError("max_observations must be positive")
+        self.max_observations = max_observations
         self.schema_reports: List[KismetSchemaReport] = []
         self.rejected_captures: Dict[str, str] = {}
 
     def iter_structured_observations(self) -> Iterator[StructuredObservation]:
+        remaining = self.max_observations
         for capture_file in self.capture_files:
+            if remaining is not None and remaining <= 0:
+                return
             try:
                 report = inspect_kismet_schema(capture_file)
             except (OSError, sqlite3.DatabaseError) as error:
@@ -380,25 +386,46 @@ class KismetMLExtractor:
                     "missing packet columns: " + ", ".join(report.missing_packet_columns)
                 )
                 continue
-            yield from self._read_capture(capture_file)
+            for observation in self._read_capture(capture_file, limit=remaining):
+                yield observation
+                if remaining is not None:
+                    remaining -= 1
+                    if remaining <= 0:
+                        return
 
-    def _read_capture(self, capture_file: Path) -> Iterator[StructuredObservation]:
+    def _read_capture(self, capture_file: Path, *, limit: Optional[int] = None) -> Iterator[StructuredObservation]:
         con: Optional[sqlite3.Connection] = None
         try:
             con = sqlite3.connect(f"file:{capture_file}?mode=ro", uri=True)
             con.row_factory = sqlite3.Row
             packet_columns = {str(row[1]) for row in con.execute("PRAGMA table_info(packets)")}
             hash_column = "hash" if "hash" in packet_columns else None
-            query = """
-                SELECT ts_sec, ts_usec, sourcemac, destmac, transmac, frequency,
-                       signal, packet_len, dlt, packet%s
-                FROM packets
-                ORDER BY ts_sec ASC, ts_usec ASC%s
-            """ % (
-                ", hash" if hash_column else "",
-                ", hash ASC" if hash_column else "",
-            )
-            for row in con.execute(query):
+            if limit is not None:
+                # Select lightweight row IDs first.  Sorting packet BLOBs in
+                # SQLite before applying LIMIT can consume hundreds of MB on
+                # active captures.
+                query = """
+                    SELECT p.rowid AS _kismet_rowid, p.ts_sec, p.ts_usec,
+                           p.sourcemac, p.destmac, p.transmac, p.frequency,
+                           p.signal, p.packet_len, p.dlt, p.packet%s
+                    FROM packets AS p
+                    INNER JOIN (
+                        SELECT rowid FROM packets
+                        ORDER BY ts_sec DESC, ts_usec DESC, rowid DESC
+                        LIMIT ?
+                    ) AS recent ON recent.rowid = p.rowid
+                """ % (", p.hash" if hash_column else "")
+                cursor = con.execute(query, (limit,))
+            else:
+                query = """
+                    SELECT rowid AS _kismet_rowid, ts_sec, ts_usec, sourcemac,
+                           destmac, transmac, frequency, signal, packet_len,
+                           dlt, packet%s
+                    FROM packets
+                    ORDER BY ts_sec ASC, ts_usec ASC, rowid ASC
+                """ % (", hash" if hash_column else "")
+                cursor = con.execute(query)
+            for row in cursor:
                 parsed = parse_80211_packet(
                     row["packet"], dlt=row["dlt"], source_mac=row["sourcemac"],
                     destination_mac=row["destmac"], transmitter_mac=row["transmac"],
@@ -414,7 +441,7 @@ class KismetMLExtractor:
                 # digest supplies deterministic identity without persisting the
                 # raw payload or assuming that optional column exists.
                 packet_identity = packet_hash or hashlib.sha256(bytes(row["packet"])).hexdigest()
-                identity = "|".join((capture_file.name, str(epoch_ms), packet_identity, str(row["sourcemac"] or "")))
+                identity = "|".join((capture_file.name, str(row["_kismet_rowid"]), str(epoch_ms), packet_identity, str(row["sourcemac"] or "")))
                 observation_id = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:24]
                 signal = _as_number(row["signal"])
                 length = _as_int(row["packet_len"])
@@ -449,7 +476,14 @@ class KismetMLExtractor:
         """Aggregate high-frequency threat signals without retaining raw frames."""
         buckets: Dict[Tuple[int, Optional[float], Optional[str]], Dict[str, Any]] = {}
         previous_sequences: Dict[Tuple[Optional[str], Optional[str]], int] = {}
-        observations = sorted(self.iter_structured_observations(), key=lambda item: item.timestamp_epoch_ms)
+        observations = sorted(
+            self.iter_structured_observations(),
+            key=lambda item: (
+                item.timestamp_epoch_ms,
+                {"Management": 0, "Control": 1, "Data": 2, "Extension": 3}.get(item.frame_type, 9),
+                item.sequence_number if item.sequence_number is not None else -1,
+            ),
+        )
         for observation in observations:
             key = (observation.timestamp_epoch_ms // 1000, observation.frequency_mhz, observation.bssid)
             bucket = buckets.setdefault(key, {"rssi": [], "rts": 0, "cts": 0, "deauth": 0,

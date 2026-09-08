@@ -25,6 +25,7 @@ from .kismet_ml_foundation import (
     ProcessingCheckpoint,
     StructuredObservation,
     build_traffic_windows,
+    inspect_kismet_schema,
     make_dataset_manifest,
     group_aware_split,
     time_block_split,
@@ -127,6 +128,7 @@ class KismetMLShadowProcessor:
 
     def __init__(
         self, capture_dirs: Optional[Sequence[Path | str]] = None, *, storage_dir: Path | str | None = None,
+        max_observations_per_run: Optional[int] = None,
     ):
         configured_dirs = os.getenv("KISMET_CAPTURE_DIRS")
         if capture_dirs is not None:
@@ -137,6 +139,8 @@ class KismetMLShadowProcessor:
             self.capture_dirs = [Path(os.getenv("KISMET_CAPTURE_ROOT") or os.getenv("KISMET_CAPTURE_DIR") or "/home/adonis/kismet")]
         self.store = KismetMLDerivedStore(storage_dir)
         self.checkpoints = CheckpointStore(self.store.storage_dir / "processing-checkpoint.json")
+        configured_limit = os.getenv("KISMET_ML_MAX_OBSERVATIONS_PER_RUN", "10000")
+        self.max_observations_per_run = max_observations_per_run if max_observations_per_run is not None else int(configured_limit)
 
     def find_capture_files(self) -> List[Path]:
         files: List[Path] = []
@@ -148,7 +152,7 @@ class KismetMLShadowProcessor:
                     files.extend(path for path in directory.glob("*.kismet") if path.is_file())
             except OSError:
                 continue
-        return sorted(set(files), key=lambda path: (path.name, str(path)))
+        return sorted(set(files), key=lambda path: path.stat().st_mtime if path.exists() else 0, reverse=True)
 
     def run_once(self) -> Dict[str, Any]:
         """Materialize a consistent shadow snapshot and atomically advance its cursor.
@@ -158,7 +162,7 @@ class KismetMLShadowProcessor:
         upserts the same records; no raw payloads are written or replayed.
         """
         capture_files = self.find_capture_files()
-        extractor = KismetMLExtractor(capture_files)
+        extractor = KismetMLExtractor(capture_files, max_observations=self.max_observations_per_run)
         observations = list(extractor.iter_structured_observations())
         checkpoint = self.checkpoints.load()
         seen = set(checkpoint.emitted_observation_ids)
@@ -167,7 +171,7 @@ class KismetMLShadowProcessor:
         # Windows and rate ticks are re-materialized from the available source
         # captures so a new run can correct incomplete active-capture windows.
         windows = build_traffic_windows(observations)
-        ticks = KismetMLExtractor(capture_files).threat_ticks()
+        ticks = KismetMLExtractor(capture_files, max_observations=self.max_observations_per_run).threat_ticks()
 
         persisted = {
             "structured_observations": self.store.persist_many("structured_observations", observations),
@@ -195,14 +199,16 @@ class KismetMLShadowProcessor:
         label_source_type: str, split_strategy: str,
     ) -> DatasetManifest:
         """Persist a provenance manifest for data materialized by this processor."""
-        extractor = KismetMLExtractor(self.find_capture_files())
-        # Inspecting is intentional: manifests record source schema even when
-        # the caller exports after a prior processing run.
-        list(extractor.iter_structured_observations())
+        reports = []
+        for capture_file in self.find_capture_files():
+            try:
+                reports.append(inspect_kismet_schema(capture_file))
+            except (OSError, sqlite3.DatabaseError):
+                continue
         manifest = make_dataset_manifest(
             dataset_version=dataset_version, source_dataset=source_dataset,
             capture_environment=capture_environment, label_source_type=label_source_type,
-            split_strategy=split_strategy, schema_reports=extractor.schema_reports,
+            split_strategy=split_strategy, schema_reports=reports,
         )
         self.store.persist_many("dataset_manifests", [manifest])
         return manifest

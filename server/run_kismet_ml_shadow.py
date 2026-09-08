@@ -18,6 +18,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--capture", action="append", default=None, help="Capture directory or .kismet file; repeatable")
     parser.add_argument("--storage-dir", help="Derived ML storage directory (default: KISMET_ML_STORAGE_DIR or server/storage/kismet_ml)")
+    parser.add_argument("--max-observations", type=int, help="Bound this run's extraction (default: KISMET_ML_MAX_OBSERVATIONS_PER_RUN or 10000)")
     parser.add_argument("--dataset-version", help="Also persist a provenance manifest with this version")
     parser.add_argument("--source-dataset", default="local-kismet")
     parser.add_argument("--capture-environment", default="production")
@@ -25,7 +26,9 @@ def main() -> int:
     parser.add_argument("--split-strategy", default="not-applicable-shadow-processing")
     args = parser.parse_args()
 
-    processor = KismetMLShadowProcessor(args.capture, storage_dir=args.storage_dir)
+    processor = KismetMLShadowProcessor(
+        args.capture, storage_dir=args.storage_dir, max_observations_per_run=args.max_observations,
+    )
     result = processor.run_once()
     if args.dataset_version:
         result["dataset_manifest"] = processor.export_dataset_manifest(

@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Network Scanner Kismet ML Shadow Processing (User)
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+Persistent=true
+Unit=kismet-ml-shadow.service
+
+[Install]
+WantedBy=timers.target
