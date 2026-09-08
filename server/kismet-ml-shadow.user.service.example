@@ -1,14 +1,12 @@
 [Unit]
-Description=Network Scanner Kismet ML Shadow Processing
-After=kismet.service
+Description=Network Scanner Kismet ML Shadow Processing (User)
 
 [Service]
 Type=oneshot
-User=adonis
 WorkingDirectory=/home/adonis/network-scanner
 EnvironmentFile=-/home/adonis/network-scanner/server/kismet_sensor.env
 Environment=KISMET_ML_MAX_OBSERVATIONS_PER_RUN=1000
 ExecStart=/usr/bin/python3 /home/adonis/network-scanner/server/run_kismet_ml_shadow.py
 
-# This process only opens Kismet captures with SQLite mode=ro and writes
-# derived data below KISMET_ML_STORAGE_DIR (or server/storage/kismet_ml).
+# User services already run as adonis. This process only opens Kismet captures
+# with SQLite mode=ro and writes derived data under KISMET_ML_STORAGE_DIR.
