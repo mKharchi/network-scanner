@@ -496,6 +496,39 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                 return
 
             # 6d. Kismet Wireless Observations & Sensors
+            if path in {"/api/v1/wifi/probes", "/api/v1/sensors/wifi/probes"}:
+                randomized_raw = get_param("randomized")
+                randomized = None
+                if randomized_raw is not None:
+                    normalized_randomized = randomized_raw.strip().lower()
+                    if normalized_randomized in {"1", "true", "yes"}:
+                        randomized = True
+                    elif normalized_randomized in {"0", "false", "no"}:
+                        randomized = False
+                    else:
+                        self.send_error_response(400, "BAD_REQUEST", "randomized must be true or false")
+                        return
+                try:
+                    data = api_service.get_recent_wifi_probes(
+                        lookback_minutes=get_param("lookback", "15m"),
+                        start_time=get_param("start"),
+                        end_time=get_param("end"),
+                        limit=get_int_param("limit", 5000),
+                        subtype=get_param("subtype"),
+                        randomized=randomized,
+                        channel=get_param("channel"),
+                        bssid=get_param("bssid"),
+                        source_mac=get_param("source_mac"),
+                        capture_file=get_param("capture_file"),
+                        min_signal=get_param("min_signal"),
+                    )
+                    self.send_data(data)
+                except ValueError as err:
+                    self.send_error_response(400, "BAD_REQUEST", str(err))
+                except Exception as err:
+                    self.send_error_response(500, "INTERNAL_ERROR", str(err))
+                return
+
             if path in {"/api/v1/sensors/wifi/health", "/api/v1/wifi/sensors/health"}:
                 self.send_data(api_service.get_wifi_sensor_health())
                 return

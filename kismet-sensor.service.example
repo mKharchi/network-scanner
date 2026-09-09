@@ -25,7 +25,7 @@ ExecStartPre=/bin/sh -c 'if ! /usr/sbin/ip link show "${KISMET_CAPTURE_INTERFACE
 ExecStartPre=/usr/sbin/ip link set ${KISMET_CAPTURE_INTERFACE} up
 ExecStartPre=-/usr/bin/nmcli device set ${KISMET_MAIN_INTERFACE} managed true
 ExecStartPre=/bin/sh -c '/usr/bin/nmcli device set "${KISMET_CAPTURE_INTERFACE}" managed false >/dev/null 2>&1 || true'
-ExecStart=/bin/sh -c 'exec "${KISMET_BINARY}" --confdir "${KISMET_CONF_DIR}" --homedir "${KISMET_HOMEDIR}" --no-ncurses --no-line-wrap -p "${KISMET_CAPTURE_ROOT}" -c "${KISMET_CAPTURE_INTERFACE}"'
+ExecStart=/bin/sh -c 'exec "${KISMET_BINARY}" --confdir "${KISMET_CONF_DIR}" --homedir "${KISMET_HOMEDIR}" --no-ncurses --no-line-wrap -p "${KISMET_CAPTURE_ROOT}" -c "${KISMET_CAPTURE_SOURCE:-${KISMET_CAPTURE_INTERFACE}}"'
 ExecStopPost=-/usr/sbin/iw dev ${KISMET_CAPTURE_INTERFACE} del
 
 Restart=on-failure

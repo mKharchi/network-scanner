@@ -44,10 +44,14 @@ async function get<T>(
   console.log(`[API ->] GET ${fullUrl}`);
 
   try {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 30_000);
     const response = await fetch(fullUrl, {
       method: "GET",
       headers: { Accept: "application/json" },
+      signal: controller.signal,
     });
+    window.clearTimeout(timeout);
 
     const body = await response.json().catch(() => null);
 
@@ -67,7 +71,9 @@ async function get<T>(
     if (err instanceof ApiError) {
       throw err;
     }
-    const message = err instanceof Error ? err.message : String(err);
+    const message = err instanceof DOMException && err.name === "AbortError"
+      ? "request timed out after 30 seconds"
+      : err instanceof Error ? err.message : String(err);
     console.error(
       `[API Network Failure] Could not reach backend at ${fullUrl}:`,
       message,
@@ -1821,6 +1827,33 @@ export const api = {
       },
     ),
 
+  getRecentWifiProbes: (params?: {
+    lookback?: string;
+    start?: string;
+    end?: string;
+    limit?: number;
+    subtype?: 'request' | 'response' | 'all';
+    randomized?: boolean;
+    channel?: number;
+    bssid?: string;
+    source_mac?: string;
+    capture_file?: string;
+    min_signal?: number;
+  }) =>
+    get<RecentWifiProbesResponse>('/wifi/probes', {
+      ...(params?.lookback ? { lookback: params.lookback } : {}),
+      ...(params?.start ? { start: params.start } : {}),
+      ...(params?.end ? { end: params.end } : {}),
+      ...(params?.limit ? { limit: String(params.limit) } : {}),
+      ...(params?.subtype && params.subtype !== 'all' ? { subtype: params.subtype } : {}),
+      ...(params?.randomized !== undefined ? { randomized: String(params.randomized) } : {}),
+      ...(params?.channel !== undefined ? { channel: String(params.channel) } : {}),
+      ...(params?.bssid ? { bssid: params.bssid } : {}),
+      ...(params?.source_mac ? { source_mac: params.source_mac } : {}),
+      ...(params?.capture_file ? { capture_file: params.capture_file } : {}),
+      ...(params?.min_signal !== undefined ? { min_signal: String(params.min_signal) } : {}),
+    }),
+
   getWifiSensors: () => get<{ items: WifiSensor[] }>("/sensors/wifi"),
 
   getSensorHealth: () => get<WifiSensorHealth>("/sensors/wifi/health"),
@@ -1843,6 +1876,100 @@ export interface WirelessObservation {
   sensor: string;
   capture_file: string;
   packet_hash: string;
+  bssid?: string | null;
+  is_randomized_mac?: boolean;
+  destination_kind?: 'broadcast' | 'multicast' | 'unicast' | 'unknown';
+  sequence_number?: number | null;
+  retry?: boolean | null;
+  power_management?: boolean | null;
+  ie_tag_sequence?: number[];
+  supported_rates_mbps?: number[];
+  vendor_ouis?: string[];
+  ht_capabilities_digest?: string | null;
+  vht_capabilities_digest?: string | null;
+  he_capabilities_digest?: string | null;
+  wmm_capabilities_present?: boolean;
+  rsn_capabilities_present?: boolean;
+  ssid_present?: boolean;
+  ssid_length?: number | null;
+  ssid_hidden?: boolean;
+}
+
+export interface ProbeObservation {
+  observation_id: string;
+  timestamp: string;
+  epoch_sec: number;
+  epoch_usec: number;
+  frame_type: 'Management';
+  frame_subtype: 'Probe Request' | 'Probe Response';
+  source_mac: string | null;
+  destination_mac: string | null;
+  transmitter_mac: string | null;
+  bssid: string | null;
+  destination_kind: 'broadcast' | 'multicast' | 'unicast' | 'unknown';
+  is_randomized_mac: boolean;
+  sequence_number: number | null;
+  retry: boolean | null;
+  power_management: boolean | null;
+  signal_dbm: number | null;
+  frequency_khz: number | null;
+  channel: number | null;
+  packet_length: number | null;
+  sensor: string;
+  capture_file: string;
+  ie_tag_sequence: number[];
+  supported_rates_mbps: number[];
+  vendor_ouis: string[];
+  ht_capabilities_digest: string | null;
+  vht_capabilities_digest: string | null;
+  he_capabilities_digest: string | null;
+  wmm_capabilities_present: boolean;
+  rsn_capabilities_present: boolean;
+  ssid_present: boolean;
+  ssid_length: number | null;
+  ssid_hidden: boolean;
+  fingerprint_signature: string;
+}
+
+export interface ProbeCandidateGroup {
+  fingerprint_signature: string;
+  probe_count: number;
+  mac_addresses: string[];
+  unique_mac_count: number;
+  first_seen: string;
+  last_seen: string;
+  frame_subtypes: Record<string, number>;
+  channels: number[];
+  min_signal_dbm: number | null;
+  max_signal_dbm: number | null;
+}
+
+export interface RecentWifiProbesResponse {
+  source: 'KISMET_SERVER';
+  query_window: {
+    start: string;
+    end: string;
+    lookback_minutes: number | null;
+  };
+  summary: {
+    observation_count: number;
+    probe_request_count: number;
+    probe_response_count: number;
+    unique_source_mac_count: number;
+    randomized_source_mac_count: number;
+    stable_source_mac_count: number;
+    channels: number[];
+    avg_signal_dbm: number | null;
+    min_signal_dbm: number | null;
+    max_signal_dbm: number | null;
+    candidate_group_count: number;
+  };
+  observations: ProbeObservation[];
+  candidate_groups: ProbeCandidateGroup[];
+  capture_files_scanned: number;
+  rejected_captures?: Record<string, string>;
+  degraded_captures?: Record<string, string>;
+  truncated_captures?: Record<string, string>;
 }
 
 export interface WirelessInvestigationSummary {
@@ -1870,6 +1997,8 @@ export interface DeviceWirelessObservationsResponse {
   };
   summary: WirelessInvestigationSummary;
   observations: WirelessObservation[];
+  rejected_captures?: Record<string, string>;
+  degraded_captures?: Record<string, string>;
 }
 
 export interface WifiSensor {
@@ -1913,6 +2042,14 @@ export interface WifiSensorHealth {
     file: string | null;
     packet_count: number | null;
     last_observation_time: string | null;
+  };
+  management_capture?: {
+    sample_limit: number;
+    probe_request_count: number;
+    probe_response_count: number;
+    latest_probe_time: string | null;
+    randomized_source_mac_count: number;
+    channels: number[];
   };
 }
 

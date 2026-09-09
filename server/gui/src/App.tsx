@@ -18,6 +18,7 @@ import { LocationsPage } from './pages/Locations';
 import { RogueDevicesPage } from './pages/RogueDevices';
 import { SpatialPage } from './pages/SpatialPage';
 import { ClientLocalizationPage } from './pages/ClientLocalization';
+import { RecentProbeActivityPage } from './pages/RecentProbeActivity';
 
 function AppContent() {
   const { unreadAlerts } = useRealTimeEvents();
@@ -44,6 +45,7 @@ function AppContent() {
         <Route path="/network/devices" element={<AllDevicesPage />} />
         <Route path="/network/latest" element={<LatestScanPage />} />
         <Route path="/network/history" element={<ScanHistoryPage />} />
+        <Route path="/network/wifi/probes" element={<RecentProbeActivityPage />} />
         <Route path="/network/devices/:mac" element={<DeviceDetailPage />} />
 
         {/* Alerts */}

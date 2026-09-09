@@ -3141,6 +3141,37 @@ def get_device_wireless_observations(
     )
 
 
+def get_recent_wifi_probes(
+    *,
+    start_time: Optional[Any] = None,
+    end_time: Optional[Any] = None,
+    lookback_minutes: Optional[Any] = "15m",
+    limit: int = 500,
+    subtype: Optional[Any] = None,
+    randomized: Optional[bool] = None,
+    channel: Optional[Any] = None,
+    bssid: Optional[Any] = None,
+    source_mac: Optional[Any] = None,
+    capture_file: Optional[Any] = None,
+    min_signal: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """Return decoded, global Probe Request/Response observations from Kismet."""
+    from server_components.kismet_service import KismetInvestigationService
+    return KismetInvestigationService().query_recent_probes(
+        start_time=start_time,
+        end_time=end_time,
+        lookback_minutes=lookback_minutes,
+        limit=limit,
+        subtype=subtype,
+        randomized=randomized,
+        channel=channel,
+        bssid=bssid,
+        source_mac=source_mac,
+        capture_file=capture_file,
+        min_signal=min_signal,
+    )
+
+
 def list_wifi_sensors() -> List[Dict[str, Any]]:
     """List detected passive Kismet Wi-Fi sensors and status."""
     from server_components.kismet_service import KismetInvestigationService
@@ -3211,5 +3242,4 @@ def get_alert_wireless_investigation(
         "alert": alert_info,
         "investigation": obs_result,
     }
-
 

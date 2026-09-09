@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import {
   api,
   type WirelessObservation,
@@ -328,7 +329,10 @@ export function WirelessInvestigationPanel({
   ];
 
   return (
-    <SectionCard title="Kismet Passive Wireless Investigation">
+    <SectionCard
+      title="Kismet Passive Wireless Investigation"
+      headerAction={<Link to="/network/wifi/probes" style={{ fontSize: 'var(--font-xs)' }}>View global probe activity →</Link>}
+    >
       {/* Sensor Health Banner */}
       {sensorHealth && (() => {
         const st = sensorHealth.status;
@@ -366,6 +370,11 @@ export function WirelessInvestigationPanel({
             {sensorHealth.latest_capture.last_observation_time && (
               <span style={{ color: 'var(--text-muted)' }}>
                 Last: <strong style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{sensorHealth.latest_capture.last_observation_time}</strong>
+              </span>
+            )}
+            {sensorHealth.management_capture && (
+              <span style={{ color: 'var(--text-muted)' }}>
+                Recent probes: <strong style={{ color: 'var(--text-primary)' }}>{sensorHealth.management_capture.probe_request_count}</strong> requests / <strong style={{ color: 'var(--text-primary)' }}>{sensorHealth.management_capture.probe_response_count}</strong> responses
               </span>
             )}
             {lowStorage && (
@@ -531,6 +540,16 @@ export function WirelessInvestigationPanel({
       {state.status === 'error' && (
         <Notice variant="warning" title="Failed to refresh wireless observations">
           {state.error.message}
+        </Notice>
+      )}
+      {data?.degraded_captures && Object.keys(data.degraded_captures).length > 0 && (
+        <Notice variant="warning" title="Live Kismet capture is a committed snapshot">
+          {Object.entries(data.degraded_captures).map(([file, reason]) => <div key={file}><code>{file}</code>: {reason}</div>)}
+        </Notice>
+      )}
+      {data?.rejected_captures && Object.keys(data.rejected_captures).length > 0 && (
+        <Notice variant="warning" title="Some Kismet captures were skipped">
+          {Object.entries(data.rejected_captures).map(([file, reason]) => <div key={file}><code>{file}</code>: {reason}</div>)}
         </Notice>
       )}
 

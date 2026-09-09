@@ -38,7 +38,10 @@ MGMT_NAMES = {
     8: "Beacon", 10: "Disassociation", 11: "Authentication", 12: "Deauthentication",
     13: "Action",
 }
-CONTROL_NAMES = {11: "RTS", 12: "CTS"}
+CONTROL_NAMES = {
+    8: "Block Ack Request", 9: "Block Ack", 10: "PS-Poll", 11: "RTS",
+    12: "CTS", 13: "ACK", 14: "CF-End",
+}
 DATA_NAMES = {0: "Data", 4: "Null Data", 8: "QoS Data", 12: "QoS Null"}
 
 
@@ -281,7 +284,9 @@ def _management_ie_offset(subtype: int, header_end: int) -> Optional[int]:
 
 def _parse_information_elements(packet: bytes, offset: Optional[int]) -> Dict[str, Any]:
     result: Dict[str, Any] = {
-        "tags": [], "vendor_ouis": [], "ht": None, "vht": None, "he": None, "wmm": False,
+        "tags": [], "vendor_ouis": [], "supported_rates": [], "ht": None, "vht": None,
+        "he": None, "wmm": False, "rsn": False, "ssid_present": False,
+        "ssid_length": None, "ssid_hidden": False,
     }
     if offset is None or offset >= len(packet):
         return result
@@ -293,7 +298,19 @@ def _parse_information_elements(packet: bytes, offset: Optional[int]) -> Dict[st
         body = packet[offset:offset + length]
         offset += length
         result["tags"].append(tag)
-        if tag == 45:
+        if tag == 0:
+            # SSIDs can identify people, locations, or organisations.  Keep
+            # only their observable shape; never return the SSID bytes.
+            result["ssid_present"] = True
+            result["ssid_length"] = length
+            result["ssid_hidden"] = length == 0
+        elif tag in {1, 50}:
+            # The high bit means a basic rate; the remaining value is in
+            # 500-kbit/s units.  Keep the normalized numeric rate pattern.
+            result["supported_rates"].extend(
+                sorted({(rate & 0x7F) / 2.0 for rate in body if rate & 0x7F})
+            )
+        elif tag == 45:
             result["ht"] = body.hex()
         elif tag == 191:
             result["vht"] = body.hex()
@@ -305,7 +322,10 @@ def _parse_information_elements(packet: bytes, offset: Optional[int]) -> Dict[st
             # Microsoft WMM vendor IE: 00:50:F2, type 2.
             if oui == "0050F2" and len(body) >= 4 and body[3] == 2:
                 result["wmm"] = True
+        elif tag == 48:
+            result["rsn"] = True
     result["vendor_ouis"] = sorted(set(result["vendor_ouis"]))
+    result["supported_rates"] = sorted(set(result["supported_rates"]))
     return result
 
 

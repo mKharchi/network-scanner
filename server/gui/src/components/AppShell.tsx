@@ -88,6 +88,11 @@ export function AppShell({
           to: "/network/history",
           icon: <HiOutlineSquare3Stack3D size={18} />,
         },
+        {
+          label: "Wi-Fi Probes",
+          to: "/network/wifi/probes",
+          icon: <TbRadar size={18} />,
+        },
         { label: "Clients", to: "/clients", icon: <FiCpu size={18} /> },
         {
           label: "Client Localization",

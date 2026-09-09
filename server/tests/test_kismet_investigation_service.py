@@ -303,6 +303,16 @@ class KismetApiEndpointTests(unittest.TestCase):
             self.assertIn("data", payload)
             self.assertIn("items", payload["data"])
 
+    def test_rest_global_probe_endpoint(self):
+        url = f"http://127.0.0.1:{self.port}/api/v1/wifi/probes?lookback=5m&randomized=true&subtype=request"
+        req = urllib.request.Request(url, headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req) as resp:
+            self.assertEqual(resp.status, 200)
+            payload = json.loads(resp.read().decode("utf-8"))
+            self.assertIn("data", payload)
+            self.assertIn("observations", payload["data"])
+            self.assertIn("candidate_groups", payload["data"])
+
     def test_rest_device_wireless_observations_endpoint(self):
         url = f"http://127.0.0.1:{self.port}/api/v1/devices/B0:3C:DC:95:39:36/wireless-observations?lookback=60m"
         req = urllib.request.Request(url, headers={"Accept": "application/json"})
