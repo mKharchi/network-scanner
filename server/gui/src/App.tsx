@@ -14,7 +14,6 @@ import { DeviceDetailPage } from './pages/DeviceDetail';
 import { AlertsPage } from './pages/Alerts';
 import { ActivityLogsPage } from './pages/ActivityLogs';
 import { SettingsPage } from './pages/Settings';
-import { LocationsPage } from './pages/Locations';
 import { RogueDevicesPage } from './pages/RogueDevices';
 import { SpatialPage } from './pages/SpatialPage';
 import { ClientLocalizationPage } from './pages/ClientLocalization';
@@ -31,7 +30,8 @@ function AppContent() {
         {/* Clients */}
         <Route path="/clients" element={<ClientsPage />} />
         <Route path="/clients/:clientId" element={<ClientDetailPage />} />
-        <Route path="/locations" element={<LocationsPage />} />
+        {/* Locations is intentionally folded into Clients + the Spatial Map. */}
+        <Route path="/locations" element={<Navigate to="/digital-twin" replace />} />
         <Route path="/rogue-devices" element={<RogueDevicesPage />} />
         <Route path="/digital-twin" element={<SpatialPage />} />
         <Route path="/spatial" element={<SpatialPage />} />

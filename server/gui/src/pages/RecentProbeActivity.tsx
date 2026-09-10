@@ -44,9 +44,24 @@ export function RecentProbeActivityPage() {
   const [channel, setChannel] = useState('');
   const [bssid, setBssid] = useState('');
   const [minSignal, setMinSignal] = useState('');
+  const [hideLocalPc, setHideLocalPc] = useState(true);
+  const [excludeMac, setExcludeMac] = useState('');
   const [search, setSearch] = useState('');
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [selected, setSelected] = useState<ProbeObservation | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getSensorHealth().then((health) => {
+      const localMac = health.interface?.mac_address;
+      if (!cancelled && localMac && !excludeMac) {
+        setExcludeMac(normalizeMac(localMac));
+      }
+    }).catch(() => {
+      // Sensor health is optional for the exclude-MAC default.
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   const fetchProbes = () => api.getRecentWifiProbes({
     lookback,
@@ -54,11 +69,12 @@ export function RecentProbeActivityPage() {
     randomized: randomized === 'all' ? undefined : randomized === 'true',
     channel: channel ? Number(channel) : undefined,
     bssid: bssid.trim() || undefined,
+    exclude_mac: hideLocalPc && excludeMac.trim() ? excludeMac.trim() : undefined,
     min_signal: minSignal ? Number(minSignal) : undefined,
     limit: 700,
   });
   const { state, refetch } = useFetch<RecentWifiProbesResponse>(
-    fetchProbes, [lookback, subtype, randomized, channel, bssid, minSignal],
+    fetchProbes, [lookback, subtype, randomized, channel, bssid, minSignal, hideLocalPc, excludeMac],
   );
   const data = state.status === 'success' ? state.data : state.status === 'error' ? state.staleData : undefined;
   const probes = data?.observations ?? [];
@@ -155,6 +171,19 @@ export function RecentProbeActivityPage() {
           <label>Channel<input value={channel} onChange={(event) => setChannel(event.target.value)} inputMode="numeric" placeholder="e.g. 1" /></label>
           <label>BSSID<input value={bssid} onChange={(event) => setBssid(event.target.value)} placeholder="AA:BB:CC:DD:EE:FF" /></label>
           <label>Minimum RSSI<input value={minSignal} onChange={(event) => setMinSignal(event.target.value)} inputMode="numeric" placeholder="e.g. -75" /></label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+              <input type="checkbox" checked={hideLocalPc} onChange={(event) => setHideLocalPc(event.target.checked)} />
+              Hide this PC
+            </span>
+            <input
+              value={excludeMac}
+              onChange={(event) => setExcludeMac(event.target.value)}
+              placeholder="Local MAC AA:BB:…"
+              disabled={!hideLocalPc}
+              title="Exclude probes where this MAC is source, destination, transmitter, or BSSID"
+            />
+          </label>
           <label style={{ flex: 1, minWidth: 210 }}>Search<input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="MAC, BSSID, channel, sensor…" /></label>
         </div>
       </SectionCard>

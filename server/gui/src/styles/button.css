@@ -1,5 +1,5 @@
 /* ============================================================
-   Button Component — Light Intelligence Platform
+   Button Component — Terminal CLI Platform
    ============================================================ */
 
 .btn {
@@ -17,19 +17,14 @@
   border: 1px solid transparent;
   border-radius: var(--radius-pill);
   cursor: pointer;
-  transition:
-    background-color var(--transition-fast),
-    border-color var(--transition-fast),
-    color var(--transition-fast),
-    transform var(--transition-fast),
-    box-shadow var(--transition-fast);
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
   text-decoration: none;
   user-select: none;
   position: relative;
 }
 
 .btn:hover {
-  transform: translateY(-1px);
+  transform: none;
 }
 
 .btn:active {
@@ -38,7 +33,7 @@
 
 .btn:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring);
+  box-shadow: 0 0 0 3px var(--canvas), 0 0 0 6px var(--foreground, #000);
 }
 
 .btn:disabled,
@@ -51,26 +46,27 @@
 
 /* Primary CTA — Steel Blue */
 .btn--primary {
-  background: var(--steel-blue);
-  border-color: var(--steel-blue);
-  color: var(--white);
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--text-on-accent);
   box-shadow: var(--shadow);
 }
 .btn--primary:hover {
-  background: var(--accent-blue-hover);
-  border-color: var(--accent-blue-hover);
-  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.5);
+  background: transparent;
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 /* Secondary — Midnight Navy */
 .btn--secondary {
-  background: var(--midnight-navy);
-  border-color: var(--midnight-navy);
-  color: var(--frost-blue);
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-primary);
 }
 .btn--secondary:hover {
-  background: #152238;
-  border-color: #152238;
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--text-on-accent);
 }
 
 /* Quiet / Ghost */
@@ -80,8 +76,8 @@
   color: var(--muted-text);
 }
 .btn--quiet:hover {
-  background: var(--surface-card-subtle);
-  color: var(--text-primary);
+  background: var(--surface-muted);
+  color: var(--primary);
 }
 
 /* Outline */
@@ -91,20 +87,21 @@
   color: var(--text-primary);
 }
 .btn--outline:hover {
-  background: var(--surface-card-subtle);
-  border-color: var(--border-hover);
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--text-on-accent);
 }
 
 /* Danger */
 .btn--danger {
-  background: var(--danger-bg);
-  border-color: var(--danger-border);
+  background: transparent;
+  border-color: var(--danger);
   color: var(--danger);
 }
 .btn--danger:hover {
-  background: rgba(220, 38, 38, 0.14);
+  background: var(--danger);
   border-color: var(--danger);
-  color: var(--danger);
+  color: var(--text-on-accent);
 }
 
 /* Sizes */

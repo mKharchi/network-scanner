@@ -109,7 +109,6 @@ export function AppShell({
           to: "/digital-twin",
           icon: <TbMapPin size={18} />,
         },
-        { label: "Locations", to: "/locations", icon: <TbMapPin size={18} /> },
       ],
     },
     {
@@ -213,15 +212,6 @@ export function AppShell({
               <span>Clients</span>
             </NavLink>
 
-            <NavLink
-              to="/locations"
-              className={({ isActive }) =>
-                `top-nav-link ${isActive ? "top-nav-link--active" : ""}`
-              }
-            >
-              <TbMapPin size={16} />
-              <span>Locations</span>
-            </NavLink>
 
             <NavLink
               to="/alerts"

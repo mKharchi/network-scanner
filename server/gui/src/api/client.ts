@@ -1837,6 +1837,7 @@ export const api = {
     channel?: number;
     bssid?: string;
     source_mac?: string;
+    exclude_mac?: string;
     capture_file?: string;
     min_signal?: number;
   }) =>
@@ -1850,6 +1851,7 @@ export const api = {
       ...(params?.channel !== undefined ? { channel: String(params.channel) } : {}),
       ...(params?.bssid ? { bssid: params.bssid } : {}),
       ...(params?.source_mac ? { source_mac: params.source_mac } : {}),
+      ...(params?.exclude_mac ? { exclude_mac: params.exclude_mac } : {}),
       ...(params?.capture_file ? { capture_file: params.capture_file } : {}),
       ...(params?.min_signal !== undefined ? { min_signal: String(params.min_signal) } : {}),
     }),
@@ -2025,6 +2027,7 @@ export interface WifiSensorHealth {
     name: string;
     exists: boolean;
     state: string | null;
+    mac_address?: string | null;
   };
   storage: {
     capture_dir: string;

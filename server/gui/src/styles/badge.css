@@ -32,9 +32,9 @@
 }
 
 .badge--primary {
-  color: var(--steel-blue);
-  background: rgba(59, 96, 228, 0.12);
-  border-color: rgba(59, 96, 228, 0.28);
+  color: #000000;
+  background: #f5f5f5;
+  border-color: #000000;
 }
 
 /* Semantic Status Variants */
@@ -57,9 +57,9 @@
 }
 
 .badge--critical {
-  color: var(--critical);
-  background: var(--critical-bg);
-  border-color: var(--critical-border);
+  color: #ffffff;
+  background: #000000;
+  border-color: #000000;
   font-weight: 700;
 }
 

@@ -7,7 +7,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
   padding: var(--space-8);
-  box-shadow: var(--shadow-card);
+  box-shadow: none;
   color: var(--text-primary);
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
@@ -22,7 +22,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
   padding: var(--space-6) var(--space-8);
-  box-shadow: var(--shadow-card);
+  box-shadow: none;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -32,7 +32,7 @@
 
 .metric-card:hover {
   border-color: var(--border-hover);
-  box-shadow: var(--shadow-md);
+  background: var(--surface-muted);
 }
 
 .metric-card__label {
@@ -51,6 +51,7 @@
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
+  text-shadow: 0 0 5px rgba(51, 255, 0, 0.22);
 }
 
 .metric-card__value--success { color: var(--success); }
@@ -72,7 +73,7 @@
   background: var(--surface-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
-  box-shadow: var(--shadow-card);
+  box-shadow: none;
   overflow: hidden;
   color: var(--text-primary);
 }

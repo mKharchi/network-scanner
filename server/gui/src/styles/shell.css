@@ -14,7 +14,7 @@
 .netwatch-header {
   height: var(--header-h);
   background: var(--midnight-navy);
-  border-bottom: 1px solid rgba(108, 122, 137, 0.25);
+  border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -49,13 +49,13 @@
 .brand-icon {
   width: 36px;
   height: 36px;
-  background: var(--steel-blue);
+  background: var(--primary);
   border-radius: var(--radius);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--white);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--text-on-accent);
+  border: 1px solid var(--primary);
 }
 
 .brand-text {
@@ -64,12 +64,23 @@
 }
 
 .brand-title {
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-size: var(--font-base);
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--frost-blue);
   line-height: 1.1;
+}
+
+.brand-title::before {
+  content: "> ";
+  color: #ffb000;
+}
+
+.brand-title::after {
+  content: "_";
+  color: var(--primary);
+  animation: terminal-cursor 1s steps(2, end) infinite;
 }
 
 .brand-sub {
@@ -95,23 +106,31 @@
   border-radius: var(--radius);
   font-size: var(--font-sm);
   font-weight: 600;
-  color: rgba(235, 243, 250, 0.72);
+  color: rgba(255, 255, 255, 0.72);
   text-decoration: none;
   transition:
     color var(--transition-fast),
     background var(--transition-fast);
   border: 1px solid transparent;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+@keyframes terminal-cursor {
+  0%, 45% { opacity: 1; }
+  46%, 100% { opacity: 0; }
 }
 
 .top-nav-link:hover {
-  color: var(--frost-blue);
-  background: rgba(255, 255, 255, 0.06);
+  color: var(--primary);
+  text-shadow: 0 0 5px rgba(51, 255, 0, .5);
+  background: #222222;
 }
 
 .top-nav-link--active {
-  color: var(--frost-blue);
-  background: rgba(59, 96, 228, 0.22);
-  border-color: rgba(184, 184, 232, 0.35);
+  color: var(--primary);
+  background: var(--surface-muted);
+  border-color: var(--primary);
 }
 
 .top-nav-link--spatial {
@@ -292,9 +311,9 @@ style={{ width: '100%' , padding: 'var(--space-1)', borderRadius: 'var(--radius-
   padding: 0 var(--space-5);
   height: 36px;
   border-radius: var(--radius);
-  background: var(--steel-blue);
-  color: var(--white);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--primary);
+  color: var(--text-on-accent);
+  border: 1px solid var(--primary);
   font-size: var(--font-sm);
   font-weight: 700;
   cursor: pointer;
@@ -305,7 +324,8 @@ style={{ width: '100%' , padding: 'var(--space-1)', borderRadius: 'var(--radius-
 }
 
 .header-cta-btn:hover {
-  background: var(--primary-hover);
+  background: transparent;
+  color: var(--primary);
 }
 
 .btn-arrow {
@@ -428,9 +448,9 @@ style={{ width: '100%' , padding: 'var(--space-1)', borderRadius: 'var(--radius-
 }
 
 .drawer-link--active {
-  background: rgba(59, 96, 228, 0.22);
-  color: var(--frost-blue);
-  border-color: rgba(184, 184, 232, 0.35);
+  background: var(--surface-muted);
+  color: var(--primary);
+  border-color: var(--primary);
 }
 
 .drawer-footer {

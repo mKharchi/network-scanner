@@ -175,21 +175,9 @@ function buildClientColumns(
   },
   {
     key: "ip_address",
-    label: "IP Address",
+    label: "Network address",
     mono: true,
     render: (c) => c.ip_address ?? null,
-  },
-  {
-    key: "client_version",
-    label: "Client version",
-    mono: true,
-    render: (c) => c.client_version ?? "—",
-  },
-  {
-    key: "mac_address",
-    label: "MAC",
-    mono: true,
-    render: (c) => c.mac_address,
   },
   {
     key: "connection",
@@ -200,30 +188,22 @@ function buildClientColumns(
     key: "location",
     label: "Location",
     render: (c) => (
-      <span style={{ color: c.location ? "var(--text)" : "var(--warning)" }}>
-        {c.location?.label || "Location not assigned"}
+      <span className={`client-location-cell${c.location ? "" : " client-location-cell--empty"}`}>
+        <span className="client-location-cell__marker" aria-hidden="true">{c.location ? "＋" : "—"}</span>
+        <span>
+          <strong>{c.location?.label || "Location not assigned"}</strong>
+          <small>{c.location ? "Physical position" : "Needs placement"}</small>
+        </span>
       </span>
     ),
   },
   {
-    key: "assign",
+    key: "location_action",
     label: "",
-    render: (c) =>
-      c.location ? null : (
-        <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}>
+    render: (c) => (
+        <div className="client-location-actions">
           <Button
             variant="secondary"
-            size="sm"
-            disabled={autoLocatingClientId !== null}
-            onClick={(event) => {
-              event.stopPropagation();
-              onAutoLocate(c);
-            }}
-          >
-            {autoLocatingClientId === c.id ? "Locating…" : "Try auto"}
-          </Button>
-          <Button
-            variant="quiet"
             size="sm"
             disabled={autoLocatingClientId !== null}
             onClick={(event) => {
@@ -231,16 +211,23 @@ function buildClientColumns(
               onAssign(c.id);
             }}
           >
-            Assign
+            {c.location ? "View on map" : "Open map"}
           </Button>
+          {!c.location && (
+            <Button
+              variant="quiet"
+              size="sm"
+              disabled={autoLocatingClientId !== null}
+              onClick={(event) => {
+                event.stopPropagation();
+                onAutoLocate(c);
+              }}
+            >
+              {autoLocatingClientId === c.id ? "Locating…" : "Auto-locate"}
+            </Button>
+          )}
         </div>
       ),
-  },
-  {
-    key: "os",
-    label: "OS",
-    render: (c) =>
-      c.os.system ? `${c.os.system} ${c.os.release ?? ""}`.trim() : null,
   },
   {
     key: "connection_time",
@@ -312,7 +299,7 @@ export function ClientsPage() {
   });
 
   const startManualAssignment = (clientId: string) => {
-    navigate(`/locations?assign=${encodeURIComponent(clientId)}`);
+    navigate(`/digital-twin?client=${encodeURIComponent(clientId)}`);
   };
 
   const tryAutomaticLocation = async (client: ManagedClientSummary) => {
@@ -323,17 +310,17 @@ export function ClientsPage() {
       if (outcome.assigned === true && location?.label) {
         addToast({
           title: "Automatic location assigned",
-          message: `${client.hostname || client.id} was placed at ${location.label}. Open the Center layout to verify and confirm it.`,
+          message: `${client.hostname || client.id} was placed at ${location.label}. Open the spatial map to verify it.`,
           severity: "SUCCESS",
           action: {
             label: "Review location",
-            onClick: () => navigate("/locations"),
+            onClick: () => navigate(`/digital-twin?client=${encodeURIComponent(client.id)}`),
           },
         });
       } else {
         addToast({
           title: "Automatic location not assigned",
-          message: `${client.hostname || client.id} remains unassigned. Use Assign to place it manually.`,
+          message: `${client.hostname || client.id} remains unassigned. Open the spatial map to inspect its placement evidence.`,
           severity: "HIGH",
         });
       }
@@ -377,10 +364,22 @@ export function ClientsPage() {
       <div className="page-header operations-page-header">
         <div className="client-page-header__copy">
           <span className="eyebrow eyebrow--accent">NETWORK INTELLIGENCE / CLIENTS</span>
-          <h1 className="page-title">Monitoring agents</h1>
-          <p className="page-description">Manage the agents that collect network evidence, health signals, and diagnostics across your infrastructure.</p>
+          <h1 className="page-title">Clients</h1>
+          <p className="page-description">Monitor every agent and see its physical place at a glance. Select a client to inspect it, or focus that client on the floor map.</p>
         </div>
-        
+        <div className="operations-page-header__actions">
+          <Button variant="secondary" size="md" onClick={() => navigate("/digital-twin")}>
+            Open floor map →
+          </Button>
+        </div>
+      </div>
+
+      <div className="client-location-guide" role="note">
+        <span className="client-location-guide__index">01</span>
+        <div>
+          <strong>Physical placement is part of the client record.</strong>
+          <span>The spatial map is the single source of truth for floor-one placement. Use a client row to focus its marker.</span>
+        </div>
       </div>
 
       <div className="operations-metric-grid" aria-label="Client fleet overview">
@@ -537,7 +536,7 @@ export function ClientsPage() {
           data={items}
           rowKey={(c) => c.id}
           onRowClick={(c) => navigate(`/clients/${encodeURIComponent(c.id)}`)}
-          aria-label="Managed clients"
+          aria-label="Managed clients and physical locations"
           sortKey={sortKey}
           sortDir={sortDir}
           onSort={handleSort}

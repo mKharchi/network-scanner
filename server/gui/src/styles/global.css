@@ -1,8 +1,8 @@
 /* ============================================================
-   Global Reset and Base Styles — Light Intelligence Platform
+   Global Reset and Base Styles — Terminal CLI Platform
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 @import './tokens.css';
 
 *,
@@ -31,6 +31,20 @@ body {
   background-color: var(--canvas);
   min-height: 100dvh;
   overflow-x: hidden;
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 3px,
+    rgba(51, 255, 0, 0.035) 3px,
+    rgba(51, 255, 0, 0.035) 4px
+  );
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: var(--font-mono);
 }
 
 /* ── Typography & Eyebrow Helpers ──────────────────────────── */
@@ -97,7 +111,26 @@ body {
 }
 
 .text-accent {
-  color: var(--steel-blue);
+  color: var(--text-primary);
+}
+
+.page-title {
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: clamp(2.5rem, 6vw, 5rem);
+  font-weight: 600;
+  letter-spacing: -0.045em;
+  line-height: 0.98;
+  text-transform: uppercase;
+  text-shadow: 0 0 5px rgba(51, 255, 0, 0.35);
+}
+
+.page-description,
+.page-subtitle {
+  max-width: 58rem;
+  color: var(--text-muted);
+  font-size: var(--font-lg);
+  line-height: 1.45;
 }
 
 /* ── Link Reset ────────────────────────────────────────────── */

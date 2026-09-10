@@ -668,9 +668,11 @@ export function ClientDetailPage() {
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => navigate("/locations")}
+                onClick={() =>
+                  navigate(`/digital-twin?client=${encodeURIComponent(c.id)}`)
+                }
               >
-                Change location
+                {c.location ? "View on map" : "Open map"}
               </Button>
             </div>
           </div>

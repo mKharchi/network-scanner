@@ -1,71 +1,71 @@
 /* ============================================================
-   Design Tokens — Light Network Intelligence Platform
-   Midnight Navy · Steel Blue · Frost Blue foundation
+   Design Tokens — Terminal CLI Intelligence Platform
+   Phosphor green · amber warnings · rigid terminal panes
    ============================================================ */
 
 :root {
   /* ── Brand Palette ────────────────────────────────────────── */
-  --midnight-navy: #0b192c;
-  --steel-blue: #3b60e4;
-  --slate-muted: #6c7a89;
-  --soft-lavender: #b8b8e8;
-  --frost-blue: #ebf3fa;
+  --midnight-navy: #0a0a0a;
+  --steel-blue: #33ff00;
+  --slate-muted: #86a982;
+  --soft-lavender: #6e9568;
+  --frost-blue: #d8ffd1;
 
   /* ── Legacy aliases (components still reference these) ───── */
-  --deep-card-navy: #ffffff;
-  --dark-background-navy: var(--frost-blue);
-  --dark-surface-elevated: #ffffff;
+  --deep-card-navy: #0f160f;
+  --dark-background-navy: var(--midnight-navy);
+  --dark-surface-elevated: #111b11;
   --accent-blue: var(--steel-blue);
-  --accent-blue-hover: #2f4fc8;
-  --accent-blue-subtle: rgba(59, 96, 228, 0.1);
-  --white: #ffffff;
+  --accent-blue-hover: #0a0a0a;
+  --accent-blue-subtle: #102010;
+  --white: #d8ffd1;
   --muted-text: var(--slate-muted);
   --faint-text: #94a0ad;
-  --badge-background: rgba(184, 184, 232, 0.35);
-  --badge-solid: var(--midnight-navy);
-  --navy-border: rgba(108, 122, 137, 0.35);
-  --navy-border-subtle: rgba(108, 122, 137, 0.2);
+  --badge-background: #122212;
+  --badge-solid: #33ff00;
+  --navy-border: #1f521f;
+  --navy-border-subtle: #163b16;
 
   /* ── Theme Surfaces ───────────────────────────────────────── */
-  --canvas: var(--frost-blue);
-  --surface: #ffffff;
-  --surface-muted: #f5f9fd;
-  --surface-card: #ffffff;
-  --surface-card-subtle: rgba(184, 184, 232, 0.18);
-  --border: rgba(108, 122, 137, 0.35);
-  --border-subtle: rgba(108, 122, 137, 0.2);
-  --border-hover: rgba(59, 96, 228, 0.45);
+  --canvas: #0a0a0a;
+  --surface: #0f160f;
+  --surface-muted: #111b11;
+  --surface-card: #0f160f;
+  --surface-card-subtle: #111b11;
+  --border: #1f521f;
+  --border-subtle: #163b16;
+  --border-hover: #33ff00;
 
   /* ── Typography & Text Colors ─────────────────────────────── */
-  --text: var(--midnight-navy);
-  --text-primary: var(--midnight-navy);
-  --text-secondary: var(--slate-muted);
-  --text-muted: var(--slate-muted);
-  --text-faint: #94a0ad;
-  --text-on-accent: #ffffff;
+  --text: #d8ffd1;
+  --text-primary: #d8ffd1;
+  --text-secondary: #a7cfa0;
+  --text-muted: #86a982;
+  --text-faint: #50704d;
+  --text-on-accent: #0a0a0a;
 
   /* ── Actions & Highlights ─────────────────────────────────── */
-  --primary: var(--steel-blue);
-  --primary-hover: #2f4fc8;
-  --focus: var(--steel-blue);
-  --focus-ring: 0 0 0 2px rgba(59, 96, 228, 0.3);
+  --primary: #33ff00;
+  --primary-hover: #d8ffd1;
+  --focus: #33ff00;
+  --focus-ring: 0 0 0 2px #0a0a0a, 0 0 0 4px #33ff00;
 
   /* ── Semantic State Colors ────────────────────────────────── */
-  --success: #0b7a55;
-  --success-bg: rgba(11, 122, 85, 0.1);
-  --success-border: rgba(11, 122, 85, 0.28);
-  --warning: #b45309;
-  --warning-bg: rgba(180, 83, 9, 0.1);
-  --warning-border: rgba(180, 83, 9, 0.28);
-  --danger: #dc2626;
-  --danger-bg: rgba(220, 38, 38, 0.08);
-  --danger-border: rgba(220, 38, 38, 0.28);
-  --critical: #e11d48;
-  --critical-bg: rgba(225, 29, 72, 0.1);
-  --critical-border: rgba(225, 29, 72, 0.28);
-  --info: #0369a1;
-  --info-bg: rgba(3, 105, 161, 0.08);
-  --info-border: rgba(3, 105, 161, 0.28);
+  --success: #33ff00;
+  --success-bg: #102010;
+  --success-border: #1f8f1f;
+  --warning: #ffb000;
+  --warning-bg: #211900;
+  --warning-border: #9b6c00;
+  --danger: #ff3333;
+  --danger-bg: #260d0d;
+  --danger-border: #9e2222;
+  --critical: #ff3333;
+  --critical-bg: #260d0d;
+  --critical-border: #9e2222;
+  --info: #33ff00;
+  --info-bg: #102010;
+  --info-border: #1f8f1f;
 
   /* ── Spatial Station Visualization Tokens ─────────────────── */
   --station-healthy: var(--success);
@@ -77,17 +77,13 @@
   --station-isolated: var(--info);
   --station-isolated-bg: var(--info-bg);
   --station-offline: var(--text-faint);
-  --station-offline-bg: rgba(108, 122, 137, 0.08);
-  --station-empty: rgba(184, 184, 232, 0.2);
+  --station-offline-bg: #111b11;
+  --station-empty: #111b11;
   --station-empty-border: var(--border);
 
   /* ── Typography Scale ─────────────────────────────────────── */
-  --font-sans:
-    Inter, "Space Grotesk", "SF Pro Display", -apple-system,
-    BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-display:
-    "Space Grotesk", Inter, "SF Pro Display", -apple-system,
-    BlinkMacSystemFont, sans-serif;
+  --font-sans: var(--font-mono);
+  --font-display: var(--font-mono);
   --font-mono:
     "JetBrains Mono", ui-monospace, "Cascadia Code", "Fira Code", monospace;
 
@@ -122,28 +118,28 @@
 
   /* ── Radius System — sharp geometry (0–2px max) ─────────── */
   --radius-sm: 0px;
-  --radius: 2px;
-  --radius-lg: 2px;
-  --radius-card: 2px;
-  --radius-pill: 2px;
+  --radius: 0px;
+  --radius-lg: 0px;
+  --radius-card: 0px;
+  --radius-pill: 0px;
 
   /* ── Flat Depth & Shadows ─────────────────────────────────── */
-  --shadow-sm: 0 1px 0 rgba(11, 25, 44, 0.08);
-  --shadow: 0 2px 0 rgba(11, 25, 44, 0.1);
-  --shadow-md: 0 2px 0 rgba(11, 25, 44, 0.12);
-  --shadow-card: 0 2px 0 rgba(11, 25, 44, 0.1);
-  --shadow-glow: 0 0 0 1px rgba(59, 96, 228, 0.25);
+  --shadow-sm: none;
+  --shadow: none;
+  --shadow-md: none;
+  --shadow-card: none;
+  --shadow-glow: none;
 
   /* ── Layout Dimensions ────────────────────────────────────── */
   --header-h: 64px;
   --content-max-w: 96rem;
-  --page-px: 2rem;
-  --page-py: 2rem;
+  --page-px: clamp(1rem, 4vw, 2.5rem);
+  --page-py: clamp(1rem, 3vw, 2rem);
 
   /* ── Transitions ──────────────────────────────────────────── */
-  --transition-fast: 140ms cubic-bezier(0.4, 0, 0.2, 1);
-  --transition: 220ms cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-smooth: 320ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-fast: 100ms linear;
+  --transition: 100ms linear;
+  --transition-smooth: 100ms linear;
 }
 
 @media (prefers-reduced-motion: reduce) {
