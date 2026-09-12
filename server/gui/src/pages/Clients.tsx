@@ -72,7 +72,7 @@ function FilterBar({
               border: "none",
               background:
                 stateFilter === value ? "var(--primary)" : "transparent",
-              color: stateFilter === value ? "#fff" : "var(--text-muted)",
+              color: stateFilter === value ? "#000" : "var(--text-muted)",
               fontFamily: "var(--font-sans)",
               fontSize: "var(--font-sm)",
               fontWeight: stateFilter === value ? 600 : 400,
@@ -368,7 +368,7 @@ export function ClientsPage() {
           <p className="page-description">Monitor every agent and see its physical place at a glance. Select a client to inspect it, or focus that client on the floor map.</p>
         </div>
         <div className="operations-page-header__actions">
-          <Button variant="secondary" size="md" onClick={() => navigate("/digital-twin")}>
+          <Button variant="secondary" size="md" onClick={() => navigate("/locations")}>
             Open floor map →
           </Button>
         </div>

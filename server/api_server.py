@@ -564,6 +564,22 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     self.send_error_response(500, "INTERNAL_ERROR", str(err))
                 return
 
+            m = re.match(r"^/api/v1/devices/([^/]+)/activity$", path)
+            if m:
+                device_id = urllib.parse.unquote(m.group(1))
+                try:
+                    activity = api_service.get_device_activity(
+                        device_id,
+                        lookback=get_param("lookback", "15m"),
+                        limit=get_int_param("limit", 20),
+                    )
+                    self.send_data(activity)
+                except ValueError as err:
+                    self.send_error_response(400, "BAD_REQUEST", str(err))
+                except Exception as err:
+                    self.send_error_response(500, "INTERNAL_ERROR", str(err))
+                return
+
             # 7. DHCP Activity
             if path == "/api/v1/network/dhcp":
                 date_param = get_param("date")

@@ -18,11 +18,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Deque, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
-from .kismet_ml_foundation import TrafficWindow, group_aware_split, normalize_mac
+from .kismet_ml_foundation import ACTIVITY_LABELS, TrafficWindow, group_aware_split, normalize_mac
 
 ACTIVITY_FEATURE_SCHEMA_VERSION = "activity-features-v1"
 ACTIVITY_MODEL_VERSION = "activity-rf-v1"
-ACTIVITY_LABEL_ORDER = ("idle", "browsing", "streaming", "file_transfer", "other")
+# v1 is trained on the labelled VNAT activity proxies.  ``idle`` and
+# ``browsing`` remain valid future/local labels in the foundation contract but
+# are intentionally not fabricated from missing VNAT packets.
+ACTIVITY_LABEL_ORDER = ("streaming", "file_transfer", "chat", "voip", "other")
 _DERIVED_FEATURE_NAMES = (
     "packet_rate", "byte_rate", "mean_packet_size", "median_packet_size",
     "packet_size_std", "mean_interarrival_ms", "median_interarrival_ms",
@@ -108,8 +111,10 @@ class ActivityLabeledWindow:
 
     @property
     def split_group(self) -> str:
-        # MAC is grouping/provenance only, never a model feature.
-        return f"{self.client_mac}|{self.capture_session}|{self.capture_day}"
+        # A complete PCAP/capture session is the leakage boundary.  Do not add
+        # the UTC day: one capture can cross midnight and must still remain in
+        # exactly one split.
+        return self.capture_session
 
 
 def load_labeled_activity_windows(
@@ -127,7 +132,7 @@ def load_labeled_activity_windows(
         label = label_row.get("label")
         if window is None or not label:
             continue
-        if label not in ACTIVITY_LABEL_ORDER:
+        if label not in ACTIVITY_LABELS:
             raise ValueError(
                 f"activity label '{label}' is outside the initial Plan 2 taxonomy "
                 f"{ACTIVITY_LABEL_ORDER}"
@@ -136,7 +141,7 @@ def load_labeled_activity_windows(
         capture_day = datetime.fromtimestamp(start_ms / 1000.0, timezone.utc).date().isoformat()
         probabilities = {str(key): float(value) for key, value in (label_row.get("probabilities") or {}).items()}
         if probabilities:
-            if set(probabilities) - set(ACTIVITY_LABEL_ORDER) or any(not 0.0 <= value <= 1.0 for value in probabilities.values()):
+            if set(probabilities) - ACTIVITY_LABELS or any(not 0.0 <= value <= 1.0 for value in probabilities.values()):
                 raise ValueError(f"invalid activity probabilities for window {window_id}")
             if not math.isclose(sum(probabilities.values()), 1.0, abs_tol=1e-6):
                 raise ValueError(f"activity probabilities for window {window_id} must sum to one")
@@ -184,7 +189,7 @@ def label_windows_from_sessions(
         if not client_mac:
             raise ValueError("activity session is missing a valid client_mac")
         label = str(session.get("label", ""))
-        if label not in ACTIVITY_LABEL_ORDER:
+        if label not in ACTIVITY_LABELS:
             raise ValueError(f"activity session has unsupported label: {label}")
         session_id = str(session.get("capture_session") or session.get("session_id") or "")
         if not session_id:
@@ -348,6 +353,12 @@ class ActivityRandomForestClassifier:
             raise RuntimeError("Plan 2 classifier requires scikit-learn") from error
         features, columns = self._matrix(rows)
         labels = [row.label for row in rows]
+        unsupported = sorted(set(labels) - set(ACTIVITY_LABEL_ORDER))
+        if unsupported:
+            raise ValueError(
+                "training labels are outside the active v1 model taxonomy: "
+                + ", ".join(unsupported)
+            )
         if not features or len(set(labels)) < 2:
             raise ValueError("training requires labelled windows from at least two activity classes")
         self._model = RandomForestClassifier(
@@ -362,6 +373,8 @@ class ActivityRandomForestClassifier:
     def predict(self, vector: ActivityFeatureVector) -> Tuple[str, Dict[str, float]]:
         if self._model is None or self._feature_columns is None:
             raise RuntimeError("activity classifier is not fitted")
+        if tuple(sorted(vector.feature_values)) != tuple(sorted(self._feature_columns)):
+            raise ActivityModelCompatibilityError("activity feature columns are incompatible")
         features = [[vector.feature_values.get(column, 0.0) for column in self._feature_columns]]
         probabilities_raw = self._model.predict_proba(features)[0]
         probabilities = {label: 0.0 for label in ACTIVITY_LABEL_ORDER}
@@ -375,7 +388,7 @@ class ActivityRandomForestClassifier:
         predicted = [self.predict(row.feature_vector)[0] for row in rows]
         return _evaluate_predictions(actual, predicted)
 
-    def save(self, directory: Path | str) -> Dict[str, Path]:
+    def save(self, directory: Path | str, *, artifact_metadata: Optional[Mapping[str, Any]] = None) -> Dict[str, Path]:
         if self._model is None or self._feature_columns is None or not self.dataset_version:
             raise RuntimeError("activity classifier is not fitted")
         try:
@@ -387,7 +400,7 @@ class ActivityRandomForestClassifier:
         model_path = target / f"{self.model_version}.joblib"
         metadata_path = target / f"{self.model_version}.json"
         joblib.dump(self._model, model_path)
-        metadata_path.write_text(json.dumps({
+        metadata = {
             "model_id": self.model_version,
             "model_version": self.model_version,
             "feature_schema_version": ACTIVITY_FEATURE_SCHEMA_VERSION,
@@ -395,7 +408,10 @@ class ActivityRandomForestClassifier:
             "feature_columns": self._feature_columns,
             "label_order": ACTIVITY_LABEL_ORDER,
             "prediction_output_shape": [len(ACTIVITY_LABEL_ORDER)],
-        }, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+        }
+        if artifact_metadata:
+            metadata.update(dict(artifact_metadata))
+        metadata_path.write_text(json.dumps(metadata, sort_keys=True, indent=2) + "\n", encoding="utf-8")
         return {"model": model_path, "metadata": metadata_path}
 
     @classmethod
@@ -412,6 +428,8 @@ class ActivityRandomForestClassifier:
             raise ActivityModelCompatibilityError("activity dataset version is incompatible")
         if tuple(metadata.get("label_order", ())) != ACTIVITY_LABEL_ORDER:
             raise ActivityModelCompatibilityError("activity label order is incompatible")
+        if tuple(metadata.get("prediction_output_shape", ())) != (len(ACTIVITY_LABEL_ORDER),):
+            raise ActivityModelCompatibilityError("activity probability output shape is incompatible")
         model = joblib.load(model_path)
         if getattr(model, "n_features_in_", len(columns)) != len(columns):
             raise ActivityModelCompatibilityError("activity feature width is incompatible")

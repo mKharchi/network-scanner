@@ -1827,6 +1827,15 @@ export const api = {
       },
     ),
 
+  getDeviceActivity: (deviceId: string | number, params?: { lookback?: string; limit?: number }) =>
+    get<DeviceActivityResponse>(
+      `/devices/${encodeURIComponent(String(deviceId))}/activity`,
+      {
+        ...(params?.lookback ? { lookback: params.lookback } : {}),
+        ...(params?.limit ? { limit: String(params.limit) } : {}),
+      },
+    ),
+
   getRecentWifiProbes: (params?: {
     lookback?: string;
     start?: string;
@@ -2001,6 +2010,24 @@ export interface DeviceWirelessObservationsResponse {
   observations: WirelessObservation[];
   rejected_captures?: Record<string, string>;
   degraded_captures?: Record<string, string>;
+}
+
+export interface DeviceActivityPrediction {
+  window_id: string;
+  window_start: string;
+  window_end: string;
+  activity: string;
+  confidence: number;
+  probabilities: Record<string, number>;
+  model_version: string;
+}
+
+export interface DeviceActivityResponse {
+  device_id: string;
+  current: DeviceActivityPrediction | null;
+  recent: DeviceActivityPrediction[];
+  status: "ok" | "model_unavailable" | "model_incompatible" | "no_recent_window" | "low_confidence" | string;
+  detail?: string;
 }
 
 export interface WifiSensor {

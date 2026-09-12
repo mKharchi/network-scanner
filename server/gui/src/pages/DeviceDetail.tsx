@@ -117,6 +117,10 @@ export function DeviceDetailPage() {
   };
 
   const { state, refetch } = useFetch(mac ? () => api.getNetworkDevice(mac) : null, [mac]);
+  const { state: activityState, refetch: refetchActivity } = useFetch(
+    mac ? () => api.getDeviceActivity(mac, { lookback: '15m', limit: 12 }) : null,
+    [mac],
+  );
 
   if (state.status === 'idle' || state.status === 'loading') {
     return <DeviceDetailSkeleton />;
@@ -298,6 +302,39 @@ export function DeviceDetailPage() {
                 Launch Wireless Investigation (15m Lookback) →
               </Button>
             </div>
+          </SectionCard>
+
+          <SectionCard title="Current network activity">
+            {activityState.status === 'loading' || activityState.status === 'idle' ? (
+              <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-sm)' }}>Loading activity inference…</div>
+            ) : activityState.status === 'error' ? (
+              <Notice variant="warning" title="Activity inference unavailable">
+                {activityState.error.message}
+              </Notice>
+            ) : activityState.data.current ? (
+              <div>
+                <DetailRow
+                  label="Current activity"
+                  value={activityState.data.current.activity === 'unknown' ? 'Unknown / mixed' : activityState.data.current.activity}
+                />
+                <DetailRow label="Confidence" value={`${Math.round(activityState.data.current.confidence * 100)}%`} />
+                <DetailRow label="Model" value={activityState.data.current.model_version} mono />
+                {activityState.data.status === 'low_confidence' && (
+                  <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-xs)', marginTop: 'var(--space-2)' }}>
+                    Recent traffic did not meet the confidence threshold.
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-sm)' }}>
+                {activityState.data.status === 'model_unavailable' || activityState.data.status === 'model_incompatible'
+                  ? 'The activity model is not available yet.'
+                  : 'No recent derived traffic window is available.'}
+                <button type="button" onClick={refetchActivity} style={{ marginLeft: 'var(--space-2)', color: 'var(--primary)', background: 'none', border: 0, cursor: 'pointer' }}>
+                  Refresh
+                </button>
+              </div>
+            )}
           </SectionCard>
         </>
       )}

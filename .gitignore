@@ -40,6 +40,9 @@ ENV/
 server/storage/logs/
 server/storage/network_scans/
 server/storage/packages/
+server/storage/ml-2-datasets/
+server/storage/kismet_ml/activity_datasets/
+server/storage/kismet_ml/activity_models/
 client/storage/network_neighborhood/
 
 *.db

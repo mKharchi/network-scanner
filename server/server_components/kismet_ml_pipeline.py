@@ -241,9 +241,14 @@ class KismetMLShadowProcessor:
             splits, split_metadata = group_aware_split(labeled, group_field="split_group")
         elif label_family in {"activity", "mining"}:
             for item in labeled:
-                timestamp = int(item["record"].get("window_start_ms", 0)) / 1000.0
-                day = datetime.fromtimestamp(timestamp, timezone.utc).date().isoformat()
-                item["split_group"] = f"{item['record'].get('client_mac', 'unknown')}|{day}"
+                # Activity windows from one capture must remain together.  A
+                # day-only split leaks adjacent windows and can put the same
+                # PCAP into train and test, especially for public datasets.
+                capture_session = item["record"].get("capture_session") or item["label"].get("capture_session")
+                if not capture_session:
+                    timestamp = int(item["record"].get("window_start_ms", 0)) / 1000.0
+                    capture_session = datetime.fromtimestamp(timestamp, timezone.utc).date().isoformat()
+                item["split_group"] = f"{capture_session}"
             splits, split_metadata = group_aware_split(labeled, group_field="split_group")
         elif label_family == "threat":
             for item in labeled:

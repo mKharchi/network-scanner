@@ -73,9 +73,10 @@
 }
 
 .data-table tbody tr:hover {
-  background: #f5f5f5;
+  background: #212122;
   cursor: pointer;
 }
+
 
 .data-table tbody tr:focus-within {
   outline: 2px solid var(--steel-blue);

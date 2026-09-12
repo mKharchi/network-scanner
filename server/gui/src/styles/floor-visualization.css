@@ -268,13 +268,82 @@
   flex-wrap: wrap;
   gap: var(--space-2);
   margin-bottom: var(--space-4);
+  align-items: end;
 }
 
-.floor-vis__filters select {
-  min-width: 8rem;
-  background: var(--surface);
-  color: var(--text);
+.location-radio {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.location-radio__legend {
+  margin: 0 0 4px;
+  padding: 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.location-radio__track {
+  position: relative;
+  display: flex;
+  width: max-content;
+  max-width: min(100%, 25rem);
+  min-height: 36px;
+  overflow-x: auto;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: var(--space-2);
+  border-radius: 10px;
+  background: var(--surface-card);
+  color: var(--text-primary);
+  scrollbar-width: thin;
+}
+
+.location-radio__track label {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-width: 4.25rem;
+  flex: 1 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: var(--font-xs);
+  font-weight: 600;
+  white-space: nowrap;
+  transition: color .15s ease;
+}
+
+.location-radio__track input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.location-radio__track label:focus-within {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.location-radio__track label.location-radio__option--selected {
+  color: var(--white);
+}
+
+.location-radio__selection {
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  left: 0;
+  height: 100%;
+  border-radius: 9px;
+  background: var(--steel-blue);
+  pointer-events: none;
+  transition: transform .15s ease;
 }

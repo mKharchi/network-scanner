@@ -2800,6 +2800,55 @@ def retrain_classification_model() -> Dict[str, Any]:
     return service.retrain_model_pipeline()
 
 
+def get_device_activity(
+    device_identifier: Any,
+    *,
+    lookback: Optional[Any] = "15m",
+    limit: int = 20,
+) -> Dict[str, Any]:
+    """Return the derived activity prediction envelope for one device.
+
+    Device identifiers may be a network-device numeric id or an observed MAC.
+    The activity service receives the MAC only for lookup; it is never passed
+    into the model feature vector.
+    """
+    import re
+
+    text = str(lookback or "15m").strip().lower()
+    match = re.fullmatch(r"(\d+)\s*([smhd]?)", text)
+    if not match:
+        raise ValueError("lookback must be a number followed by s, m, h, or d")
+    amount = int(match.group(1))
+    unit = match.group(2) or "m"
+    lookback_minutes = max(1, (amount if unit == "m" else amount / 60 if unit == "s" else amount * 60 if unit == "h" else amount * 1440))
+    lookback_minutes = int(lookback_minutes)
+    identifier = str(device_identifier)
+    candidate_mac = _format_mac(identifier) if ":" in identifier or "-" in identifier else None
+    compact_mac = (candidate_mac or "").replace(":", "")
+    client_mac = candidate_mac if len(compact_mac) == 12 and all(char in "0123456789ABCDEF" for char in compact_mac) else None
+    if client_mac is None:
+        conn = get_connection()
+        if conn:
+            try:
+                cursor = conn.cursor(dictionary=True)
+                if identifier.isdigit():
+                    cursor.execute("SELECT mac_address FROM network_devices WHERE id = %s", (int(identifier),))
+                else:
+                    cursor.execute("SELECT mac_address FROM network_devices WHERE device_id = %s", (identifier,))
+                row = cursor.fetchone()
+                client_mac = _format_mac(row.get("mac_address")) if row else None
+            except Exception:
+                client_mac = None
+            finally:
+                conn.close()
+    from server_components.activity_inference import ActivityInferenceService
+    service = ActivityInferenceService()
+    return service.predict_device(
+        identifier, client_mac=client_mac, lookback_minutes=lookback_minutes,
+        limit=max(1, min(int(limit), 100)),
+    )
+
+
 # ============================================================
 # MILESTONE G: BULK UPDATE
 # ============================================================
@@ -3242,4 +3291,3 @@ def get_alert_wireless_investigation(
         "alert": alert_info,
         "investigation": obs_result,
     }
-
