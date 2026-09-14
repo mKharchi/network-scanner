@@ -18,7 +18,6 @@ import { RogueDevicesPage } from './pages/RogueDevices';
 import { SpatialPage } from './pages/SpatialPage';
 import { ClientLocalizationPage } from './pages/ClientLocalization';
 import { RecentProbeActivityPage } from './pages/RecentProbeActivity';
-import { LocationsPage } from './pages/Locations';
 
 function AppContent() {
   const { unreadAlerts } = useRealTimeEvents();
@@ -28,11 +27,10 @@ function AppContent() {
       <Routes>
         <Route path="/" element={<DashboardPage />} />
 
-        {/* Clients */}
+        {/* Clients & Locations (Unified) */}
         <Route path="/clients" element={<ClientsPage />} />
         <Route path="/clients/:clientId" element={<ClientDetailPage />} />
-        {/* Locations is intentionally folded into Clients + the Spatial Map. */}
-        <Route path="/locations" element={<LocationsPage />} />
+        <Route path="/locations" element={<ClientsPage />} />
         <Route path="/rogue-devices" element={<RogueDevicesPage />} />
         <Route path="/digital-twin" element={<SpatialPage />} />
         <Route path="/spatial" element={<SpatialPage />} />

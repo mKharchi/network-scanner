@@ -205,11 +205,11 @@ export function AppShell({
             <NavLink
               to="/clients"
               className={({ isActive }) =>
-                `top-nav-link ${isActive ? "top-nav-link--active" : ""}`
+                `top-nav-link ${isActive || location.pathname === "/locations" ? "top-nav-link--active" : ""}`
               }
             >
               <FiCpu size={16} />
-              <span>Clients</span>
+              <span>Clients & Locations</span>
             </NavLink>
 
 

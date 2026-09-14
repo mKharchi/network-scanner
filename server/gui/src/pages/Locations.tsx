@@ -80,16 +80,15 @@ function SegmentedRadio<T extends string | number>({
   if (!options.length) return null;
 
   return (
-    <fieldset
-      className="location-radio"
-      aria-label={label}
-    >
+    <fieldset className="location-radio" aria-label={label}>
       <legend className="location-radio__legend">{label}</legend>
       <div className="location-radio__track">
         {options.map((option) => (
           <label
             key={String(option.value)}
-            className={option.value === value ? "location-radio__option--selected" : ""}
+            className={
+              option.value === value ? "location-radio__option--selected" : ""
+            }
           >
             <input
               type="radio"
@@ -172,7 +171,17 @@ function automaticLocationFailureMessage(
   return "The available observations do not contain usable coordinates for a reliable location.";
 }
 
-export function LocationsPage() {
+export interface FloorLayoutVisualizerProps {
+  hideHeader?: boolean;
+  onLocationAssigned?: () => void;
+  onClientSelected?: (clientId: string) => void;
+}
+
+export function FloorLayoutVisualizer({
+  hideHeader = false,
+  onLocationAssigned,
+  onClientSelected,
+}: FloorLayoutVisualizerProps = {}) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { addToast } = useToast();
@@ -187,9 +196,9 @@ export function LocationsPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [aisleFilter, setAisleFilter] = useState<number | "all">("all");
   const [tableFilter, setTableFilter] = useState<number | "all">("all");
-  const [selectedLocationId, setSelectedLocationId] = useState<number | string | null>(
-    () => selectedParam || null,
-  );
+  const [selectedLocationId, setSelectedLocationId] = useState<
+    number | string | null
+  >(() => selectedParam || null);
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
   const [actionLoading, setActionLoading] = useState(false);
   const [pendingBulkAction, setPendingBulkAction] = useState<{
@@ -557,6 +566,7 @@ export function LocationsPage() {
       setSelectedLocationId(location.id);
       refetch();
       refetchUnassigned();
+      onLocationAssigned?.();
     } catch (err: any) {
       addToast({
         title: "Assignment failed",
@@ -581,6 +591,7 @@ export function LocationsPage() {
       refetch();
       refetchUnassigned();
       refetchCalibration();
+      onLocationAssigned?.();
     } catch (err: any) {
       addToast({
         title: "Confirm failed",
@@ -594,6 +605,9 @@ export function LocationsPage() {
 
   const handleStationClick = (station: ClientLocation) => {
     setSelectedLocationId(station.id);
+    if (station.client_id && onClientSelected) {
+      onClientSelected(station.client_id);
+    }
     if (assigningClientId && !station.client_id) {
       void assignClientToSeat(station);
     }
@@ -658,44 +672,44 @@ export function LocationsPage() {
           }
         }}
       />
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: "var(--space-3)",
-          alignItems: "center",
-          marginBottom: "var(--space-5)",
-          flexWrap: "wrap",
-        }}
-      >
-        <div className="client-page-header__copy">
-          <span className="eyebrow eyebrow--accent">
-            SPATIAL INTELLIGENCE / LOCATIONS
-          </span>
-          <h1 className="page-title">Center layout</h1>
-          <p
-            style={{ color: "var(--text-muted)", marginTop: "var(--space-1)" }}
-          >
-            Floors, rooms, aisles, tables, and PC seats. Use the assignment
-            queue to place unassigned clients on empty seats.
-          </p>
+      {!hideHeader && (
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: "var(--space-3)",
+            alignItems: "center",
+            marginBottom: "var(--space-5)",
+            flexWrap: "wrap",
+          }}
+        >
+          <div className="client-page-header__copy">
+            <span className="eyebrow eyebrow--accent">
+              SPATIAL INTELLIGENCE / LOCATIONS
+            </span>
+            <h1 className="page-title">Center layout</h1>
+            <p
+              style={{ color: "var(--text-muted)", marginTop: "var(--space-1)" }}
+            >
+              Floors, rooms, aisles, tables, and PC seats. Use the assignment
+              queue to place unassigned clients on empty seats.
+            </p>
+          </div>
+          <div style={{ display: "flex", gap: "var(--space-2)" }}>
+            <Button
+              variant="quiet"
+              size="sm"
+              onClick={() => {
+                refetch();
+                refetchUnassigned();
+                refetchCalibration();
+              }}
+            >
+              Refresh
+            </Button>
+          </div>
         </div>
-        <div style={{ display: "flex", gap: "var(--space-2)" }}>
-          <Button
-            variant="quiet"
-            size="sm"
-            onClick={() => {
-              refetch();
-              refetchUnassigned();
-              refetchCalibration();
-            }}
-          >
-            Refresh
-          </Button>
-        </div>
-      </div>
-
-     
+      )}
 
       {assigningClientId && (
         <div style={{ marginBottom: "var(--space-4)" }}>
@@ -815,9 +829,18 @@ export function LocationsPage() {
       </div>
 
       <CalibrationSummary
-        report={calibrationState.status === "success" ? calibrationState.data : null}
-        loading={calibrationState.status === "idle" || calibrationState.status === "loading"}
-        error={calibrationState.status === "error" ? calibrationState.error.message : null}
+        report={
+          calibrationState.status === "success" ? calibrationState.data : null
+        }
+        loading={
+          calibrationState.status === "idle" ||
+          calibrationState.status === "loading"
+        }
+        error={
+          calibrationState.status === "error"
+            ? calibrationState.error.message
+            : null
+        }
       />
 
       {state.status === "error" && (
@@ -827,7 +850,6 @@ export function LocationsPage() {
           </div>
         </div>
       )}
-
 
       <div className="floor-vis__filters">
         <SegmentedRadio
@@ -844,7 +866,10 @@ export function LocationsPage() {
           value={aisleFilter}
           options={[
             { value: "all" as const, label: "All" },
-            ...aisleOptions.map((aisle) => ({ value: aisle, label: String(aisle) })),
+            ...aisleOptions.map((aisle) => ({
+              value: aisle,
+              label: String(aisle),
+            })),
           ]}
           onChange={setAisleFilter}
         />
@@ -853,7 +878,10 @@ export function LocationsPage() {
           value={tableFilter}
           options={[
             { value: "all" as const, label: "All" },
-            ...tableOptions.map((table) => ({ value: table, label: String(table) })),
+            ...tableOptions.map((table) => ({
+              value: table,
+              label: String(table),
+            })),
           ]}
           onChange={setTableFilter}
         />
@@ -862,7 +890,16 @@ export function LocationsPage() {
           value={statusFilter}
           options={[
             { value: "all", label: "All" },
-            ...(["healthy", "warning", "critical", "isolated", "offline", "empty"] as StationVisual[]).map((status) => ({
+            ...(
+              [
+                "healthy",
+                "warning",
+                "critical",
+                "isolated",
+                "offline",
+                "empty",
+              ] as StationVisual[]
+            ).map((status) => ({
               value: status as StatusFilter,
               label: STATION_VISUAL_LABEL[status],
             })),
@@ -1606,19 +1643,29 @@ function findLocation(
   locationId: number | string | null,
 ): ClientLocation | null {
   if (!layout || locationId == null) return null;
-  const asNumber = typeof locationId === "number" ? locationId : Number(locationId);
+  const asNumber =
+    typeof locationId === "number" ? locationId : Number(locationId);
   const isNumeric = Number.isFinite(asNumber);
   const asString = String(locationId);
 
   for (const room of layout.rooms) {
-    if ((isNumeric && room.id === asNumber) || room.client_id === asString) return room;
+    if ((isNumeric && room.id === asNumber) || room.client_id === asString)
+      return room;
   }
   for (const aisle of layout.aisles) {
     for (const table of aisle.tables) {
-      if ((isNumeric && table.location?.id === asNumber) || table.location?.client_id === asString) return table.location;
+      if (
+        (isNumeric && table.location?.id === asNumber) ||
+        table.location?.client_id === asString
+      )
+        return table.location;
       for (const column of tableColumns(table)) {
         for (const station of column.stations) {
-          if ((isNumeric && station.id === asNumber) || station.client_id === asString) return station;
+          if (
+            (isNumeric && station.id === asNumber) ||
+            station.client_id === asString
+          )
+            return station;
         }
       }
     }
@@ -1672,4 +1719,8 @@ function collectVisibleClientIds(
     }
   }
   return ids;
+}
+
+export function LocationsPage() {
+  return <FloorLayoutVisualizer />;
 }

@@ -673,7 +673,7 @@ export function ClientDetailPage() {
                       size="sm"
                       onClick={() =>
                         navigate(
-                          `/locations?floor=${c.location?.floor ?? 1}&selected=${c.location?.id}`
+                          `/clients?floor=${c.location?.floor ?? 1}&selected=${c.location?.id}`
                         )
                       }
                     >
@@ -684,7 +684,7 @@ export function ClientDetailPage() {
                       size="sm"
                       onClick={() =>
                         navigate(
-                          `/locations?assign=${encodeURIComponent(c.id)}&floor=${c.location?.floor ?? 1}`
+                          `/clients?assign=${encodeURIComponent(c.id)}&floor=${c.location?.floor ?? 1}`
                         )
                       }
                     >
@@ -696,7 +696,7 @@ export function ClientDetailPage() {
                     variant="primary"
                     size="sm"
                     onClick={() =>
-                      navigate(`/locations?assign=${encodeURIComponent(c.id)}`)
+                      navigate(`/clients?assign=${encodeURIComponent(c.id)}`)
                     }
                   >
                     Assign location

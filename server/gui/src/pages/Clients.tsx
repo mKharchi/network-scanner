@@ -17,6 +17,7 @@ import { formatRelative } from "../utils/format";
 import { MetricCard } from "../components/Card";
 import { DeployPackagePanel } from "../components/DeployPackagePanel";
 import { UpdateClientPanel } from "../components/UpdateClientPanel";
+import { FloorLayoutVisualizer } from "./Locations";
 import "../styles/operations.css";
 
 // ── Filter bar ────────────────────────────────────────────────────
@@ -314,41 +315,54 @@ export function ClientsPage() {
   });
 
   const startManualAssignment = (clientId: string) => {
-    navigate(`/locations?assign=${encodeURIComponent(clientId)}`);
+    const next = new URLSearchParams(searchParams);
+    next.set("assign", clientId);
+    setSearchParams(next, { replace: true });
+    document.getElementById("floor-layout-section")?.scrollIntoView({ behavior: "smooth" });
   };
 
   const viewOnFloorMap = (client: ManagedClientSummary) => {
+    const next = new URLSearchParams(searchParams);
     if (client.location) {
-      navigate(`/locations?floor=${client.location.floor ?? 1}&selected=${client.location.id}`);
+      next.set("floor", String(client.location.floor ?? 1));
+      next.set("selected", String(client.location.id));
+      next.delete("assign");
     } else {
-      navigate(`/locations?assign=${encodeURIComponent(client.id)}`);
+      next.set("assign", client.id);
     }
+    setSearchParams(next, { replace: true });
+    document.getElementById("floor-layout-section")?.scrollIntoView({ behavior: "smooth" });
   };
 
   const tryAutomaticLocation = async (client: ManagedClientSummary) => {
     setAutoLocatingClientId(client.id);
     try {
       const outcome = await api.autoAssignClientLocation(client.id);
-      const location = outcome.location as { id?: number; label?: string } | undefined;
+      const location = outcome.location as { id?: number; floor?: number; label?: string } | undefined;
       if (outcome.assigned === true && location?.label) {
         addToast({
           title: "Automatic location assigned",
-          message: `${client.hostname || client.id} was placed at ${location.label}. Open the floor map to verify it.`,
+          message: `${client.hostname || client.id} was placed at ${location.label}.`,
           severity: "SUCCESS",
           action: {
-            label: "Review location",
-            onClick: () =>
-              navigate(
-                location?.id != null
-                  ? `/locations?selected=${location.id}`
-                  : `/locations?selected=${encodeURIComponent(client.id)}`
-              ),
+            label: "Inspect seat",
+            onClick: () => {
+              const next = new URLSearchParams(searchParams);
+              if (location?.floor != null) {
+                next.set("floor", String(location.floor));
+              }
+              if (location?.id != null) {
+                next.set("selected", String(location.id));
+              }
+              setSearchParams(next, { replace: true });
+              document.getElementById("floor-layout-section")?.scrollIntoView({ behavior: "smooth" });
+            },
           },
         });
       } else {
         addToast({
           title: "Automatic location not assigned",
-          message: `${client.hostname || client.id} remains unassigned. Open the floor map to inspect its placement.`,
+          message: `${client.hostname || client.id} remains unassigned. Use the floor layout to place manually.`,
           severity: "HIGH",
         });
       }
@@ -393,21 +407,30 @@ export function ClientsPage() {
       <div className="page-header operations-page-header">
         <div className="client-page-header__copy">
           <span className="eyebrow eyebrow--accent">NETWORK INTELLIGENCE / CLIENTS</span>
-          <h1 className="page-title">Clients</h1>
-          <p className="page-description">Monitor every agent and see its physical place at a glance. Select a client to inspect it, or focus that client on the floor map.</p>
+          <h1 className="page-title">Clients & Locations</h1>
+          <p className="page-description">
+            Monitor client health and physical center disposition at a glance. Manage 2D seat assignments directly from the floor layout or the fleet directory below.
+          </p>
         </div>
         <div className="operations-page-header__actions">
-          <Button variant="secondary" size="md" onClick={() => navigate("/locations")}>
-            Open floor map →
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={() => {
+              document.getElementById("floor-layout-section")?.scrollIntoView({ behavior: "smooth" });
+            }}
+          >
+            Floor map ↓
           </Button>
-        </div>
-      </div>
-
-      <div className="client-location-guide" role="note">
-        <span className="client-location-guide__index">01</span>
-        <div>
-          <strong>Physical placement is part of the client record.</strong>
-          <span>The spatial map is the single source of truth for floor-one placement. Use a client row to focus its marker.</span>
+          <Button
+            variant="quiet"
+            size="md"
+            onClick={() => {
+              document.getElementById("clients-table-section")?.scrollIntoView({ behavior: "smooth" });
+            }}
+          >
+            Client directory ↓
+          </Button>
         </div>
       </div>
 
@@ -416,6 +439,73 @@ export function ClientsPage() {
         <MetricCard label="Online" value={onlineCount} valueVariant="success" context="Currently connected" />
         <MetricCard label="Isolated" value={isolatedCount} valueVariant="danger" context="Network access restricted" />
         <MetricCard label="Located" value={assignedCount} valueVariant="info" context="Assigned to a physical position" />
+      </div>
+
+      <section
+        id="floor-layout-section"
+        aria-label="2D Floor Layout and PC Seats"
+        style={{
+          margin: "var(--space-5) 0",
+          padding: "var(--space-4)",
+          background: "var(--surface)",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--radius-lg)",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: "var(--space-4)",
+            borderBottom: "1px solid var(--border-subtle)",
+            paddingBottom: "var(--space-3)",
+            flexWrap: "wrap",
+            gap: "var(--space-2)",
+          }}
+        >
+          <div>
+            <span className="eyebrow eyebrow--accent" style={{ fontSize: "var(--font-xs)" }}>
+              PHYSICAL DISPOSITION
+            </span>
+            <h2 style={{ margin: 0, fontSize: "var(--font-lg)", fontWeight: 600 }}>
+              Center Floor Layout & Workstations
+            </h2>
+            <p style={{ margin: "var(--space-1) 0 0", color: "var(--text-muted)", fontSize: "var(--font-xs)" }}>
+              Floors, aisles, tables, and PC positions. Click an empty seat to assign a client or select a seated PC to inspect diagnostics.
+            </p>
+          </div>
+        </div>
+
+        <FloorLayoutVisualizer
+          hideHeader
+          onLocationAssigned={() => {
+            refetch();
+          }}
+          onClientSelected={(clientId) => {
+            setSelectedClientIds(new Set([clientId]));
+          }}
+        />
+      </section>
+
+      <div
+        id="clients-table-section"
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: "var(--space-3)",
+          marginTop: "var(--space-6)",
+        }}
+      >
+        <div>
+          <span className="eyebrow eyebrow--accent" style={{ fontSize: "var(--font-xs)" }}>
+            DIRECTORY & FLEET
+          </span>
+          <h2 style={{ margin: 0, fontSize: "var(--font-lg)", fontWeight: 600 }}>
+            Client Fleet Directory
+          </h2>
+        </div>
       </div>
 
       {state.status === "error" && (
