@@ -1692,6 +1692,165 @@ def _spawn_updater_subprocess(
         }
 
 
+
+# ---------------------------------------------------------------------------
+# RECONFIGURE_CLIENT handler
+# ---------------------------------------------------------------------------
+
+# Keys the server is allowed to write into config/.env remotely.
+# Extend this list as new portable config parameters are introduced.
+_RECONFIGURE_ALLOWLIST: set[str] = {
+    "SERVER_IP",
+    "SERVER_PORT",
+    "NETWORK_SCAN_INTERFACE",
+    "NETWORK_SCAN_SUBNET",
+    "DHCP_LISTEN_INTERFACE",
+    "FORBIDDEN_PROCESS_SCAN_INTERVAL_SECONDS",
+    "PROCESS_SCAN_INTERVAL_SECONDS",
+    "QUARANTINE_MAX_DURATION_MINUTES",
+    "AUTO_ISOLATE_ON_ESCALATION",
+    "SCREENSHOT_MAX_RESPONSE_BYTES",
+    "NETWORK_NEIGHBOUR_HOSTNAME_LOOKUP_LIMIT",
+}
+
+
+def _read_env_file(path: Path) -> dict:
+    """Parse a .env file into a dict preserving comment lines."""
+    lines = []
+    kv = {}
+    if path.is_file():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if stripped and not stripped.startswith("#") and "=" in stripped:
+                k, _, v = stripped.partition("=")
+                kv[k.strip()] = v.strip()
+            lines.append(line)
+    return kv, lines
+
+
+def _write_env_file(path: Path, existing_kv: dict, original_lines: list, patch: dict) -> None:
+    """Apply patch onto the existing env file, updating in-place for known keys
+    and appending new ones. Written atomically via a .tmp swap."""
+    updated_keys = set()
+    new_lines = []
+    for line in original_lines:
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#") and "=" in stripped:
+            k, _, _ = stripped.partition("=")
+            k = k.strip()
+            if k in patch:
+                new_lines.append(f"{k}={patch[k]}")
+                updated_keys.add(k)
+                continue
+        new_lines.append(line)
+
+    # Append any keys in patch that were not already in the file
+    for k, v in patch.items():
+        if k not in updated_keys:
+            new_lines.append(f"{k}={v}")
+
+    content = "\n".join(new_lines)
+    if not content.endswith("\n"):
+        content += "\n"
+
+    tmp_path = path.with_suffix(".tmp")
+    tmp_path.write_text(content, encoding="utf-8")
+    os.replace(tmp_path, path)
+
+
+def _spawn_restarted_client(client_root: Path) -> dict:
+    """Spawn a fresh client.py process and return its PID."""
+    import subprocess
+    import sys
+
+    app_py = client_root / "app" / "client.py"
+    if not app_py.is_file():
+        return {"status": "error", "message": f"client.py not found at {app_py}"}
+
+    # Prefer the venv interpreter, fall back to the current executable.
+    venv_py = client_root / ".venv" / "Scripts" / "python.exe"  # Windows
+    if not venv_py.is_file():
+        venv_py = client_root / "venv" / "Scripts" / "python.exe"
+    if not venv_py.is_file():
+        venv_py = client_root / ".venv" / "bin" / "python"      # Linux/macOS
+    if not venv_py.is_file():
+        venv_py = client_root / "venv" / "bin" / "python"
+    python_exe = str(venv_py) if venv_py.is_file() else sys.executable
+
+    try:
+        proc = subprocess.Popen(
+            [python_exe, str(app_py)],
+            cwd=str(client_root / "app"),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        return {"status": "ok", "pid": proc.pid}
+    except Exception as err:
+        return {"status": "error", "message": str(err)}
+
+
+def _handle_reconfigure_client(message, **_context):
+    """Patch config/.env with server-supplied key-value pairs then restart.
+
+    Only keys present in ``_RECONFIGURE_ALLOWLIST`` are accepted.  All other
+    keys are rejected and the config file is left untouched.  The patch is
+    written atomically (tmp-file + os.replace).  After a successful write the
+    client schedules a process restart so the new values are picked up cleanly.
+    """
+    parameters: dict = message.get("parameters") or {}
+
+    if not parameters:
+        return {"status": "FAILED", "error": "No parameters provided."}
+
+    rejected = {k for k in parameters if k not in _RECONFIGURE_ALLOWLIST}
+    if rejected:
+        return {
+            "status": "FAILED",
+            "error": f"Rejected disallowed config key(s): {sorted(rejected)}. "
+                     f"Allowed: {sorted(_RECONFIGURE_ALLOWLIST)}",
+        }
+
+    # Resolve config/.env path — APP_DIR/../config/.env
+    app_dir = Path(__file__).resolve().parent
+    client_root = app_dir.parent
+    env_path = client_root / "config" / ".env"
+
+    try:
+        env_path.parent.mkdir(parents=True, exist_ok=True)
+        existing_kv, original_lines = _read_env_file(env_path)
+        _write_env_file(env_path, existing_kv, original_lines, parameters)
+    except OSError as err:
+        return {"status": "FAILED", "error": f"Could not write config/.env: {err}"}
+
+    patched_keys = list(parameters.keys())
+    print(f"[RECONFIGURE] Patched config/.env: {patched_keys}. Scheduling restart.")
+
+    # Schedule the restart in a daemon thread so the SUCCESS response is sent
+    # first before the current process exits.
+    def _restart_after_delay():
+        import time as _time
+        _time.sleep(1.5)
+        spawn_result = _spawn_restarted_client(client_root)
+        if spawn_result.get("status") == "ok":
+            print(f"[RECONFIGURE] New client process spawned (pid={spawn_result['pid']}). Exiting.")
+        else:
+            print(f"[RECONFIGURE] WARNING: could not spawn new client: {spawn_result.get('message')}")
+        # Exit the current process regardless — if spawn failed the OS task /
+        # scheduled task will relaunch it automatically.
+        import os as _os
+        _os._exit(0)
+
+    threading.Thread(target=_restart_after_delay, daemon=True, name="reconfigure-restart").start()
+
+    return {
+        "status": "SUCCESS",
+        "patched_keys": patched_keys,
+        "message": "Configuration updated. Client will restart momentarily.",
+    }
+
+
+
 ACTION_MANAGER = ActionManager()
 ACTION_MANAGER.register(ActionType.GET_SYSTEM_INFO.value, _handle_get_system_info)
 ACTION_MANAGER.register(ActionType.GET_NETWORK_INFO.value, _handle_get_network_info)
@@ -1744,6 +1903,10 @@ ACTION_MANAGER.register(
 ACTION_MANAGER.register(
     ActionType.UPDATE_CLIENT.value,
     _handle_deploy_package_init,
+)
+ACTION_MANAGER.register(
+    ActionType.RECONFIGURE_CLIENT.value,
+    _handle_reconfigure_client,
 )
 
 

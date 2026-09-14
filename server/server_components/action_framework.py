@@ -44,6 +44,7 @@ class ActionType(str, Enum):
     DEPLOY_PACKAGE = "DEPLOY_PACKAGE"
     SEND_FILE = "SEND_FILE"
     UPDATE_CLIENT = "UPDATE_CLIENT"
+    RECONFIGURE_CLIENT = "RECONFIGURE_CLIENT"
 
 
 class ActionState(str, Enum):

@@ -62,7 +62,7 @@ class KismetRetentionManager:
         elif configured_dir:
             self.capture_dir = Path(configured_dir).resolve()
         else:
-            self.capture_dir = Path("/home/adonis/kismet").resolve()
+            self.capture_dir = Path("~/kismet").expanduser().resolve()
 
         self.retention_hours = (
             float(retention_hours)

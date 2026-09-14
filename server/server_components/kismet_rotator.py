@@ -78,8 +78,8 @@ class KismetLogRotator:
             self.capture_dirs = [Path(p) for p in capture_dirs]
         else:
             self.capture_dirs = [
-                Path(os.getenv("KISMET_CAPTURE_ROOT") or "/home/adonis/kismet"),
-                Path("/home/adonis"),
+                Path(os.getenv("KISMET_CAPTURE_ROOT") or "~/kismet").expanduser(),
+                Path("~").expanduser(),
             ]
 
     def _auth_header(self) -> str:

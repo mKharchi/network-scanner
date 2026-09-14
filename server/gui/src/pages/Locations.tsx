@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   api,
-  type CalibrationReport,
   type ClientLocation,
   type FloorLayout,
   type FloorTable,
@@ -55,7 +54,7 @@ type StatusFilter = "all" | StationVisual;
 
 interface RadioOption<T extends string | number> {
   value: T;
-  label: string;
+  label: ReactNode;
 }
 
 interface SegmentedRadioProps<T extends string | number> {
@@ -72,17 +71,45 @@ function SegmentedRadio<T extends string | number>({
   options,
   onChange,
 }: SegmentedRadioProps<T>) {
-  const selectedIndex = Math.max(
-    0,
-    options.findIndex((option) => option.value === value),
-  );
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [indicatorStyle, setIndicatorStyle] = useState<{
+    left: number;
+    width: number;
+    ready: boolean;
+  }>({ left: 0, width: 0, ready: false });
+
+  useEffect(() => {
+    const updateIndicator = () => {
+      if (!trackRef.current) return;
+      const selectedEl = trackRef.current.querySelector<HTMLLabelElement>(
+        ".location-radio__option--selected",
+      );
+      if (selectedEl) {
+        setIndicatorStyle({
+          left: selectedEl.offsetLeft,
+          width: selectedEl.offsetWidth,
+          ready: true,
+        });
+      } else {
+        setIndicatorStyle((prev) => ({ ...prev, ready: false }));
+      }
+    };
+
+    updateIndicator();
+
+    const track = trackRef.current;
+    if (!track) return;
+    const resizeObserver = new ResizeObserver(updateIndicator);
+    resizeObserver.observe(track);
+    return () => resizeObserver.disconnect();
+  }, [value, options]);
 
   if (!options.length) return null;
 
   return (
     <fieldset className="location-radio" aria-label={label}>
       <legend className="location-radio__legend">{label}</legend>
-      <div className="location-radio__track">
+      <div className="location-radio__track" ref={trackRef}>
         {options.map((option) => (
           <label
             key={String(option.value)}
@@ -100,14 +127,16 @@ function SegmentedRadio<T extends string | number>({
             <span>{option.label}</span>
           </label>
         ))}
-        <span
-          className="location-radio__selection"
-          aria-hidden="true"
-          style={{
-            width: `${100 / options.length}%`,
-            transform: `translateX(${selectedIndex * 100}%)`,
-          }}
-        />
+        {indicatorStyle.ready && (
+          <span
+            className="location-radio__selection"
+            aria-hidden="true"
+            style={{
+              transform: `translateX(${indicatorStyle.left}px)`,
+              width: `${indicatorStyle.width}px`,
+            }}
+          />
+        )}
       </div>
     </fieldset>
   );
@@ -139,10 +168,6 @@ function locationDescription(location: ClientLocation): string {
 
 function stationKey(location: ClientLocation): string {
   return String(location.id);
-}
-
-function formatCoordinate(value: number): string {
-  return value.toFixed(2);
 }
 
 function automaticLocationFailureMessage(
@@ -189,10 +214,7 @@ export function FloorLayoutVisualizer({
   const selectedParam = searchParams.get("selected");
   const assigningClientId = searchParams.get("assign");
 
-  const [selectedFloor, setSelectedFloor] = useState(() => {
-    const parsed = Number(floorParam);
-    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 1;
-  });
+  const [selectedFloor, setSelectedFloor] = useState(1);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [aisleFilter, setAisleFilter] = useState<number | "all">("all");
   const [tableFilter, setTableFilter] = useState<number | "all">("all");
@@ -238,12 +260,6 @@ export function FloorLayoutVisualizer({
     [],
     ["app:client_status", "app:client_location_updated"],
   );
-  const { state: calibrationState, refetch: refetchCalibration } =
-    useFetch<CalibrationReport>(
-      () => api.getCalibrationReport(),
-      [],
-      ["app:client_location_updated"],
-    );
   const layout: FloorLayout | null =
     state.status === "success"
       ? state.data
@@ -498,7 +514,6 @@ export function FloorLayoutVisualizer({
       }
       refetch();
       refetchUnassigned();
-      refetchCalibration();
     } catch (err: any) {
       addToast({
         title: "Automatic location failed",
@@ -590,7 +605,6 @@ export function FloorLayoutVisualizer({
       });
       refetch();
       refetchUnassigned();
-      refetchCalibration();
       onLocationAssigned?.();
     } catch (err: any) {
       addToast({
@@ -637,9 +651,6 @@ export function FloorLayoutVisualizer({
   const client: ManagedClientSummary | null =
     clientState.status === "success" ? clientState.data.client : null;
   const isOnline = client?.connection.state === "ONLINE";
-  const floors = layout.available_floors.length
-    ? layout.available_floors
-    : [0, 1, 2];
   const emptyFloor = !layout.rooms.length && !layout.aisles.length;
   const selectedAssignment = resolveLocationAssignment(
     selectedLocation,
@@ -689,7 +700,10 @@ export function FloorLayoutVisualizer({
             </span>
             <h1 className="page-title">Center layout</h1>
             <p
-              style={{ color: "var(--text-muted)", marginTop: "var(--space-1)" }}
+              style={{
+                color: "var(--text-muted)",
+                marginTop: "var(--space-1)",
+              }}
             >
               Floors, rooms, aisles, tables, and PC seats. Use the assignment
               queue to place unassigned clients on empty seats.
@@ -702,7 +716,6 @@ export function FloorLayoutVisualizer({
               onClick={() => {
                 refetch();
                 refetchUnassigned();
-                refetchCalibration();
               }}
             >
               Refresh
@@ -828,21 +841,6 @@ export function FloorLayoutVisualizer({
         </SectionCard>
       </div>
 
-      <CalibrationSummary
-        report={
-          calibrationState.status === "success" ? calibrationState.data : null
-        }
-        loading={
-          calibrationState.status === "idle" ||
-          calibrationState.status === "loading"
-        }
-        error={
-          calibrationState.status === "error"
-            ? calibrationState.error.message
-            : null
-        }
-      />
-
       {state.status === "error" && (
         <div style={{ marginBottom: "var(--space-4)" }}>
           <div className="notice notice--warning">
@@ -851,16 +849,9 @@ export function FloorLayoutVisualizer({
         </div>
       )}
 
+      
       <div className="floor-vis__filters">
-        <SegmentedRadio
-          label="Floor"
-          value={selectedFloor}
-          options={floors.map((floor) => ({
-            value: floor,
-            label: floor === 0 ? "Ground" : `Floor ${floor}`,
-          }))}
-          onChange={setSelectedFloor}
-        />
+        
         <SegmentedRadio
           label="Aisle"
           value={aisleFilter}
@@ -901,7 +892,7 @@ export function FloorLayoutVisualizer({
               ] as StationVisual[]
             ).map((status) => ({
               value: status as StatusFilter,
-              label: STATION_VISUAL_LABEL[status],
+              label: (String(STATION_VISUAL_LABEL[status])),
             })),
           ]}
           onChange={setStatusFilter}
@@ -966,28 +957,6 @@ export function FloorLayoutVisualizer({
           </>
         )}
       </div>
-
-      <ul className="floor-vis__legend">
-        {(
-          [
-            "healthy",
-            "warning",
-            "critical",
-            "isolated",
-            "offline",
-            "empty",
-          ] as StationVisual[]
-        ).map((status) => (
-          <li key={status} className="floor-vis__legend-item">
-            <span
-              className={`station station--${status}`}
-              style={{ width: "0.9rem", minHeight: "0.9rem" }}
-              aria-hidden="true"
-            />
-            {STATION_VISUAL_LABEL[status]}
-          </li>
-        ))}
-      </ul>
       <ul className="floor-vis__legend floor-vis__legend-assignment">
         <li className="floor-vis__legend-item">
           <span className="station__assignment-glyph" aria-hidden="true">
@@ -1113,6 +1082,7 @@ export function FloorLayoutVisualizer({
                                             station.client_id,
                                           ));
                                       const neighbor =
+                                        !selected &&
                                         station.client_id != null &&
                                         neighborIds.has(station.client_id);
                                       const title = stationAssignmentTitle(
@@ -1513,105 +1483,6 @@ export function FloorLayoutVisualizer({
   );
 }
 
-function CalibrationSummary({
-  report,
-  loading,
-  error,
-}: {
-  report: CalibrationReport | null;
-  loading: boolean;
-  error: string | null;
-}) {
-  if (loading) {
-    return (
-      <div style={{ marginBottom: "var(--space-5)" }}>
-        <Skeleton variant="row" width="100%" />
-      </div>
-    );
-  }
-  if (error) {
-    return (
-      <div
-        className="notice notice--warning"
-        style={{ marginBottom: "var(--space-5)" }}
-      >
-        Calibration data is unavailable: {error}
-      </div>
-    );
-  }
-  if (!report) return null;
-
-  const { summary } = report;
-  return (
-    <div style={{ marginBottom: "var(--space-5)" }}>
-      <SectionCard title="Localization calibration">
-        <p style={{ color: "var(--text-muted)", marginTop: 0 }}>
-          Confirmed automatic assignments compare the calculated position with
-          the physical seat.
-        </p>
-        <div
-          className="floor-vis__legend"
-          style={{ marginBottom: "var(--space-3)" }}
-        >
-          <span>
-            <strong>{report.sample_count}</strong> verified sample
-            {report.sample_count === 1 ? "" : "s"}
-          </span>
-          <span>
-            <strong>{formatCoordinate(summary.mean_distance)}</strong> mean
-            distance error
-          </span>
-          <span
-            style={{
-              color: summary.systematic_transformation_signal
-                ? "var(--danger)"
-                : "var(--success)",
-            }}
-          >
-            {summary.systematic_transformation_signal
-              ? "Offset signal detected"
-              : "No offset signal"}
-          </span>
-        </div>
-        <div
-          style={{ color: "var(--text-muted)", marginBottom: "var(--space-3)" }}
-        >
-          Mean axis error: Δx {formatCoordinate(summary.mean_error.x)}, Δy{" "}
-          {formatCoordinate(summary.mean_error.y)}, Δz{" "}
-          {formatCoordinate(summary.mean_error.z)}. {summary.interpretation}
-        </div>
-        {report.comparisons.length > 0 && (
-          <div style={{ overflowX: "auto" }}>
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Client</th>
-                  <th>Confirmed seat</th>
-                  <th>Δx</th>
-                  <th>Δy</th>
-                  <th>Δz</th>
-                  <th>Distance</th>
-                </tr>
-              </thead>
-              <tbody>
-                {report.comparisons.slice(0, 10).map((comparison) => (
-                  <tr key={`${comparison.history_id}-${comparison.client_id}`}>
-                    <td>{comparison.hostname || comparison.client_id}</td>
-                    <td>{comparison.location_label}</td>
-                    <td>{formatCoordinate(comparison.error.dx)}</td>
-                    <td>{formatCoordinate(comparison.error.dy)}</td>
-                    <td>{formatCoordinate(comparison.error.dz)}</td>
-                    <td>{formatCoordinate(comparison.error.distance)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </SectionCard>
-    </div>
-  );
-}
 
 function formatPercent(value: number | null | undefined): string {
   return typeof value === "number" ? `${Math.round(value)}%` : "—";

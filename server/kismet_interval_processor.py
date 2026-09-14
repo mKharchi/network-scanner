@@ -314,7 +314,7 @@ def cmd_run_cycle(args: argparse.Namespace, processor: KismetIntervalProcessor) 
 
     # 2. Process all closed intervals
     print("2. Processing closed intervals...", file=sys.stderr)
-    proc_args = argparse.Namespace(lookback=getattr(args, "lookback", 144), margin=30)
+    proc_args = argparse.Namespace(lookback=getattr(args, "lookback", 1), margin=0)
     proc_res_code = cmd_process_completed(proc_args, processor)
 
     # 3. Clean up verified closed raw captures
@@ -507,7 +507,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Automated 10-minute cycle: rotate log, process completed intervals, cleanup, and summarize",
     )
     rc.add_argument("--log-class", default="kismet", help="Kismet log class to rotate (default: kismet)")
-    rc.add_argument("--lookback", type=int, default=144, help="Interval lookback count (default: 144)")
+    rc.add_argument("--lookback", type=int, default=1, help="Interval lookback count for the automated cycle (default: 1; use process-completed --lookback 144 for manual full-day backfill)")
     rc.add_argument(
         "--execute-cleanup",
         action="store_true",

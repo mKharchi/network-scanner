@@ -136,7 +136,7 @@ class KismetMLShadowProcessor:
         elif configured_dirs:
             self.capture_dirs = [Path(path.strip()) for path in configured_dirs.split(",") if path.strip()]
         else:
-            self.capture_dirs = [Path(os.getenv("KISMET_CAPTURE_ROOT") or os.getenv("KISMET_CAPTURE_DIR") or "/home/adonis/kismet")]
+            self.capture_dirs = [Path(os.getenv("KISMET_CAPTURE_ROOT") or os.getenv("KISMET_CAPTURE_DIR") or "~/kismet").expanduser()]
         self.store = KismetMLDerivedStore(storage_dir)
         self.checkpoints = CheckpointStore(self.store.storage_dir / "processing-checkpoint.json")
         configured_limit = os.getenv("KISMET_ML_MAX_OBSERVATIONS_PER_RUN", "10000")

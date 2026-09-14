@@ -387,8 +387,8 @@ class KismetDailySummarizer:
             self.capture_dirs = [Path(p.strip()) for p in configured_dirs.split(",") if p.strip()]
         else:
             self.capture_dirs = [
-                Path(os.getenv("KISMET_CAPTURE_ROOT") or os.getenv("KISMET_CAPTURE_DIR") or "/home/adonis/kismet"),
-                Path("/home/adonis"),
+                Path(os.getenv("KISMET_CAPTURE_ROOT") or os.getenv("KISMET_CAPTURE_DIR") or "~/kismet").expanduser(),
+                Path("~").expanduser(),
             ]
 
     def _load_day_predictions(

@@ -19,7 +19,7 @@ DEFAULT_STORAGE_DIR = str(SERVER_DIRECTORY / "storage" / "network_scans")
 
 def get_network_scan_storage_dir():
     """Return the configured scan directory as an absolute stable path."""
-    configured_dir = Path(os.getenv("NETWORK_SCAN_STORAGE_DIR", DEFAULT_STORAGE_DIR))
+    configured_dir = Path(os.getenv("NETWORK_SCAN_STORAGE_DIR", DEFAULT_STORAGE_DIR)).expanduser()
     if configured_dir.is_absolute():
         return configured_dir
     return (PROJECT_DIRECTORY / configured_dir).resolve()

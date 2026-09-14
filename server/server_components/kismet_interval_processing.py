@@ -198,8 +198,8 @@ class KismetIntervalProcessor:
             self.capture_dirs = [Path(path.strip()) for path in configured_dirs.split(",") if path.strip()]
         else:
             self.capture_dirs = [
-                Path(os.getenv("KISMET_CAPTURE_ROOT") or os.getenv("KISMET_CAPTURE_DIR") or "/home/adonis/kismet"),
-                Path("/home/adonis"),
+                Path(os.getenv("KISMET_CAPTURE_ROOT") or os.getenv("KISMET_CAPTURE_DIR") or "~/kismet").expanduser(),
+                Path("~").expanduser(),
             ]
 
         self.prediction_store = ActivityPredictionStore(self.storage_dir / "activity_predictions.sqlite")
