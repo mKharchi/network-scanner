@@ -12,6 +12,7 @@ import { SkeletonTable, ErrorState, Notice } from "../components/States";
 import { DAY_NAMES, formatDateTime } from "../utils/format";
 import "../styles/operations.css";
 import { NumberInput } from "../components/NumberInput";
+import { ServerMigrationPanel } from "../components/ServerMigrationPanel";
 
 interface WorkingHoursData {
   rules: {
@@ -959,6 +960,16 @@ export function SettingsPage() {
               </table>
             </div>
           ) : null}
+        </SectionCard>
+
+        {/* ── Server Migration ──────────────────────────────────────── */}
+        <SectionCard title="Server Migration">
+          <p className="section-description">
+            Push a new configuration to all connected clients without manually
+            editing their <code>config/.env</code> files. Clients will
+            restart automatically after the patch is applied.
+          </p>
+          <ServerMigrationPanel />
         </SectionCard>
       </div>
     </div>

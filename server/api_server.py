@@ -33,7 +33,7 @@ from server_components.action_framework import ActionState, ActionType, get_supp
 
 API_HOST = os.getenv("API_HOST", "0.0.0.0")
 API_PORT = int(os.getenv("API_PORT", "8080"))
-LONG_RUNNING_ACTION_TYPES = {ActionType.DEPLOY_PACKAGE.value, ActionType.SEND_FILE.value, ActionType.UPDATE_CLIENT.value}
+LONG_RUNNING_ACTION_TYPES = {ActionType.DEPLOY_PACKAGE.value, ActionType.SEND_FILE.value, ActionType.UPDATE_CLIENT.value, ActionType.RECONFIGURE_CLIENT.value}
 
 
 class DecimalJSONEncoder(json.JSONEncoder):
@@ -1031,6 +1031,70 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     self.send_error_response(404, "NOT_FOUND", "Action not found.")
                     return
                 self.send_data(action)
+                return
+
+            # ---------------------------------------------------------------
+            # POST /api/v1/actions/reconfigure-clients
+            # Convenience endpoint: validates config keys, resolves "all"
+            # targets, and creates a RECONFIGURE_CLIENT action.
+            # ---------------------------------------------------------------
+            if path == "/api/v1/actions/reconfigure-clients":
+                payload = self._read_json_payload()
+                if payload is None:
+                    self.send_error_response(400, "INVALID_PAYLOAD", "Invalid JSON payload.")
+                    return
+
+                parameters = payload.get("parameters") or {}
+                if not isinstance(parameters, dict) or not parameters:
+                    self.send_error_response(400, "INVALID_PARAMETERS",
+                                             "Field 'parameters' must be a non-empty object.")
+                    return
+
+                _RECONFIGURE_ALLOWLIST = {
+                    "SERVER_IP", "SERVER_PORT",
+                    "NETWORK_SCAN_INTERFACE", "NETWORK_SCAN_SUBNET",
+                    "DHCP_LISTEN_INTERFACE",
+                    "FORBIDDEN_PROCESS_SCAN_INTERVAL_SECONDS",
+                    "PROCESS_SCAN_INTERVAL_SECONDS",
+                    "QUARANTINE_MAX_DURATION_MINUTES",
+                    "AUTO_ISOLATE_ON_ESCALATION",
+                    "SCREENSHOT_MAX_RESPONSE_BYTES",
+                    "NETWORK_NEIGHBOUR_HOSTNAME_LOOKUP_LIMIT",
+                }
+                rejected = {k for k in parameters if k not in _RECONFIGURE_ALLOWLIST}
+                if rejected:
+                    self.send_error_response(
+                        400, "DISALLOWED_KEYS",
+                        f"Disallowed parameter key(s): {sorted(rejected)}. "
+                        f"Allowed: {sorted(_RECONFIGURE_ALLOWLIST)}",
+                    )
+                    return
+
+                raw_targets = payload.get("targets", ["all"])
+                if raw_targets == ["all"] or raw_targets == "all":
+                    raw_targets = list(server_lib.get_connected_client_ids())
+                if not raw_targets:
+                    self.send_error_response(400, "NO_TARGETS",
+                                             "No connected clients to target.")
+                    return
+
+                try:
+                    action = action_service.create_action(
+                        ActionType.RECONFIGURE_CLIENT.value,
+                        raw_targets,
+                        parameters=parameters,
+                        requested_by=self.headers.get("X-Operator-Id") or "local-network-operator",
+                    )
+                    threading.Thread(
+                        target=action_service.execute_action,
+                        args=(action,),
+                        daemon=True,
+                        name=f"reconfigure-{action.get('action_id')}",
+                    ).start()
+                except ValueError as exc:
+                    self.send_error_response(400, "INVALID_ACTION", str(exc))
+                    return
+                self.send_data(action, status_code=201)
                 return
 
             if path == "/api/v1/settings/forbidden-processes":

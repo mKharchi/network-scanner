@@ -539,6 +539,7 @@ def execute_action(action: Dict[str, Any]) -> Dict[str, Any]:
                 ActionType.GET_QUARANTINE_STATUS.value,
                 ActionType.GET_DEVICE_ISOLATION_STATUS.value,
                 ActionType.UPDATE_FORBIDDEN_PROCESS_POLICY.value,
+                ActionType.RECONFIGURE_CLIENT.value,
             }:
                 if isinstance(parameters, dict):
                     dispatch_parameters = dict(parameters)

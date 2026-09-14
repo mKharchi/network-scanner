@@ -113,6 +113,7 @@ _SUPPORTED_COMMANDS = (
     {"command": ActionType.DEPLOY_PACKAGE.value, "label": "Deploy package"},
     {"command": ActionType.SEND_FILE.value, "label": "Send file"},
     {"command": ActionType.UPDATE_CLIENT.value, "label": "Update client"},
+    {"command": ActionType.RECONFIGURE_CLIENT.value, "label": "Reconfigure client"},
 )
 
 

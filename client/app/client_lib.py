@@ -1759,31 +1759,61 @@ def _write_env_file(path: Path, existing_kv: dict, original_lines: list, patch: 
 
 
 def _spawn_restarted_client(client_root: Path) -> dict:
-    """Spawn a fresh client.py process and return its PID."""
+    """Spawn a fresh client process and return its PID."""
     import subprocess
     import sys
+    import platform
 
-    app_py = client_root / "app" / "client.py"
-    if not app_py.is_file():
-        return {"status": "error", "message": f"client.py not found at {app_py}"}
+    target_script = None
+    for candidate in [
+        client_root / "user_agent.py",
+        client_root / "app" / "client.py",
+        client_root / "client.py",
+    ]:
+        if candidate.is_file():
+            target_script = candidate
+            break
 
-    # Prefer the venv interpreter, fall back to the current executable.
-    venv_py = client_root / ".venv" / "Scripts" / "python.exe"  # Windows
-    if not venv_py.is_file():
-        venv_py = client_root / "venv" / "Scripts" / "python.exe"
-    if not venv_py.is_file():
-        venv_py = client_root / ".venv" / "bin" / "python"      # Linux/macOS
-    if not venv_py.is_file():
-        venv_py = client_root / "venv" / "bin" / "python"
-    python_exe = str(venv_py) if venv_py.is_file() else sys.executable
+    if not target_script:
+        return {"status": "error", "message": f"Client script not found under {client_root}"}
+
+    # Prefer pythonw.exe on Windows for windowless execution
+    venv_py = None
+    if platform.system() == "Windows":
+        for cand in [
+            client_root / "venv" / "Scripts" / "pythonw.exe",
+            client_root / ".venv" / "Scripts" / "pythonw.exe",
+            client_root / "venv" / "Scripts" / "python.exe",
+            client_root / ".venv" / "Scripts" / "python.exe",
+        ]:
+            if cand.is_file():
+                venv_py = cand
+                break
+    else:
+        for cand in [
+            client_root / ".venv" / "bin" / "python",
+            client_root / "venv" / "bin" / "python",
+        ]:
+            if cand.is_file():
+                venv_py = cand
+                break
+
+    python_exe = str(venv_py) if venv_py else sys.executable
 
     try:
+        kwargs = {}
+        if platform.system() == "Windows":
+            # DETACHED_PROCESS (0x00000008) | CREATE_NEW_PROCESS_GROUP (0x00000200)
+            kwargs["creationflags"] = 0x00000008 | 0x00000200
+        else:
+            kwargs["start_new_session"] = True
+
         proc = subprocess.Popen(
-            [python_exe, str(app_py)],
-            cwd=str(client_root / "app"),
+            [python_exe, str(target_script)],
+            cwd=str(target_script.parent),
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            start_new_session=True,
+            **kwargs,
         )
         return {"status": "ok", "pid": proc.pid}
     except Exception as err:
@@ -1798,7 +1828,16 @@ def _handle_reconfigure_client(message, **_context):
     written atomically (tmp-file + os.replace).  After a successful write the
     client schedules a process restart so the new values are picked up cleanly.
     """
-    parameters: dict = message.get("parameters") or {}
+    raw_params = (
+        message.get("parameters")
+        if message.get("parameters") is not None
+        else message.get("args")
+    )
+    if isinstance(raw_params, dict):
+        parameters = dict(raw_params)
+    else:
+        parameters = {}
+    parameters.pop("command_id", None)
 
     if not parameters:
         return {"status": "FAILED", "error": "No parameters provided."}
@@ -1826,7 +1865,7 @@ def _handle_reconfigure_client(message, **_context):
     patched_keys = list(parameters.keys())
     print(f"[RECONFIGURE] Patched config/.env: {patched_keys}. Scheduling restart.")
 
-    # Schedule the restart in a daemon thread so the SUCCESS response is sent
+    # Schedule the restart in a daemon thread so the response is sent
     # first before the current process exits.
     def _restart_after_delay():
         import time as _time
@@ -1844,7 +1883,7 @@ def _handle_reconfigure_client(message, **_context):
     threading.Thread(target=_restart_after_delay, daemon=True, name="reconfigure-restart").start()
 
     return {
-        "status": "SUCCESS",
+        "status": "ok",
         "patched_keys": patched_keys,
         "message": "Configuration updated. Client will restart momentarily.",
     }

@@ -1057,6 +1057,15 @@ def start_client(stop_event=None, *, agent_role="service"):
         except Exception as e:
             print(f"[PACKET_OBSERVER] Could not start packet observer: {e}", flush=True)
 
+        global SERVER_IP, SERVER_PORT
+        _load_env_file(CONFIG_DIR / ".env")
+        _load_env_file(CLIENT_DIR / ".env")
+        SERVER_IP = os.getenv("SERVER_IP", SERVER_IP)
+        try:
+            SERVER_PORT = int(os.getenv("SERVER_PORT", str(SERVER_PORT)))
+        except (ValueError, TypeError):
+            pass
+
         try:
             try:
                 client.settimeout(5)

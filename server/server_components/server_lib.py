@@ -1935,6 +1935,16 @@ def receive_client_messages(mac, conn, *, agent_role="service"):
 # ============================================================
 
 
+def get_connected_client_ids() -> list:
+    """Return the client_id of every currently connected service/combined agent."""
+    with clients_lock:
+        return [
+            c["client_id"]
+            for c in clients.values()
+            if c.get("client_id")
+        ]
+
+
 def show_clients():
     print("\n==============================================")
     print("              CONNECTED CLIENTS")

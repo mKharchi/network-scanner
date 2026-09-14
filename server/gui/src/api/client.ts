@@ -1396,7 +1396,21 @@ export const api = {
       bulk_update_id: payload.bulkUpdateId,
     }),
 
-  getBulkUpdateStatus: (bulkUpdateId: string) =>
+  /**
+   * Push a config patch to one or more connected clients.
+   * Pass targets=["all"] (default) to reach every connected client.
+   * Only allowlisted keys are accepted by the server.
+   */
+  reconfigureClients: (payload: {
+    parameters: Record<string, string>;
+    targets?: string[];
+  }) =>
+    post<ActionDetail>("/actions/reconfigure-clients", {
+      parameters: payload.parameters,
+      targets: payload.targets ?? ["all"],
+    }),
+
+ getBulkUpdateStatus: (bulkUpdateId: string) =>
     get<BulkUpdateDetail>(`/bulk-updates/${encodeURIComponent(bulkUpdateId)}`),
 
   listBulkUpdates: (limit: number = 50) =>
