@@ -13,6 +13,7 @@ import { DAY_NAMES, formatDateTime } from "../utils/format";
 import "../styles/operations.css";
 import { NumberInput } from "../components/NumberInput";
 import { ServerMigrationPanel } from "../components/ServerMigrationPanel";
+import { FinishDayCard } from "../components/FinishDayCard";
 
 interface WorkingHoursData {
   rules: {
@@ -961,6 +962,9 @@ export function SettingsPage() {
             </div>
           ) : null}
         </SectionCard>
+
+        {/* ── Day-End Finalization & Cleanup ───────────────────────── */}
+        <FinishDayCard />
 
         {/* ── Server Migration ──────────────────────────────────────── */}
         <SectionCard title="Server Migration">

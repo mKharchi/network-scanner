@@ -456,7 +456,7 @@ class KismetDailySummarizer:
         date_utc: str,
         *,
         dry_run: bool = False,
-        delete_per_window_files: bool = False,
+        delete_per_window_files: bool = True,
     ) -> DayCompletionRecord:
         """Generate daily summaries for all identities seen on date_utc.
 
@@ -579,12 +579,12 @@ class KismetDailySummarizer:
         return sorted(eligible)
 
     def _delete_per_window_files(self, date_utc: str) -> bool:
-        """Delete prediction JSONL files for a verified day. Returns True on success."""
+        """Delete all JSONL prediction files for a verified day. Returns True on success."""
         day_dir = self.intervals_dir / date_utc
         if not day_dir.is_dir():
             return False
         deleted_any = False
-        for pred_file in day_dir.glob("*.predictions.jsonl"):
+        for pred_file in day_dir.glob("*.jsonl"):
             try:
                 pred_file.unlink()
                 deleted_any = True
@@ -656,3 +656,80 @@ class KismetDailySummarizer:
             "unknown_duration_seconds": completion.unknown_duration_seconds if completion else 0.0,
             "verified_at_utc": completion.verified_at_utc if completion else None,
         }
+
+
+def finish_day(
+    date_utc: Optional[str] = None,
+    *,
+    storage_dir: Optional[Path | str] = None,
+    capture_dirs: Optional[List[Path | str]] = None,
+    model_version: str = "activity-rf-v2",
+) -> Dict[str, Any]:
+    """End-of-day finalization pipeline:
+    1. Process any remaining closed intervals for the day.
+    2. Finalize interval manifests and write day_finalization.json.
+    3. Generate daily summaries into SQLite and delete all JSONL prediction files.
+    4. Ensure no lingering .jsonl files remain in the day's interval folder.
+    """
+    from datetime import datetime, timezone
+    from server_components.kismet_interval_processing import KismetIntervalProcessor
+
+    target_date = str(date_utc or datetime.now(timezone.utc).strftime("%Y-%m-%d")).strip()
+
+    processor = KismetIntervalProcessor(
+        storage_dir=storage_dir,
+        capture_dirs=capture_dirs,
+        model_version=model_version,
+    )
+    summarizer = KismetDailySummarizer(
+        storage_dir=storage_dir,
+        capture_dirs=capture_dirs,
+    )
+
+    # 1. Process all completed intervals
+    processed_count = processor.process_completed_intervals(lookback=144, margin=0)
+
+    # 2. Finalize day
+    finalization = processor.finalize_day(target_date)
+
+    # 3. Summarize day and delete JSONL files
+    record = summarizer.summarize_day(target_date, dry_run=False, delete_per_window_files=True)
+
+    # 4. Sweep remaining .jsonl files in day dir
+    day_dir = summarizer.intervals_dir / target_date
+    extra_deleted = 0
+    if day_dir.is_dir():
+        for f in day_dir.glob("*.jsonl"):
+            try:
+                f.unlink()
+                extra_deleted += 1
+            except OSError:
+                pass
+
+    return {
+        "status": "completed" if record.status in ("completed", "empty") else record.status,
+        "date_utc": target_date,
+        "identities_count": record.identity_count,
+        "total_windows": record.total_window_count,
+        "total_active_duration_seconds": record.total_active_duration_seconds,
+        "unknown_duration_seconds": record.unknown_duration_seconds,
+        "intervals_processed": processed_count,
+        "per_window_files_deleted": True,
+        "extra_jsonl_deleted": extra_deleted,
+        "finalization": finalization,
+        "completed_at_utc": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def get_day_summary_status(
+    date_utc: Optional[str] = None,
+    *,
+    storage_dir: Optional[Path | str] = None,
+) -> Dict[str, Any]:
+    """Retrieve the Phase 4 summary and cleanup status for a UTC day."""
+    from datetime import datetime, timezone
+
+    target_date = str(date_utc or datetime.now(timezone.utc).strftime("%Y-%m-%d")).strip()
+    summarizer = KismetDailySummarizer(storage_dir=storage_dir)
+    return summarizer.show_day_status(target_date)
+

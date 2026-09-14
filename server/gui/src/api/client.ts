@@ -1410,6 +1410,12 @@ export const api = {
       targets: payload.targets ?? ["all"],
     }),
 
+  finishDay: (date?: string) =>
+    post<DayFinishResult>("/kismet/finish-day", date ? { date } : {}),
+
+  getDayStatus: (date?: string) =>
+    get<DayStatusResult>(`/kismet/day-status${date ? `?date=${encodeURIComponent(date)}` : ""}`),
+
  getBulkUpdateStatus: (bulkUpdateId: string) =>
     get<BulkUpdateDetail>(`/bulk-updates/${encodeURIComponent(bulkUpdateId)}`),
 
@@ -2127,3 +2133,33 @@ export interface ClassificationStats {
   human_labels_count: number;
   model_version: string;
 }
+
+export interface DayFinishResult {
+  status: string;
+  date_utc: string;
+  identities_count: number;
+  total_windows: number;
+  total_active_duration_seconds: number;
+  unknown_duration_seconds: number;
+  intervals_processed: number;
+  per_window_files_deleted: boolean;
+  extra_jsonl_deleted: number;
+  finalization?: Record<string, any>;
+  completed_at_utc: string;
+}
+
+export interface DayStatusResult {
+  date_utc: string;
+  intervals_total: number;
+  intervals_completed: number;
+  intervals_safe_for_raw_cleanup: number;
+  summaries_generated: number;
+  summary_status: string;
+  per_window_files_deleted: boolean;
+  raw_captures_eligible: string[];
+  total_window_count: number;
+  total_active_duration_seconds: number;
+  unknown_duration_seconds: number;
+  verified_at_utc: string | null;
+}
+

@@ -10,6 +10,7 @@ import { formatDateTime, formatRelative } from "../utils/format";
 import { HiOutlineSquare3Stack3D } from "react-icons/hi2";
 import "../styles/shell.css";
 import "../styles/card.css";
+import { FinishDayCard } from "../components/FinishDayCard";
 
 // ── Alert Card Row ────────────────────────────────────────────────
 function AlertRow({ alert }: { alert: AlertModel }) {
@@ -467,6 +468,9 @@ export function DashboardPage() {
           </div>
         </div>
       </SectionCard>
+
+      {/* ── Day-End Finalization & Cleanup ───────────────────────── */}
+      <FinishDayCard />
     </div>
   );
 }

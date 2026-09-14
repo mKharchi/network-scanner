@@ -860,6 +860,11 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     self.send_error_response(502, "CLIENT_REQUEST_FAILED", result["message"])
                 return
 
+            if path in {"/api/v1/kismet/day-status", "/api/kismet/day-status"}:
+                date_val = get_param("date")
+                self.send_data(api_service.get_day_summary_status(date_val))
+                return
+
             # Fallback 404
             self.send_error_response(404, "NOT_FOUND", f"Unknown endpoint '{path}'.")
 
@@ -1095,6 +1100,16 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     self.send_error_response(400, "INVALID_ACTION", str(exc))
                     return
                 self.send_data(action, status_code=201)
+                return
+
+            if path in {"/api/v1/kismet/finish-day", "/api/kismet/finish-day"}:
+                payload = self._read_json_payload() or {}
+                date_val = payload.get("date")
+                try:
+                    result = api_service.finish_day(date_val)
+                    self.send_data(result, status_code=200)
+                except Exception as exc:
+                    self.send_error_response(500, "FINISH_DAY_FAILED", f"Failed to complete day: {exc}")
                 return
 
             if path == "/api/v1/settings/forbidden-processes":

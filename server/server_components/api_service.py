@@ -3291,3 +3291,16 @@ def get_alert_wireless_investigation(
         "alert": alert_info,
         "investigation": obs_result,
     }
+
+
+def finish_day(date_utc: Optional[str] = None) -> Dict[str, Any]:
+    """Execute end-of-day interval finalization, generate SQLite summaries, and delete JSONL files."""
+    from server_components.kismet_daily_summary import finish_day as _finish_day
+    return _finish_day(date_utc=date_utc)
+
+
+def get_day_summary_status(date_utc: Optional[str] = None) -> Dict[str, Any]:
+    """Retrieve Phase 4 summary status and cleanup state for a date."""
+    from server_components.kismet_daily_summary import get_day_summary_status as _get_day_status
+    return _get_day_status(date_utc=date_utc)
+
