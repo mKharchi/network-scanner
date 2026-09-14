@@ -50,7 +50,7 @@ class ActivityInferenceTests(unittest.TestCase):
             result = ActivityInferenceService(storage_dir=directory, model_dir=Path(directory) / "missing").predict_device("AA:BB:CC:DD:EE:FF")
             self.assertEqual(result["status"], "model_unavailable")
 
-    def test_prediction_is_smoothed_and_idempotent(self) -> None:
+    def test_read_only_prediction_does_not_persist(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             KismetMLDerivedStore(directory).persist_many("traffic_windows", [_window()])
             service = ActivityInferenceService(storage_dir=directory)
@@ -61,11 +61,33 @@ class ActivityInferenceTests(unittest.TestCase):
             result = service.predict_device("AA:BB:CC:DD:EE:FF")
             self.assertEqual(result["status"], "ok")
             self.assertEqual(result["current"]["activity"], "streaming")
+            self.assertTrue(result["read_only"])
+            # In read-only mode, database file is not written during GET
+            db_path = Path(directory) / "activity_predictions.sqlite"
+            self.assertFalse(db_path.exists())
+
+    def test_interval_prediction_is_smoothed_and_persists_idempotently(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            KismetMLDerivedStore(directory).persist_many("traffic_windows", [_window()])
+            service = ActivityInferenceService(storage_dir=directory)
+            service._classifier = _FakeClassifier({
+                "streaming": 0.8, "file_transfer": 0.05, "chat": 0.05,
+                "voip": 0.05, "other": 0.05,
+            })
+            # Interval worker explicitly persists
+            predictions = service.predict_interval([_window()])
+            self.assertEqual(len(predictions), 1)
+            self.assertEqual(predictions[0]["activity"], "streaming")
             with sqlite3.connect(Path(directory) / "activity_predictions.sqlite") as connection:
                 self.assertEqual(connection.execute("SELECT count(*) FROM activity_predictions").fetchone()[0], 1)
-            service.predict_device("AA:BB:CC:DD:EE:FF")
+            # Re-running interval is idempotent
+            service.predict_interval([_window()])
             with sqlite3.connect(Path(directory) / "activity_predictions.sqlite") as connection:
                 self.assertEqual(connection.execute("SELECT count(*) FROM activity_predictions").fetchone()[0], 1)
+            # Future read-only predict_device loads from persisted store
+            cached = service.predict_device("AA:BB:CC:DD:EE:FF")
+            self.assertEqual(cached["status"], "ok")
+            self.assertEqual(cached["current"]["activity"], "streaming")
 
     def test_low_confidence_returns_unknown(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

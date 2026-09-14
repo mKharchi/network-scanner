@@ -1,0 +1,894 @@
+ML Dataset & Feature Requirements for Kismet Wireless Intelligence
+Executive Summary & Phase 0 Architectural Alignment
+The wireless investigation system under development utilizes a single Linux server hosting Kismet as its exclusive wireless capture sensor1. In this architecture, the Linux server manages all radio frequency capture, storing raw data locally in SQLite .kismet database files1. The service layer (server_components/kismet_service.py) accesses these database files in a read-only mode to expose normalized wireless observations1.
+Currently, the normalized observation layer processes basic 802.11 metadata, including frame type and subtype, Media Access Control (MAC) address roles (source, destination, transmitter, receiver, BSSID), signal strength (RSSI), channel frequency, packet length, sensor identifier, and capture-file provenance1. Control frames are suppressed by default in the primary observation path to reduce storage overhead, and raw Kismet database retention is set to 48 hours1.
+This operational architecture imposes strict constraints on the Machine Learning (ML) data foundation:
+Production inference must execute on the single Linux host using CPU resources without degrading Kismet’s frame-capture loop.
+Model training occurs offline, requiring Phase 0 to extract and persist a feature set rich enough to support model development without requiring full packet payload duplication or decryption.
+Raw Kismet capture files remain the single source of truth; ML components must consume derived observations, windowed statistics, and structured feature vectors.
+An evaluation of public benchmark datasets across device fingerprinting, traffic activity classification, cryptomining detection, and wireless intrusion detection yields a clear engineering requirement: Phase 0 must expand its metadata extraction layer. Default suppression of management frame Information Elements (IEs), sequence numbers, retry flags, control frame metrics, and fine-grained frame timing patterns degrades signal quality required for persistent identity linking and threat detection3.
+Phase 0 must evolve from a basic packet-metadata stream into a multi-tiered observation engine. This engine must capture management frame Information Elements, preserve frame timing and directional attributes, and aggregate traffic into sliding temporal windows.
+Device Fingerprinting Dataset Analysis
+Device fingerprinting in 802.11 networks aims to establish persistent physical device identities across temporal boundaries, even when devices utilize IEEE 802.11aq/ax Media Access Control (MAC) address randomization3. The primary engineering goal is identity linking (clustering observations from the same physical hardware) rather than static vendor or model classification3.
+Benchmark Datasets Evaluation
+Two primary public datasets define the state of the art in Wi-Fi management frame fingerprinting: the Mendeley Labelled Device Wi-Fi Probe Request Dataset (10.17632/j64btzdsdy.1)3 and the UJI Probes / UJI Probes Revisited Dataset8.
+
+Metadata & Capture Dimension
+Mendeley Probe Request Dataset (10.17632/j64btzdsdy.1)
+UJI Probes / UJI Probes Revisited
+Official Dataset Name
+A dataset of labelled device Wi-Fi probe requests for MAC address de-randomization3
+UJI Probes / UJI Probes Revisited8
+Publisher / Organization
+Mendeley Data / University Research Group3
+Universitat Jaume I (UJI)8
+Publication Date & Version
+2021 (Version 1.0)3
+2023 (Revisited Version)8
+License & Access
+CC BY 4.0; Public download3
+Open Access (Zenodo/GitHub); Public8
+Direct Download Location
+https://data.mendeley.com/datasets/j64btzdsdy/1
+[cite: 3]
+Official Zenodo / Figshare repository10
+Raw Download Size & Format
+~2.5 GB; PCAP and CSV formats3
+>15 GB; Compressed PCAP / Anonymized CSV8
+Availability Status
+Officially available and active3
+Officially available and active8
+Device Count & Diversity
+20+ mobile devices (iOS, Android, Windows)3
+Hundreds of unconstrained campus devices8
+Capture Environments
+RF shield / rural outdoor & noisy indoor3
+1-month continuous university office capture8
+Monitored Channels
+3 non-overlapping channels (1, 6, 11)3
+Multi-channel 2.4 GHz sweep8
+MAC Randomization State
+Explicitly captured and labeled3
+Naturally occurring in wild traffic8
+Ground-Truth Label Type
+True Physical Device Hardware ID3
+Anonymized Device Cluster ID / MAC8
+
+Raw Field & Information Element Granularity
+Inspecting the downloadable packet structures of these datasets shows that MAC de-randomization relies on specific Information Elements (IEs) contained within 802.11 Probe Request and Association Request management frames3.
+802.11 management frames contain header fields alongside a variable-length sequence of tagged Information Elements:
+Header Metadata: Contains 12-bit Sequence Control numbers, Frame Control flags (Retry, More Data), precise arrival timestamps, and Radiotap RSSI/channel metrics3.
+Ordered IE Tag Sequence: The specific ordered array of IE tag IDs present in a frame serves as a static signature of the client's wireless network interface card (NIC) driver and OS network stack5.
+Capabilities Bitmasks:
+Supported Rates (Tag 1) and Extended Supported Rates (Tag 50)8.
+HT Capabilities (Tag 45): Supported channel widths, A-MPDU parameters, spatial stream capabilities8.
+VHT Capabilities (Tag 191): Very High Throughput MCS sets, Beamformer capabilities8.
+HE Capabilities (Tag 255 / Extension 35): High Efficiency (Wi-Fi 6) MAC/PHY capability bitmasks8.
+RSN Information (Tag 48) & WMM Capabilities (Tag 221, OUI 00:50:f2, Type 2).
+Vendor-Specific IEs (Tag 221): Contains Organizationally Unique Identifiers (OUIs) and custom vendor payload bytes (e.g., Apple, Broadcom, Microsoft, Samsung extensions)5.
+802.11 Sequence Numbers: The 12-bit sequence number field in the 802.11 Frame Control header. Operating systems implement sequence counter updates differently when randomizing MAC addresses. Some drivers maintain a global sequence counter across randomized and factory MACs, producing a continuous linear sequence that exposes address rotation6.
+Ground-Truth Labels for Identity Linking
+In the Mendeley Probe Request dataset, every frame is mapped back to the true physical device hardware instance, regardless of how frequently the device rotated its randomized MAC address or modified its transmission power3. This ground truth enables training models for identity linking (learning pairwise similarity metrics between frame bursts)3.
+In contrast, datasets labeled solely by observed MAC address or vendor OUI cannot train models to cross MAC randomization boundaries, making them unsuitable for physical device linking3.
+Kismet Reproducibility Assessment
+Kismet captures raw frames via libpcap/Linux mac80211 monitor interfaces and stores structured representations inside the devices table (in JSON blobs under dot11.device) and frame records inside the packets table of .kismet SQLite files1.
+While raw captures contain all management frame fields, Kismet's default REST API and internal normalized device structures aggregate or discard raw IE byte arrays to save memory2.
+To support physical device identity linking, Phase 0 must explicitly parse and extract raw IE byte strings, tag order vectors, and sequence numbers directly from the packets table payload blob or extend kismet_service.py to extract dot11.probreq.ie JSON attributes prior to aggregation2.
+Encrypted-Traffic Activity Classification Dataset Analysis
+Device activity classification aims to infer high-level user and application behavior (e.g., idle, web browsing, video streaming, file downloads, real-time voice calls) from unencrypted 802.11 frame metadata without payload decryption15.
+Benchmark Datasets Evaluation
+The benchmark dataset for encrypted traffic classification is the ISCXVPN2016 (ISCX VPN-nonVPN) dataset17. While captured primarily at layer 3/4 on wired/logical interfaces, it serves as the ground-truth standard for flow-level statistical profiling across application categories including Browsing, Streaming, File Transfer, Chat, VoIP, and P2P18.
+
+Structural Dimension
+ISCXVPN2016 Dataset Attributes
+Kismet Wireless Capture Mapping
+Official Dataset Name
+ISCX VPN-nonVPN 2016 Dataset (ISCXVPN2016)17
+Kismet Wireless Capture Stream1
+Publisher / Source
+Canadian Institute for Cybersecurity (CIC / UNB)18
+Local Kismet Sensor Node1
+Direct Download Location
+https://www.unb.ca/cic/datasets/vpn.html
+[cite: 18]
+Local .kismet SQLite stores1
+Data Representation
+Raw PCAP files and derived Flow CSVs17
+Raw 802.11 .kismet SQLite tables1
+Layer Visibility
+IP 5-tuple (Src IP, Dst IP, Src Port, Dst Port, Protocol)18
+802.11 MAC Addresses, DS Flags, Frame Lengths
+Encryption State
+Mixed: Plain HTTPS/TLS and Encapsulated OpenVPN18
+Full WPA2/WPA3 L2 Encryption (Payloads hidden)
+Extracted Metrics
+Packet inter-arrival times, flow duration, packet sizes18
+Frame inter-arrival times, burst counts, frame lengths
+Directional Visibility
+Bi-directional based on IP Source/Destination18
+Bi-directional via Frame Control flags (To-DS / From-DS)
+
+Feature Extraction Without Decryption
+Activity classification over encrypted Wi-Fi networks relies on physical-layer and MAC-layer framing characteristics:
+Directional Attribution (To-DS / From-DS): The Frame Control header contains two bits (To-DS and From-DS). In infrastructure networks:
+To-DS = 1, From-DS = 0: Client Uplink transmission.
+To-DS = 0, From-DS = 1: Client Downlink transmission. This enables exact computation of uplink/downlink packet and byte ratios without reading IP headers.
+Frame Length Distributions: Video streaming produces asymmetric traffic with bimodal packet size distributions (small uplink ACKs ~100 bytes, large downlink data frames ~1500 bytes). File transfers exhibit sustained maximum transmission unit (MTU) frames on downlink or uplink. Interactive web browsing produces bursty, variable-length frame clusters.
+Inter-Arrival Time (IAT) Statistics: Real-time traffic (VoIP, video calls) exhibits tightly bounded IAT variance. Web browsing shows long idle intervals punctuated by rapid burst clusters.
+Representation Architecture Trade-Offs
+The structural representation selected for Phase 0 directly impacts feature extraction stability, inference latency, and computational memory footprint on a single Linux host:
+Packet-Based Representation: Processes individual frame events sequentially. While simple, it creates extreme CPU processing overhead during high-throughput bursts and lacks broader temporal context.
+Flow-Based (5-Tuple) Representation: Groups frames by source IP, destination IP, source port, destination port, and transport protocol. This model fails on unencrypted 802.11 monitor feeds because layer-2 WPA2/WPA3 encryption hides layer-3 and layer-4 headers.
+Fixed Temporal Window Representation: Aggregates all MAC frames associated with a client over non-overlapping time intervals (e.g., every 30 seconds). This approach reduces CPU load but can miss state transitions that cross window boundaries.
+Sliding Temporal Window Representation (Recommended): Aggregates client MAC frames over a fixed temporal duration (e.g., 30 seconds) that advances at a smaller step interval (e.g., 5 seconds). This structure provides continuous state tracking, smooths temporal transition boundaries, and operates directly on layer-2 MAC metadata without payload decryption.
+The Sliding Temporal Window constructed at the client MAC level is the most defensible representation for a Kismet-only deployment.
+Cryptomining Traffic Analysis
+Cryptomining detection requires identifying consensus protocol traffic (e.g., Stratum) embedded within standard network flows. Cryptomining detection is evaluated separately from general activity classification due to its unique network footprint and threat profile.
+Stratum Protocol Dynamics & Benchmark Datasets
+Evaluation of datasets such as the Mendeley Cryptojacking Network Traffic 2021 (CNT21) reveals the behavioral characteristics of cryptocurrency mining traffic:
+Stratum Architecture: Mining clients communicate with pool servers using JSON-RPC over TCP, TLS, or WebSockets.
+Traffic Volumetrics: Cryptomining requires negligible bandwidth compared to video streaming or file downloads. An active miner transmits small work-request and share-submission packets at periodic intervals.
+Payload Encryption: Even when Stratum traffic is wrapped in TLS (port 443) or transported over encrypted WPA2/WPA3 Wi-Fi, the protocol's underlying synchronization patterns remain visible in metadata.
+Stratum mining exhibits a distinct layer-2 metadata signature. Downlink frames from the pool server containing new job assignments or difficulty targets typically range from 300 to 500 bytes. Uplink share submission frames from the client miner range from 150 to 250 bytes. Inter-arrival timing displays rigid periodicity driven by keep-alive timers and share submission intervals, producing a volumetric profile characterized by low total byte counts, near-zero frame size variance, and high session persistence.
+Metadata Feasibility Matrix
+Cryptomining can be detected without payload decryption by isolating five core structural features from Kismet frame streams:
+Stratum Behavioral Property
+802.11 Metadata Proxy Feature
+Extracted Feature Signature
+Regular Work Requests / Keep-Alives
+Frame Inter-Arrival Time (IAT) Periodicity
+Low IAT variance (); strong autocorrelation peaks
+JSON-RPC Share Submission
+Uplink / Downlink Frame Lengths
+Fixed bimodal frame size distribution ()
+Continuous Operation
+Connection Persistence / Duration
+High temporal persistence ratio across consecutive 60s windows
+Asymmetric Work/Response
+Directional Byte Ratio
+Balanced packet count but distinct small-frame directional asymmetry
+Non-Interactive Execution
+Absence of High-Bandwidth Bursts
+Maximum frame size bounded far below Wi-Fi MTU (1500 bytes)
+
+Wireless Threat & Intrusion Dataset Analysis
+Wireless threat detection targets malicious or anomalous protocol behaviors operating at the IEEE 802.11 physical and MAC layers4.
+AWID / AWID2 / AWID3 Benchmark Analysis
+The Aegean Wi-Fi Intrusion Dataset (AWID) family, culminating in AWID3, represents the benchmark standard for 802.11 intrusion detection research4. AWID3 captures modern enterprise topologies incorporating WPA2/WPA3, 802.1X Extensible Authentication Protocol (EAP), and 802.11w Protected Management Frames (PMF) across 254 standardized features and raw PCAP captures4.
+Evaluating AWID3 threats yields a structural division between attacks detectable from layer-2 metadata and those requiring higher-layer payload inspection:
+Detectable via Kismet Layer-2 Metadata:
+Deauthentication / Disassociation Flooding (Frame Subtype 0x000C / 0x000A rate spikes)4.
+Beacon / Probe Response Flooding (Rogue AP broadcast rates, SSID proliferation)22.
+Authentication / Association Request Attacks (Subtype 0x0000 / 0x000B rate anomalies)4.
+Power-Saving State Injection (Null-Data frame PM-bit manipulation)22.
+CTS/RTS Clear-to-Send Flooding (Control frame volume spikes)22.
+Sequence Gap Anomalies (Spoofed frame injection counter mismatches)4.
+Invisible / Requires Higher-Layer Payload Decryption:
+Application-Layer Malware Payloads / HTTP Command-and-Control24.
+SQL Injection / Cross-Site Scripting over Encrypted Wi-Fi Data Frames24.
+Encrypted Botnet Command Channels embedded in standard TCP flows24.
+Metadata Detectability Classification
+Evaluating AWID3 attack classes against Kismet's single-sensor capture architecture highlights the boundary between detectable link-layer threats and invisible application-layer payloads4:
+
+Attack Category
+AWID3 Attack Class
+Detectable from Kismet Metadata?
+Primary Extraction Metric / Rule
+Management Flooding
+Deauth / Disassoc Attack4
+Yes (High Precision)
+Subtype 0x0C/0x0A frame rate 
+Association Exhaustion
+Auth / Assoc Request Flood22
+Yes (High Precision)
+Failed Association state transitions per sec
+Rogue Infrastructure
+Evil Twin / Rogue AP26
+Yes (High Precision)
+BSSID / SSID pair matching with RSSI variance
+Protocol Manipulation
+Power-Save Null-Data Injection22
+Yes (Medium Precision)
+Null-Data frame rate with Power-Management bit = 1
+Media Access Denial
+RTS/CTS Frame Flooding22
+Yes (Medium Precision)
+Control frame volume spikes (requires Control Frame logging)
+WPA3 Cryptographic
+Krack / Kr00k Attacks21
+Yes (Feature Dependent)
+Re-transmitted EAPOL Msg 3/4 frame timing
+Higher-Layer Exploit
+SQLi / Application Exploits24
+No (Requires Decryption)
+Hidden within encrypted L2 data payload
+
+Comprehensive Dataset Comparison
+The following table synthesizes key metadata, structural properties, strengths, and limitations across candidate datasets evaluated for the Phase 0 architecture:
+
+Dataset Name
+Focus Domain
+Data Formats
+Ground-Truth Labeling
+Size
+Primary Capabilities Supported
+Key Strengths
+Key Weaknesses / Limitations
+Mendeley PR (j64btzdsdy.1)
+[cite: 3]
+MAC De-randomization
+PCAP, CSV
+True Physical Device Hardware ID3
+2.5 GB
+Device Fingerprinting / Identity Linking
+Controlled hardware ground truth; captured across RF noise3
+Small total device population (20 devices)3
+UJI Probes Revisited
+[cite: 8, 9]
+Wi-Fi Management Mining
+PCAP, CSV
+Anonymized Device Cluster ID8
+>15 GB
+Device Fingerprinting / Presence Sensing
+Large 1-month campus capture (>1.4M probe requests)8
+Anonymized labels complicate true hardware ground truth8
+ISCXVPN2016
+[cite: 17, 18]
+Encrypted Application Traffic
+PCAP, Flow CSV
+Application Class & Protocol Name18
+25 GB
+Activity Classification
+Gold standard for encrypted flow statistical metrics18
+Layer 3/4 capture; lacks 802.11 MAC framing headers18
+CNT21 (Cryptojacking)
+Stratum Mining Traffic
+PCAP, CSV
+Binary Mining vs Non-Mining
+5 GB
+Dedicated Cryptomining Detector
+Isolated Stratum JSON-RPC traffic signatures
+Synthetic traffic generation; limited background noise
+AWID3
+[cite: 4, 20]
+802.11 Threat Detection
+PCAP, CSV
+Multiclass Attack Class & Step4
+35 GB
+Threat & Anomaly Detection
+Comprehensive WPA2/WPA3 enterprise attack taxonomy4
+High dimensionality (254 features); includes undecryptable L7 attacks4
+
+Dataset → Kismet Compatibility Matrix
+The matrix below maps extracted features from public benchmark datasets (Mendeley PR3, UJI Probes8, ISCXVPN201617, CNT21, AWID34) directly to source structures in Kismet, defining Phase 0 implementation mandates:
+
+Feature / Attribute Name
+Target ML Domain
+Source Dataset Reference
+Available in Raw Kismet?
+Kismet DB Table / JSON Field
+Extraction Method in Phase 0
+Phase 0 Status
+frame_timestamp
+Fingerprint / Activity / Threat
+All Datasets
+Yes
+packets.ts_sec, packets.ts_usec
+[cite: 1]
+Direct SQL Query
+Required
+source_mac
+Fingerprint / Activity / Threat
+All Datasets
+Yes
+packets.sourcemac
+[cite: 1]
+Direct SQL Query
+Required
+destination_mac
+Activity / Threat
+All Datasets
+Yes
+packets.destmac
+[cite: 1]
+Direct SQL Query
+Required
+bssid
+Activity / Threat
+AWID34
+Yes
+packets.bssid
+[cite: 1]
+Direct SQL Query
+Required
+frame_type_subtype
+Activity / Threat
+AWID34
+Yes
+Raw frame header bitmask
+Binary bit-shift on packet header
+Required
+frame_length
+Activity / Mining / Threat
+ISCX201618, CNT21
+Yes
+packets.packetlen
+[cite: 1]
+Direct SQL Query
+Required
+signal_rssi
+Fingerprint / Threat
+Mendeley3, UJI8
+Yes
+packets.signal
+[cite: 1]
+Direct SQL Query
+Required
+frequency_channel
+Fingerprint / Threat
+Mendeley3, UJI8
+Yes
+packets.freq
+[cite: 1]
+Direct SQL Query
+Required
+sequence_number
+Fingerprint / Threat
+Mendeley3, AWID34
+Yes
+Raw 802.11 Header (Bytes 22-23)
+Extract 12-bit integer sequence
+Required
+retry_flag
+Threat / Anomaly
+AWID34
+Yes
+Frame Control Flags bit 11
+Bitwise AND on header flags
+Required
+to_ds_from_ds
+Activity / Threat
+ISCX201618, AWID34
+Yes
+Frame Control Flags bits 0-1
+Bitwise mask to infer direction
+Required
+ie_ordered_sequence
+Fingerprint
+Mendeley3, UJI8
+Partial
+devices.device -> dot11.probreq.ie
+[cite: 2, 13]
+Custom JSON / Raw Payload Parser
+Required
+ht_capabilities
+Fingerprint
+Mendeley3, UJI8
+Partial
+Tag 45 inside payload
+Parse Tag 45 bitmask
+Required
+vht_capabilities
+Fingerprint
+Mendeley3, UJI8
+Partial
+Tag 191 inside payload
+Parse Tag 191 bitmask
+Required
+he_capabilities
+Fingerprint
+Mendeley3, UJI8
+Partial
+Tag 255 inside payload
+Parse Tag 255 bitmask
+Required
+vendor_specific_ies
+Fingerprint
+Mendeley3, UJI8
+Partial
+Tag 221 inside payload
+Hex-encode Tag 221 OUI + Data
+Required
+interarrival_time
+Activity / Mining / Threat
+ISCX201618, CNT21
+Derived
+Delta of adjacent ts_sec / ts_usec
+SQL window function / Python delta
+Derived
+packet_rate
+Activity / Threat
+ISCX201618, AWID34
+Derived
+Aggregated count per temporal window
+Window aggregation formula
+Derived
+byte_rate
+Activity / Mining
+ISCX201618, CNT21
+Derived
+Aggregated packetlen sum per window
+Window aggregation formula
+Derived
+uplink_downlink_ratio
+Activity / Mining
+ISCX201618, CNT21
+Derived
+Ratio of To-DS vs From-DS frames
+Aggregated directional division
+Derived
+periodicity_score
+Mining / Anomaly
+CNT21
+Derived
+IAT Autocorrelation signal
+Time-series FFT / Autocorrelation
+Derived
+tcp_flags_ports
+Activity / Mining
+ISCX201618
+No
+Encrypted L2 Payload
+N/A (Payload Encrypted)
+Omit
+application_payload
+Threat
+AWID324
+No
+Encrypted L2 Payload
+N/A (Privacy Violation & Hidden)
+Omit
+
+Phase 0 Extraction & Storage Specification
+Phase 0 must extract, transform, and store raw capture data to supply downstream ML capabilities.
+Raw Observation Requirements
+The system must modify the kismet_service.py extraction pipeline to preserve raw observation fields directly from Kismet SQLite databases1. Suppressing control frames by default conceals attacks like RTS/CTS jamming22. Phase 0 must maintain a dual-path pipeline: high-frequency rate monitoring for control frames and structured extraction for management and data frames.
+The dual-path observation extraction architecture processes data from Kismet SQLite capture files (packets and devices tables)1. Path A functions as a Control Frame Rate Engine, suppressing full payload storage while aggregating high-frequency rate metrics into 1-second interval counters to output Threat Window Schemas. Path B operates as a Structured Observation Engine, parsing 802.11 management and data headers, extracting ordered IE vectors, and maintaining per-MAC temporal buffers to generate Fingerprint and Activity schemas.
+Fingerprint Observation Schema
+Captured whenever an 802.11 Probe Request, Probe Response, Association Request, or Reassociation Request frame is observed:
+observation_id (UUIDv4 string)
+timestamp_epoch_ms (uint64 integer timestamp)
+source_mac (Normalized MAC address string)
+is_randomized_mac (Boolean flag: checks local-assignment bit MAC[0] & 0x02)
+frame_subtype (String label: probe_req, assoc_req, probe_resp, assoc_resp)
+sequence_number (uint16 integer: 0–4095)
+signal_dbm (int8 signed integer)
+frequency_mhz (uint16 integer)
+ie_tag_sequence (Array of uint16 integers: ordered list of IE tag IDs)
+ie_vendor_ouis (Array of strings: extracted 24-bit OUIs from Tag 221)
+ht_capabilities_hex (HexString representation or null)
+vht_capabilities_hex (HexString representation or null)
+he_capabilities_hex (HexString representation or null)
+wmm_capabilities_present (Boolean flag)
+Traffic Window Schema (Activity & Mining)
+Evaluations of temporal aggregation windows demonstrate trade-offs across feature stability and detection latency:
+15-Second Windows: Captures short bursts, but exhibits high variance for low-frequency activities like periodic background sync.
+30-Second Windows (Recommended Initial Standard): Provides an optimal balance between statistical stability for flow features (mean packet size, inter-arrival variance) and acceptable detection latency for user state transitions.
+60-Second Windows: Smoothes activity variations, but delays threat and state transition detection.
+Recommended Configuration: 30-second sliding temporal window with a 5-second hop step.
+Schema Definition:
+window_id (UUIDv4 string)
+client_mac (Normalized MAC address string)
+window_start_ms (uint64 integer timestamp)
+window_end_ms (uint64 integer timestamp)
+total_frame_count (uint32 integer)
+total_byte_count (uint64 integer)
+uplink_frame_count (uint32 integer: To-DS = 1)
+downlink_frame_count (uint32 integer: From-DS = 1)
+uplink_byte_count (uint64 integer)
+downlink_byte_count (uint64 integer)
+retry_frame_count (uint32 integer: Retry bit = 1)
+data_frame_count (uint32 integer)
+mgmt_frame_count (uint32 integer)
+ctrl_frame_count (uint32 integer)
+derived_features_json (JSON object storing exact computed scalar values)
+Threat Observation Schema
+Captured on a 1-second rolling tick per monitored channel/BSSID:
+threat_tick_id (UUIDv4 string)
+timestamp_sec (uint64 integer timestamp)
+channel_frequency (uint16 integer)
+bssid (Normalized MAC address string or FF:FF:FF:FF:FF:FF)
+deauth_frame_count (uint32 integer: Subtype 0x0C)
+disassoc_frame_count (uint32 integer: Subtype 0x0A)
+assoc_req_count (uint32 integer: Subtype 0x00)
+auth_req_count (uint32 integer: Subtype 0x0B)
+null_data_frame_count (uint32 integer)
+sequence_gap_delta_sum (uint32 integer: Cumulative absolute sequence drops)
+mean_rssi_dbm (float32 floating point number)
+rssi_std_dev (float32 floating point number)
+Derived Feature Definitions
+Mathematical specifications for Phase 0 derived feature computations:
+Packet Rate
+
+Input Fields: total_frame_count (), window duration ()
+Unit: frames per second ()
+Aggregation: Count of frames divided by temporal window length.
+Expected Range: 
+Missing Value Handling: Default to  if .
+Byte Rate
+
+Input Fields: Frame lengths (), window duration ()
+Unit: bytes per second ()
+Aggregation: Sum of packet lengths divided by temporal window length.
+Expected Range: 
+Missing Value Handling: Default to  if .
+Mean Packet Size
+
+Input Fields: Frame lengths (), frame count ()
+Unit: bytes ()
+Aggregation: Arithmetic mean over window.
+Expected Range: 
+Missing Value Handling: Impute  if .
+Median Packet Size
+
+Input Fields: Frame length array ()
+Unit: bytes ()
+Aggregation: 50th percentile value of sorted packet lengths.
+Expected Range: 
+Missing Value Handling: Impute  if .
+Packet Size Standard Deviation
+
+Input Fields: Frame lengths (), , frame count ()
+Unit: bytes ()
+Aggregation: Sample standard deviation over window.
+Expected Range: 
+Missing Value Handling: Impute  if .
+Mean Inter-Arrival Time
+
+Input Fields: Frame arrival timestamps ()
+Unit: milliseconds ()
+Aggregation: Arithmetic mean of arrival deltas.
+Expected Range: 
+Missing Value Handling: Impute  if .
+Median Inter-Arrival Time
+
+Input Fields: Frame arrival timestamps ()
+Unit: milliseconds ()
+Aggregation: 50th percentile value of sorted inter-arrival deltas.
+Expected Range: 
+Missing Value Handling: Impute  if .
+Inter-Arrival Time Standard Deviation
+
+Input Fields: Inter-arrival timestamps, 
+Unit: milliseconds ()
+Aggregation: Standard deviation of arrival deltas.
+Expected Range: 
+Missing Value Handling: Impute  if .
+Uplink Ratio
+
+Input Fields: Frame length array (), Frame Control bitmask (To-DS)
+Unit: Dimensionless ratio 
+Aggregation: Proportion of client bytes sent to the Distribution System.
+Expected Range: 
+Missing Value Handling: Impute  if total bytes .
+Downlink Ratio
+
+Input Fields: Frame length array (), Frame Control bitmask (From-DS)
+Unit: Dimensionless ratio 
+Aggregation: Proportion of client bytes received from the Distribution System.
+Expected Range: 
+Missing Value Handling: Impute  if total bytes .
+Burst Rate
+Defined as the number of burst events per window, where a burst event is triggered when the instantaneous inter-arrival time drops below a threshold  for more than 3 consecutive frames.
+Input Fields: Frame timestamps ()
+Unit: bursts per minute ()
+Aggregation: Count of discrete burst transitions normalized per minute.
+Expected Range: 
+Missing Value Handling:  if frame count .
+Burst Duration
+
+Input Fields: Burst boundary timestamps for  detected bursts
+Unit: milliseconds ()
+Aggregation: Average duration across all  bursts in window.
+Expected Range: 
+Missing Value Handling:  if .
+Periodicity Score
+Computed via normalized discrete autocorrelation of packet arrival delta times:
+
+Input Fields: Time-binned frame count series ()
+Unit: Dimensionless normalized correlation coefficient 
+Aggregation: Peak magnitude of time-series autocorrelation function.
+Expected Range: 
+Missing Value Handling: Impute  if frame count .
+Dataset Labeling Strategy
+Supervised offline training requires a clear labeling taxonomy across all target ML capabilities:
+Device Fingerprinting Labels:
+Primary Target: Physical Device Hardware ID (Unique GUID assigned to a single physical device instance).
+Auxiliary Targets: Vendor OUI Class, Operating System Family (iOS, Android, Windows, Linux, IoT).
+Device Activity Labels:
+Single Target Classes: {idle, browsing, streaming, file_transfer, chat, voip, p2p, other}.
+Threat Detection Labels:
+Single Target Classes: {normal, deauth_flood, disassoc_flood, scanning, rogue_ap, power_save_injection, anomaly}.
+Mining Detector Labels:
+Binary Target: {mining, non_mining}.
+Label Categorization & Verification
+Label types must be explicitly tracked in the dataset repository:
+Ground-Truth Labels: Manually verified hardware identities and controlled traffic generation logs (e.g., automated test harness execution).
+Weak Labels: Inferred labels derived from high-confidence heuristic rules (e.g., labeling an unencrypted HTTP GET request containing User-Agent strings as an auxiliary OS signal).
+Derived Labels: Output generated from baseline clustering algorithms subjected to manual review.
+Manually Reviewed Labels: Human-in-the-loop analyst confirmations generated via inspection tools.
+Multi-Label Classification Strategy
+While Activity Classification operates primarily as a multi-class problem (selecting the dominant traffic profile per 30-second window), actual network traffic can exhibit concurrent activity (e.g., background file download during a VoIP call).
+The Phase 0 schema must support Multi-Label Probability Vectors, enabling models to emit independent probability distributions across activity classes rather than forcing a single mutually exclusive argmax label.
+Leakage-Safe Training & Evaluation Strategy
+Data leakage is a common cause of degraded generalization performance in wireless ML models.
+Two primary leakage vectors affect wireless ML pipelines:
+Temporal Leakage (Sliding Window Contamination): Occurs when overlapping temporal windows (e.g., Window  spanning 0–30s and Window  spanning 5–35s) are randomly assigned across train and test splits, leaking identical packet patterns into evaluation sets.
+Identity / Device Leakage: Occurs when frame bursts originating from the same physical device (under different randomized MACs) are split between training and evaluation partitions, artificially inflating fingerprinting accuracy.
+To prevent leakage, Phase 0 must implement a Group-Based Splitting Strategy, where the group key is defined as (Physical Device GUID + Capture Session ID + Calendar Day). Entire groups are assigned exclusively to Train, Validation, or Test splits.
+Evaluation Strategies per Capability
+Fingerprinting & Identity Linking:
+Split Strategy: Group-K-Fold by (Physical Device GUID, Capture Session). No device present in the training set may appear in the evaluation set.
+Core Metrics:
+False Merge Rate (FMR): Rate at which two distinct physical devices are incorrectly assigned to the same identity cluster.
+False Split Rate (FSR): Rate at which observations from a single device are fragmented into separate clusters.
+Adjusted Rand Index (ARI) and Normalized Mutual Information (NMI) for global partition evaluation.
+Activity & Cryptomining Classification:
+Split Strategy: Stratified Group-K-Fold grouped by (Client MAC, Session Day). Prevents adjacent sliding temporal windows from overlapping across splits.
+Core Metrics:
+Macro F1-Score: Balances performance across rare classes (e.g., P2P) and dominant classes (e.g., browsing).
+Precision-Recall Area Under Curve (PR-AUC): Evaluates performance under class imbalance.
+Confidence Calibration (Expected Calibration Error - ECE): Ensures generated probabilities accurately reflect actual confidence.
+Threat Detection:
+Split Strategy: Time-based block splitting. Train on historical capture days; test on subsequent future days. Prevents temporal autocorrelation leakage.
+Core Metrics:
+False Positive Rate (FPR) per Hour: Operational mandate requiring  false alarms per hour in clean environments.
+Detection Latency: Elapsed time from the start of an attack frame sequence to model alert generation.
+Domain Gap Analysis & Transfer Learning
+Public benchmark datasets are captured in controlled lab environments using specific radio hardware, which differs from real-world Kismet sensor deployments.
+Comparing public benchmarks against a production Kismet environment highlights key operational gaps:
+Receiver Hardware: Public benchmarks often use specialized NICs (e.g., Atheros AR9271), whereas production hosts use commercial adapters (e.g., Alfa AWUS036ACH).
+Channel Visibility: Benchmarks typically record on a single fixed channel (e.g., Channel 6), whereas production sensors perform multi-channel hopping sweeps.
+Packet Loss & Framing: Lab captures exhibit low packet loss (), whereas wild environments experience higher loss () and partial frame visibility.
+Background Noise: Benchmarks feature low client density, whereas target production environments operate in crowded ISM bands.
+Strategic Dataset Roles
+To bridge the domain gap without retraining models from scratch:
+Pretraining & Feature Extraction: Public datasets (AWID34, ISCX201618, UJI Probes8) should be used to pretrain offline feature extractors and establish baseline representations.
+Feature Engineering Validation: Verify that derived feature formulations (e.g., periodicity scores, directional ratios) successfully separate classes on public benchmark data.
+Production Fine-Tuning: Models deployed to production hosts must be fine-tuned using locally captured, domain-specific training data to account for local radio hardware, channel hopping artifacts, and local noise profiles.
+Local Data-Collection Campaign Plan
+To build a reliable fine-tuning dataset, a structured local collection campaign must be executed:
+Device Fingerprinting Campaign:
+Device Pool: 25 heterogeneous devices (iOS, Android, Windows, Linux, IoT).
+Test Matrix: 3 RF states (Screen On/Active, Screen Off/Idle, Airplane Mode Toggle).
+Channel Strategy: Fixed capture on Channels 1, 6, 11 (20 mins per channel).
+Ground-Truth: Record factory MAC, assigned random MACs, device serial, and OS version.
+Activity Classification Campaign:
+Automated Harness: Selenium & PyAutoGUI script execution on 5 client nodes.
+Scripted Workloads:
+Idle: Background OS keep-alives (30 mins).
+Browsing: Scripted page loads across top 100 websites (30 mins).
+Streaming: 1080p / 4K YouTube & Twitch playback (30 mins).
+File Transfer: Local SCP / HTTP multi-gigabyte upload and download (30 mins).
+VoIP / Chat: Discord audio stream & continuous WebSocket message exchange (30 mins).
+Threat Reproduction Campaign (Isolated RF Enclosure / Faraday Cage):
+Attack Tooling: mdk4, aircrack-ng, Scapy custom injection scripts.
+Simulated Scenarios: Deauth floods, Assoc exhaustion, Rogue AP beacons, Null-Data injection.
+Normal Baseline: Simultaneous capture of 5 legitimate clients operating under load.
+Cryptomining Campaign:
+Positive Samples: XMRig Monero miner communicating over Stratum (TCP 3333, TLS 443, WebSockets).
+Background Noise: Execute concurrent streaming and file transfers to test false-alarm rates.
+Model Architecture Recommendations
+Production inference must run on a single Linux server alongside the core Kismet capture process, favoring computationally efficient, explainable model families over deep neural networks.
+Model selection trade-offs evaluate tabular performance, inference latency, memory footprint, and CPU overhead on a single Linux host:
+LightGBM / XGBoost (Gradient Boosted Trees): High accuracy on tabular features, low CPU inference latency (), small memory footprint, handles missing values natively. Highly recommended for production.
+Random Forest: Strong baseline, highly parallelizable, but produces larger model binary sizes and slightly higher inference latency than LightGBM.
+Logistic Regression: Extremely low latency and minimal memory footprint, but struggles with non-linear feature interactions.
+Deep Neural Networks (CNN/LSTM/GRU): High benchmark performance on sequential raw data, but requires high CPU/GPU compute, large memory footprint, and acts as a black box. Not recommended for host-constrained single-server inference.
+Isolation Forest: Unsupervised tree structure with minimal computational overhead. Ideal for detecting zero-day protocol anomalies.
+Recommended Production Model Families
+Capability 1: Identity Linking & Fingerprinting:
+Model Family: Hybrid IE Sequence Vectorizer + LightGBM Pairwise Distance Model + Agglomerative Hierarchical Clustering.
+Rationale: Tree-based gradient boosting models handle categorical Information Element bitmasks efficiently. The model evaluates whether two frame observations originate from the same physical device, outputting a similarity score that feeds a real-time clustering engine.
+Capability 2: Device Activity Classification:
+Model Family: LightGBM Classifier operating on 30-second sliding window aggregate features.
+Rationale: LightGBM provides low inference latency ( per window) on multi-core Linux CPUs. It handles missing feature fields natively and produces calibrated class probabilities.
+Capability 3: Threat & Anomaly Detection:
+Model Family: Two-Stage Ensemble:
+Stage 1: Rate Threshold Engine: Rapidly identifies high-volume denial-of-service attacks (e.g., deauthentication floods).
+Stage 2: Isolation Forest (Unsupervised) + LightGBM (Supervised Multiclass): Isolation Forest detects zero-day protocol anomalies, while LightGBM identifies known AWID3 threat signatures4.
+Capability 4: Dedicated Cryptomining Detector:
+Model Family: XGBoost Binary Classifier using inter-arrival time autocorrelation and packet size histogram features.
+Rationale: Separating cryptomining into a specialized binary detector prevents high-bandwidth activity classes (like streaming) from obscuring low-volume, highly periodic mining signatures.
+Sub-Model Architectural Decomposition
+Rather than enforcing a monolithic structure with three rigid ML models, the system architecture should decompose capabilities into specialized sub-models managed by a unified observation interface:
+
+High-Level Capability
+Sub-Component Module
+Algorithm / Model Family
+Primary Output Target
+Identity Capability
+IE_Feature_Extractor
+Hash / Bitmask Vectorizer
+Dense Information Element Signature Vector
+Identity Capability
+MAC_Pairwise_Matcher
+LightGBM Distance Model
+Pairwise Probability ()
+Identity Capability
+Identity_Cluster_Manager
+Agglomerative Clustering
+Persistent Physical Device GUID
+Activity Capability
+Temporal_Window_Aggregator
+Rolling Buffer Engine
+30-Second Statistical Feature Vector
+Activity Capability
+Activity_Classifier
+Calibrated LightGBM
+Probability Vector over Activity Classes
+Threat Capability
+Rate_Threshold_Filter
+Sliding Windows Counters
+Immediate DoS Alert Flags
+Threat Capability
+Protocol_Anomaly_Detector
+Isolation Forest
+Unsupervised Anomaly Score 
+Threat Capability
+Signature_Threat_Classifier
+XGBoost Multiclass
+AWID3 Attack Class Label4
+Threat Capability
+Cryptomining_Detector
+Autocorrelation + XGBoost
+Binary Mining Confidence Score
+
+Phase 0 Changes Required After Dataset Research
+To support downstream machine learning capabilities, the Phase 0 ML Data Foundation must implement the following changes in the Kismet ingestion layer (server_components/kismet_service.py and associated SQLite schema extractors)1:
+
+Module / File Affected
+New Field / Schema Required
+Engineering Rationale
+Dependent ML Capability
+Benchmark Evidence
+Class
+Privacy Impact
+Priority
+kismet_service.py
+ie_tag_sequence
+Parse ordered IE tag lists from probe requests
+Fingerprinting
+Mendeley3, UJI8
+Raw
+Low (No payload content)
+Required
+kismet_service.py
+ie_vendor_ouis
+Extract vendor OUIs from IE Tag 221
+Fingerprinting
+Mendeley3, UJI8
+Raw
+Low
+Required
+kismet_service.py
+ht_vht_he_caps
+Parse PHY capability bitmasks (Tags 45, 191, 255)
+Fingerprinting
+Mendeley3, UJI8
+Raw
+Low
+Required
+kismet_service.py
+sequence_number
+Extract 12-bit sequence numbers from 802.11 headers
+Fingerprinting / Threat
+AWID34, UJI8
+Raw
+None
+Required
+kismet_service.py
+frame_control_flags
+Capture To-DS, From-DS, Retry, and PM bits
+Activity / Threat
+ISCX201618, AWID34
+Raw
+None
+Required
+kismet_service.py
+Control Frame Path
+Enable high-frequency counting for RTS/CTS frames
+Threat
+AWID34
+Raw
+None
+Required
+schema/activity.py
+Traffic_Window_30s
+Implement sliding 30s window aggregation engine
+Activity / Mining
+ISCX201618, CNT21
+Derived
+Aggregated
+Required
+schema/features.py
+directional_ratios
+Compute To-DS and From-DS byte/packet ratios
+Activity / Mining
+ISCX201618, CNT21
+Derived
+None
+Required
+schema/features.py
+periodicity_score
+Implement IAT autocorrelation transform module
+Mining / Anomaly
+CNT21 Benchmark
+Derived
+None
+Required
+schema/threat.py
+Threat_Tick_1s
+Implement 1-second rolling threat counter schema
+Threat Detection
+AWID34
+Derived
+None
+Required
+kismet_service.py
+is_randomized_mac
+Parse bit 1 of MAC byte 0 to flag randomized addresses
+Fingerprinting
+Mendeley3
+Derived
+Low
+Recommended
+schema/features.py
+burst_metrics
+Calculate burst rate and mean burst duration
+Activity
+ISCX201618
+Derived
+None
+Recommended
+database/store.py
+Label Metadata Table
+Store ground-truth and weak labels with schema versions
+Training System
+ML Operational Mandate
+System
+None
+Recommended
+
+Definitive Phase 0 Implementation Directives
+To successfully support future offline training and real-time inference across fingerprinting, activity classification, and threat detection, the Phase 0 layer must be updated to extract, derive, store, label, and version the following core components:
+Extract:
+From Management Frames: Ordered Information Element tag sequences, vendor-specific OUIs (Tag 221), HT/VHT/HE capability bitmasks (Tags 45, 191, 255), and 12-bit 802.11 sequence numbers3.
+From Frame Headers: To-DS, From-DS, Retry, and Power Management control flags, frame length, signal RSSI, and frequency4.
+Control Frame Counters: Enable high-frequency aggregation for RTS/CTS frames22.
+Derive:
+30-second sliding client activity feature vectors (packet rates, byte rates, mean/median packet size, IAT variance, uplink/downlink byte ratios, burst durations, and autocorrelation periodicity scores)18.
+1-second channel threat tick vectors (deauthentication rates, disassociation rates, association failure counts, and sequence gap deltas)4.
+Store:
+Preserve structured, windowed feature schemas in lightweight local database tables or Parquet files, bypassing full packet payload duplication while retaining necessary layer-2 signals.
+Label:
+Maintain a labeling database mapping observations to physical device hardware GUIDs, activity classes (idle, browsing, streaming, file_transfer, chat, voip, p2p), threat classes (normal, deauth_flood, rogue_ap, injection), and binary mining flags (mining, non_mining).
+Version:
+Track dataset schema versions and feature transformation parameters alongside model training metadata to ensure reproducible offline training and compatible online inference.
+Works cited
+Kismetdb - Kismet, https://www.kismetwireless.net/docs/readme/logging/kismetdb/
+KismetDB logs - Kismet, https://www.kismetwireless.net/docs/dev/kismetdb/
+A dataset of labelled device Wi-Fi probe requests for MAC address, https://www.researchgate.net/publication/357757364_A_dataset_of_labelled_device_Wi-Fi_probe_requests_for_MAC_address_de-randomization
+Empirical Evaluation of Attacks Against IEEE 802.11 Enterprise, https://www.scribd.com/document/1072343871/Empirical-Evaluation-of-Attacks-Against-IEEE-802-11-Enterprise-Networks-the-AWID3-Dataset
+What WiFi Probe Requests can tell you - ResearchGate, https://www.researchgate.net/publication/369351790_What_WiFi_Probe_Requests_can_tell_you
+Non-Intrusive Privacy-Preserving Approach for Presence Monitoring, https://www.researchgate.net/publication/368861662_Non-Intrusive_Privacy-Preserving_Approach_for_Presence_Monitoring_Based_on_WiFi_Probe_Requests
+Non-Intrusive Privacy-Preserving Approach for Presence Monitoring, https://pmc.ncbi.nlm.nih.gov/articles/PMC10007437/
+Deeper Dive Into the Dataset of Wi-Fi Probe Requests - ResearchGate, https://www.researchgate.net/publication/375846757_UJI_Probes_Revisited_Deeper_Dive_into_the_Dataset_of_Wi-Fi_Probe_Requests
+Dataset of Wi-Fi Probe Requests - arXiv, https://arxiv.org/pdf/2308.04435
+A Review of Open Access WiFi Fingerprinting Datasets for Indoor, https://khuong.uk/Papers/Review_Open_Access_WiFi_Fingerprinting_Datasets.pdf
+Comprehensive Assessment of Open Science Practices in Indoor, https://www.researchgate.net/publication/389801905_Comprehensive_Assessment_of_Open_Science_Practices_in_Indoor_Positioning_Open_Data_Code_and_Material
+A Novel Approach to 802.11 Probe Request Analysis, Part I - Medium, https://medium.com/@underneaththec/a-novel-approach-to-802-11-probe-request-analysis-part-i-652f9c19c012
+How to write a SQL query to pull a value from a nested json object, https://stackoverflow.com/questions/56506744/how-to-write-a-sql-query-to-pull-a-value-from-a-nested-json-object-identified-by
+File kismet.changes of Package kismet - openSUSE Build Service, https://build.opensuse.org/projects/home:Beiyu:patch-test2/packages/kismet/files/kismet.changes?expand=0
+User Activity Detection and Feature Selection Using WiFi CSI-Based, https://publications.polymtl.ca/57106/8/2023_RoyaAlizadeh.pdf
+AWID2 | AWID, https://icsdweb.aegean.gr/awid/awid2
+Classified VPN Network Traffic Flow Using Time Related to Artificial, https://www.sciopen.com/article/10.32604/cmc.2024.050474
+VPN-nonVPN dataset (ISCXVPN2016) - University of New Brunswick, https://www.unb.ca/cic/datasets/vpn.html
+Classifying Network Flows through a Multi-Modal 1D CNN Approach, https://www.techscience.com/csse/v49n1/60020/html
+Enhanced Anomaly Detection in Wireless 5G Networks With Hybrid, https://www.cureusjournals.com/articles/5486-enhanced-anomaly-detection-in-wireless-5g-networks-with-hybrid-learning-technique-using-awid3-dataset
+Enhancing Network Security: A Machine Learning-Based Approach, https://www.mdpi.com/1999-5903/15/8/269
+Enhanced an Intrusion Detection System for IoT networks through, https://www.tandfonline.com/doi/full/10.1080/23311916.2024.2378603
+Toward Effective Framework for Wireless Intrusion Detection System, https://www.preprints.org/manuscript/202307.1619
+Best of Both Worlds: Detecting Application Layer Attacks through, https://www.mdpi.com/1424-8220/22/15/5633
+comsyssec/datasets - GitHub, https://github.com/comsyssec/datasets
+Erciyes University Journal of Institue Of Science and Technology, https://dergipark.org.tr/tr/download/article-file/5931505

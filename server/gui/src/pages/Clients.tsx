@@ -148,6 +148,7 @@ function FilterBar({
 // ── Column definitions ────────────────────────────────────────────
 function buildClientColumns(
   onAssign: (clientId: string) => void,
+  onViewMap: (client: ManagedClientSummary) => void,
   onAutoLocate: (client: ManagedClientSummary) => void,
   autoLocatingClientId: string | null,
   selectedIds: Set<string>,
@@ -202,17 +203,31 @@ function buildClientColumns(
     label: "",
     render: (c) => (
         <div className="client-location-actions">
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={autoLocatingClientId !== null}
-            onClick={(event) => {
-              event.stopPropagation();
-              onAssign(c.id);
-            }}
-          >
-            {c.location ? "View on map" : "Open map"}
-          </Button>
+          {c.location ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={autoLocatingClientId !== null}
+              onClick={(event) => {
+                event.stopPropagation();
+                onViewMap(c);
+              }}
+            >
+              View on map
+            </Button>
+          ) : (
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={autoLocatingClientId !== null}
+              onClick={(event) => {
+                event.stopPropagation();
+                onAssign(c.id);
+              }}
+            >
+              Assign
+            </Button>
+          )}
           {!c.location && (
             <Button
               variant="quiet"
@@ -299,28 +314,41 @@ export function ClientsPage() {
   });
 
   const startManualAssignment = (clientId: string) => {
-    navigate(`/digital-twin?client=${encodeURIComponent(clientId)}`);
+    navigate(`/locations?assign=${encodeURIComponent(clientId)}`);
+  };
+
+  const viewOnFloorMap = (client: ManagedClientSummary) => {
+    if (client.location) {
+      navigate(`/locations?floor=${client.location.floor ?? 1}&selected=${client.location.id}`);
+    } else {
+      navigate(`/locations?assign=${encodeURIComponent(client.id)}`);
+    }
   };
 
   const tryAutomaticLocation = async (client: ManagedClientSummary) => {
     setAutoLocatingClientId(client.id);
     try {
       const outcome = await api.autoAssignClientLocation(client.id);
-      const location = outcome.location as { label?: string } | undefined;
+      const location = outcome.location as { id?: number; label?: string } | undefined;
       if (outcome.assigned === true && location?.label) {
         addToast({
           title: "Automatic location assigned",
-          message: `${client.hostname || client.id} was placed at ${location.label}. Open the spatial map to verify it.`,
+          message: `${client.hostname || client.id} was placed at ${location.label}. Open the floor map to verify it.`,
           severity: "SUCCESS",
           action: {
             label: "Review location",
-            onClick: () => navigate(`/digital-twin?client=${encodeURIComponent(client.id)}`),
+            onClick: () =>
+              navigate(
+                location?.id != null
+                  ? `/locations?selected=${location.id}`
+                  : `/locations?selected=${encodeURIComponent(client.id)}`
+              ),
           },
         });
       } else {
         addToast({
           title: "Automatic location not assigned",
-          message: `${client.hostname || client.id} remains unassigned. Open the spatial map to inspect its placement evidence.`,
+          message: `${client.hostname || client.id} remains unassigned. Open the floor map to inspect its placement.`,
           severity: "HIGH",
         });
       }
@@ -338,6 +366,7 @@ export function ClientsPage() {
 
   const columns = buildClientColumns(
     startManualAssignment,
+    viewOnFloorMap,
     tryAutomaticLocation,
     autoLocatingClientId,
     selectedClientIds,

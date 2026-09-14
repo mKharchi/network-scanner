@@ -44,7 +44,7 @@ def main() -> int:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("server/storage/kismet_ml/activity_datasets/vnat-v1"),
+        default=Path("server/storage/kismet_ml/activity_datasets/vnat-v2"),
     )
     parser.add_argument("--window-seconds", type=int, default=30)
     parser.add_argument("--hop-seconds", type=int, default=30)

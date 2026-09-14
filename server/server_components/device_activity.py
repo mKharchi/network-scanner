@@ -12,6 +12,7 @@ import hashlib
 import json
 import math
 import sqlite3
+import statistics
 from collections import Counter, defaultdict, deque
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -20,10 +21,16 @@ from typing import Any, Deque, Dict, Iterable, List, Mapping, Optional, Sequence
 
 from .kismet_ml_foundation import ACTIVITY_LABELS, TrafficWindow, group_aware_split, normalize_mac
 
-ACTIVITY_FEATURE_SCHEMA_VERSION = "activity-features-v1"
-ACTIVITY_MODEL_VERSION = "activity-rf-v1"
-# v1 is trained on the labelled VNAT activity proxies.  ``idle`` and
-# ``browsing`` remain valid future/local labels in the foundation contract but
+ACTIVITY_FEATURE_SCHEMA_V1 = "activity-features-v1"
+ACTIVITY_FEATURE_SCHEMA_V2 = "activity-features-v2"
+ACTIVITY_FEATURE_SCHEMA_VERSION = ACTIVITY_FEATURE_SCHEMA_V2
+
+ACTIVITY_MODEL_V1 = "activity-rf-v1"
+ACTIVITY_MODEL_V2 = "activity-rf-v2"
+ACTIVITY_MODEL_VERSION = ACTIVITY_MODEL_V2
+
+# v2 is trained on the labelled VNAT activity proxies with Wi-Fi neutral features.
+# ``idle`` and ``browsing`` remain valid future/local labels in the foundation contract but
 # are intentionally not fabricated from missing VNAT packets.
 ACTIVITY_LABEL_ORDER = ("streaming", "file_transfer", "chat", "voip", "other")
 _DERIVED_FEATURE_NAMES = (
@@ -53,30 +60,49 @@ def _derived(window: TrafficWindow | Mapping[str, Any]) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
 
 
-def _window_features(window: TrafficWindow | Mapping[str, Any]) -> Dict[str, float]:
+def _window_features(
+    window: TrafficWindow | Mapping[str, Any],
+    schema_version: str = ACTIVITY_FEATURE_SCHEMA_VERSION,
+) -> Dict[str, float]:
     """Create fixed numeric features without using the client MAC."""
     values: Dict[str, float] = {}
     count = float(_window_value(window, "total_frame_count") or 0)
     total_bytes = float(_window_value(window, "total_byte_count") or 0)
     duration_ms = max(1.0, float((_window_value(window, "window_end_ms") or 0) - (_window_value(window, "window_start_ms") or 0)))
     duration_seconds = duration_ms / 1000.0
+
+    uplink_packets = float(_window_value(window, "uplink_frame_count") or 0)
+    downlink_packets = float(_window_value(window, "downlink_frame_count") or 0)
+    uplink_bytes = float(_window_value(window, "uplink_byte_count") or 0)
+    downlink_bytes = float(_window_value(window, "downlink_byte_count") or 0)
+
     values.update({
         "packet_count": count,
         "byte_count": total_bytes,
         "packet_rate": count / duration_seconds,
         "byte_rate": total_bytes / duration_seconds,
-        "uplink_packet_count": float(_window_value(window, "uplink_frame_count") or 0),
-        "downlink_packet_count": float(_window_value(window, "downlink_frame_count") or 0),
-        "uplink_byte_count": float(_window_value(window, "uplink_byte_count") or 0),
-        "downlink_byte_count": float(_window_value(window, "downlink_byte_count") or 0),
-        "retry_packet_count": float(_window_value(window, "retry_frame_count") or 0),
-        "data_packet_count": float(_window_value(window, "data_frame_count") or 0),
-        "management_packet_count": float(_window_value(window, "mgmt_frame_count") or 0),
-        "control_packet_count": float(_window_value(window, "ctrl_frame_count") or 0),
+        "uplink_packet_count": uplink_packets,
+        "downlink_packet_count": downlink_packets,
+        "uplink_byte_count": uplink_bytes,
+        "downlink_byte_count": downlink_bytes,
     })
-    values["uplink_packet_ratio"] = values["uplink_packet_count"] / count if count else 0.0
-    values["downlink_packet_ratio"] = values["downlink_packet_count"] / count if count else 0.0
-    values["retry_packet_ratio"] = values["retry_packet_count"] / count if count else 0.0
+    values["uplink_packet_ratio"] = uplink_packets / count if count else 0.0
+    values["downlink_packet_ratio"] = downlink_packets / count if count else 0.0
+
+    if schema_version == ACTIVITY_FEATURE_SCHEMA_V1:
+        # Legacy v1 included radio-specific 802.11 frame counters that caused
+        # out-of-distribution errors when evaluated on live monitor-mode Wi-Fi.
+        retry_packets = float(_window_value(window, "retry_frame_count") or 0)
+        values.update({
+            "retry_packet_count": retry_packets,
+            "data_packet_count": float(_window_value(window, "data_frame_count") or 0),
+            "management_packet_count": float(_window_value(window, "mgmt_frame_count") or 0),
+            "control_packet_count": float(_window_value(window, "ctrl_frame_count") or 0),
+            "retry_packet_ratio": retry_packets / count if count else 0.0,
+        })
+    # Note: v2 explicitly excludes retry_packet_count, data_packet_count,
+    # management_packet_count, control_packet_count, and retry_packet_ratio.
+
     for name in _DERIVED_FEATURE_NAMES:
         raw = _derived(window).get(name)
         if raw is None:
@@ -94,9 +120,12 @@ class ActivityFeatureVector:
     feature_values: Dict[str, float]
 
 
-def activity_feature_vector(window: TrafficWindow | Mapping[str, Any]) -> ActivityFeatureVector:
+def activity_feature_vector(
+    window: TrafficWindow | Mapping[str, Any],
+    schema_version: str = ACTIVITY_FEATURE_SCHEMA_VERSION,
+) -> ActivityFeatureVector:
     window_id = str(_window_value(window, "window_id"))
-    return ActivityFeatureVector(ACTIVITY_FEATURE_SCHEMA_VERSION, window_id, _window_features(window))
+    return ActivityFeatureVector(schema_version, window_id, _window_features(window, schema_version=schema_version))
 
 
 @dataclass(frozen=True)
@@ -368,7 +397,66 @@ class ActivityRandomForestClassifier:
         self._model.fit(features, labels)
         self._feature_columns = tuple(columns)
         self.dataset_version = dataset_version
+
+        # Calculate training reference statistics for domain shift detection
+        ref_stats: Dict[str, Dict[str, float]] = {}
+        for col_idx, col_name in enumerate(columns):
+            col_vals = [features[row_idx][col_idx] for row_idx in range(len(features))]
+            sorted_vals = sorted(col_vals)
+            n = len(sorted_vals)
+            p01 = sorted_vals[int(0.01 * (n - 1))] if n > 1 else sorted_vals[0]
+            p99 = sorted_vals[int(0.99 * (n - 1))] if n > 1 else sorted_vals[-1]
+            mean_val = statistics.fmean(col_vals) if col_vals else 0.0
+            std_val = statistics.pstdev(col_vals) if len(col_vals) > 1 else 0.0
+            min_val = sorted_vals[0] if sorted_vals else 0.0
+            max_val = sorted_vals[-1] if sorted_vals else 0.0
+            ref_stats[col_name] = {
+                "min": min_val,
+                "max": max_val,
+                "mean": mean_val,
+                "std": std_val,
+                "p01": p01,
+                "p99": p99,
+            }
+        self.reference_statistics = ref_stats
         return self
+
+    def check_domain_shift(self, vector: ActivityFeatureVector) -> Tuple[bool, Optional[str]]:
+        """Detect out-of-distribution feature inputs compared to training domain."""
+        stats_map = getattr(self, "reference_statistics", None)
+        if not stats_map:
+            return False, None
+        anomalies: List[str] = []
+        for col, stats in stats_map.items():
+            val = vector.feature_values.get(col)
+            if val is None or not math.isfinite(val):
+                continue
+
+            # Naturally bounded [0, 1] ratios, periodicity scores, and missingness indicators
+            # should not be subjected to Gaussian z-score checks against narrow Ethernet flow means.
+            if col.startswith("missing_") or col.endswith("_ratio") or col == "derived_periodicity_score":
+                if col.endswith("_ratio") and not (0.0 <= val <= 1.0):
+                    anomalies.append(f"{col}={val:.2f} outside [0, 1]")
+                continue
+
+            max_val = stats.get("max", 0.0)
+            std_val = stats.get("std", 0.0)
+            mean_val = stats.get("mean", 0.0)
+            # Upper bound violation on rate/count features (e.g. >10x training maximum)
+            if col in ("packet_rate", "byte_rate", "packet_count", "byte_count"):
+                if max_val > 0 and val > max_val * 10:
+                    anomalies.append(f"{col}={val:.1f} > 10x max ({max_val:.1f})")
+            elif col in ("derived_mean_packet_size", "derived_median_packet_size"):
+                if val > 65535 or (max_val > 0 and val > max_val * 2.5):
+                    anomalies.append(f"{col}={val:.1f} exceeds valid frame bounds")
+            # Severe z-score deviation (> 6 sigma from training mean) on continuous metrics
+            if std_val > 0:
+                z = abs(val - mean_val) / std_val
+                if z > 6.0:
+                    anomalies.append(f"{col} z={z:.1f} > 6.0")
+        if len(anomalies) >= 2:
+            return True, f"domain_shift: {'; '.join(anomalies[:3])}"
+        return False, None
 
     def predict(self, vector: ActivityFeatureVector) -> Tuple[str, Dict[str, float]]:
         if self._model is None or self._feature_columns is None:
@@ -408,6 +496,7 @@ class ActivityRandomForestClassifier:
             "feature_columns": self._feature_columns,
             "label_order": ACTIVITY_LABEL_ORDER,
             "prediction_output_shape": [len(ACTIVITY_LABEL_ORDER)],
+            "reference_statistics": getattr(self, "reference_statistics", {}),
         }
         if artifact_metadata:
             metadata.update(dict(artifact_metadata))
@@ -436,6 +525,7 @@ class ActivityRandomForestClassifier:
         classifier = cls(model_version=str(metadata.get("model_version", ACTIVITY_MODEL_VERSION)))
         classifier._model, classifier._feature_columns = model, columns
         classifier.dataset_version = str(metadata["dataset_version"])
+        classifier.reference_statistics = metadata.get("reference_statistics", {})
         return classifier
 
 
@@ -449,6 +539,8 @@ class ActivityPrediction:
     confidence: float
     probabilities: Dict[str, float]
     model_version: str
+    status: str = "ok"
+    status_detail: Optional[str] = None
 
 
 class TemporalActivitySmoother:
@@ -462,6 +554,19 @@ class TemporalActivitySmoother:
         self._history: Dict[str, Deque[Dict[str, float]]] = defaultdict(lambda: deque(maxlen=history_size))
 
     def update(self, prediction: ActivityPrediction) -> ActivityPrediction:
+        if prediction.status == "domain_shift":
+            return ActivityPrediction(
+                window_id=prediction.window_id,
+                device_id=prediction.device_id,
+                window_start_ms=prediction.window_start_ms,
+                window_end_ms=prediction.window_end_ms,
+                activity="unknown",
+                confidence=prediction.confidence,
+                probabilities=prediction.probabilities,
+                model_version=prediction.model_version,
+                status="domain_shift",
+                status_detail=prediction.status_detail,
+            )
         history = self._history[prediction.device_id]
         history.append(dict(prediction.probabilities))
         probabilities = {
@@ -470,29 +575,65 @@ class TemporalActivitySmoother:
         }
         activity = max(ACTIVITY_LABEL_ORDER, key=lambda value: (probabilities[value], value))
         confidence = probabilities[activity]
+        status = "ok"
+        status_detail = None
         if confidence < self.minimum_confidence:
             activity = "unknown"
+            status = "low_confidence"
+            status_detail = f"confidence {confidence:.4f} < threshold {self.minimum_confidence}"
         return ActivityPrediction(
-            window_id=prediction.window_id, device_id=prediction.device_id,
-            window_start_ms=prediction.window_start_ms, window_end_ms=prediction.window_end_ms,
-            activity=activity, confidence=confidence, probabilities=probabilities,
+            window_id=prediction.window_id,
+            device_id=prediction.device_id,
+            window_start_ms=prediction.window_start_ms,
+            window_end_ms=prediction.window_end_ms,
+            activity=activity,
+            confidence=confidence,
+            probabilities=probabilities,
             model_version=prediction.model_version,
+            status=status,
+            status_detail=status_detail,
         )
 
 
 def prediction_from_window(
-    window: TrafficWindow | Mapping[str, Any], classifier: ActivityRandomForestClassifier,
+    window: TrafficWindow | Mapping[str, Any], classifier: Any,
     *, device_id: Optional[str] = None,
 ) -> ActivityPrediction:
-    label, probabilities = classifier.predict(activity_feature_vector(window))
+    vector = activity_feature_vector(window)
+    is_shift, shift_detail = (
+        classifier.check_domain_shift(vector)
+        if hasattr(classifier, "check_domain_shift")
+        else (False, None)
+    )
+    label, probabilities = classifier.predict(vector)
     start_ms = int(_window_value(window, "window_start_ms") or 0)
+    dev_id = device_id or str(_window_value(window, "client_mac") or "unknown")
+    top_conf = probabilities.get(label, 0.0)
+
+    if is_shift:
+        activity = "unknown"
+        status = "domain_shift"
+        status_detail = shift_detail
+    elif top_conf < 0.55:
+        activity = "unknown"
+        status = "low_confidence"
+        status_detail = f"confidence {top_conf:.4f} < threshold 0.55"
+    else:
+        activity = label
+        status = "ok"
+        status_detail = None
+
     return ActivityPrediction(
         window_id=str(_window_value(window, "window_id")),
-        device_id=device_id or str(_window_value(window, "client_mac") or "unknown"),
+        device_id=dev_id,
         window_start_ms=start_ms,
         window_end_ms=int(_window_value(window, "window_end_ms") or 0),
-        activity=label, confidence=probabilities[label], probabilities=probabilities,
-        model_version=classifier.model_version,
+        activity=activity,
+        confidence=top_conf,
+        probabilities=probabilities,
+        model_version=getattr(classifier, "model_version", ACTIVITY_MODEL_VERSION),
+        status=status,
+        status_detail=status_detail,
     )
 
 
@@ -502,25 +643,90 @@ class ActivityPredictionStore:
     def __init__(self, path: Path | str):
         self.path = Path(path)
 
+    def _ensure_schema(self, con: sqlite3.Connection) -> None:
+        con.execute("""CREATE TABLE IF NOT EXISTS activity_predictions (
+            window_id TEXT PRIMARY KEY, device_id TEXT NOT NULL,
+            window_start_ms INTEGER NOT NULL, window_end_ms INTEGER NOT NULL,
+            activity TEXT NOT NULL, confidence REAL NOT NULL,
+            probabilities_json TEXT NOT NULL, model_version TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'ok',
+            status_detail TEXT,
+            persisted_at TEXT NOT NULL
+        )""")
+        cols = [row[1] for row in con.execute("PRAGMA table_info(activity_predictions)").fetchall()]
+        if "status" not in cols:
+            con.execute("ALTER TABLE activity_predictions ADD COLUMN status TEXT NOT NULL DEFAULT 'ok'")
+        if "status_detail" not in cols:
+            con.execute("ALTER TABLE activity_predictions ADD COLUMN status_detail TEXT")
+
     def persist(self, prediction: ActivityPrediction) -> None:
+        self.persist_batch([prediction])
+
+    def persist_batch(self, predictions: Sequence[ActivityPrediction]) -> None:
+        if not predictions:
+            return
         self.path.parent.mkdir(parents=True, exist_ok=True)
         con = sqlite3.connect(self.path)
         try:
-            con.execute("""CREATE TABLE IF NOT EXISTS activity_predictions (
-                window_id TEXT PRIMARY KEY, device_id TEXT NOT NULL,
-                window_start_ms INTEGER NOT NULL, window_end_ms INTEGER NOT NULL,
-                activity TEXT NOT NULL, confidence REAL NOT NULL,
-                probabilities_json TEXT NOT NULL, model_version TEXT NOT NULL,
-                persisted_at TEXT NOT NULL
-            )""")
-            con.execute(
-                "INSERT INTO activity_predictions VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now')) "
+            self._ensure_schema(con)
+            con.executemany(
+                "INSERT INTO activity_predictions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now')) "
                 "ON CONFLICT(window_id) DO UPDATE SET activity=excluded.activity, confidence=excluded.confidence, "
-                "probabilities_json=excluded.probabilities_json, model_version=excluded.model_version, persisted_at=excluded.persisted_at",
-                (prediction.window_id, prediction.device_id, prediction.window_start_ms,
-                 prediction.window_end_ms, prediction.activity, prediction.confidence,
-                 json.dumps(prediction.probabilities, sort_keys=True), prediction.model_version),
+                "probabilities_json=excluded.probabilities_json, model_version=excluded.model_version, "
+                "status=excluded.status, status_detail=excluded.status_detail, persisted_at=excluded.persisted_at",
+                [
+                    (p.window_id, p.device_id, p.window_start_ms, p.window_end_ms,
+                     p.activity, p.confidence, json.dumps(p.probabilities, sort_keys=True),
+                     p.model_version, p.status, p.status_detail)
+                    for p in predictions
+                ],
             )
             con.commit()
+        finally:
+            con.close()
+
+    def query_device(
+        self,
+        device_id: str,
+        *,
+        client_mac: Optional[str] = None,
+        cutoff_ms: Optional[int] = None,
+        limit: int = 20,
+    ) -> List[ActivityPrediction]:
+        if not self.path.exists():
+            return []
+        con = sqlite3.connect(f"file:{self.path}?mode=ro", uri=True)
+        try:
+            self._ensure_schema(con)
+            targets = [str(device_id).upper()]
+            if client_mac and str(client_mac).upper() != str(device_id).upper():
+                targets.append(str(client_mac).upper())
+            placeholders = ",".join("?" for _ in targets)
+            query = (
+                "SELECT window_id, device_id, window_start_ms, window_end_ms, "
+                "activity, confidence, probabilities_json, model_version, status, status_detail "
+                f"FROM activity_predictions WHERE UPPER(device_id) IN ({placeholders})"
+            )
+            params: List[Any] = list(targets)
+            if cutoff_ms is not None:
+                query += " AND window_end_ms >= ?"
+                params.append(cutoff_ms)
+            query += " ORDER BY window_start_ms ASC"
+            rows = con.execute(query, params).fetchall()
+            results = []
+            for row in rows:
+                results.append(ActivityPrediction(
+                    window_id=row[0],
+                    device_id=row[1],
+                    window_start_ms=row[2],
+                    window_end_ms=row[3],
+                    activity=row[4],
+                    confidence=float(row[5]),
+                    probabilities=json.loads(row[6]),
+                    model_version=row[7],
+                    status=row[8] if row[8] else "ok",
+                    status_detail=row[9],
+                ))
+            return results[-limit:] if limit > 0 else results
         finally:
             con.close()

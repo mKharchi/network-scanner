@@ -13,6 +13,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from server_components.device_activity import (
+    ACTIVITY_MODEL_VERSION,
     ActivityMajorityBaseline,
     ActivityRandomForestClassifier,
     load_labeled_activity_windows,
@@ -27,7 +28,8 @@ def main() -> int:
     parser.add_argument("--windows-jsonl", help="Derived TrafficWindow JSONL; bypasses the SQLite store")
     parser.add_argument("--labels-jsonl", required=True)
     parser.add_argument("--output-dir", required=True)
-    parser.add_argument("--dataset-version", default="activity-local-v1")
+    parser.add_argument("--dataset-version", default="vnat-v2")
+    parser.add_argument("--model-version", default=ACTIVITY_MODEL_VERSION)
     args = parser.parse_args()
 
     if args.windows_jsonl:
@@ -49,7 +51,7 @@ def main() -> int:
         raise SystemExit("activity split has no training windows")
 
     baseline = ActivityMajorityBaseline().fit(splits["train"])
-    classifier = ActivityRandomForestClassifier().fit(splits["train"], dataset_version=args.dataset_version)
+    classifier = ActivityRandomForestClassifier(model_version=args.model_version).fit(splits["train"], dataset_version=args.dataset_version)
     metrics = {}
     for name, members in splits.items():
         if not members:

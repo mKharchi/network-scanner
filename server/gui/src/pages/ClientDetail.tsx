@@ -665,15 +665,44 @@ export function ClientDetailPage() {
               <span className="client-detail-location__label">
                 {c.location ? c.location.label : "Location unassigned"}
               </span>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() =>
-                  navigate(`/digital-twin?client=${encodeURIComponent(c.id)}`)
-                }
-              >
-                {c.location ? "View on map" : "Open map"}
-              </Button>
+              <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}>
+                {c.location ? (
+                  <>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() =>
+                        navigate(
+                          `/locations?floor=${c.location?.floor ?? 1}&selected=${c.location?.id}`
+                        )
+                      }
+                    >
+                      View on floor map
+                    </Button>
+                    <Button
+                      variant="quiet"
+                      size="sm"
+                      onClick={() =>
+                        navigate(
+                          `/locations?assign=${encodeURIComponent(c.id)}&floor=${c.location?.floor ?? 1}`
+                        )
+                      }
+                    >
+                      Reassign location
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() =>
+                      navigate(`/locations?assign=${encodeURIComponent(c.id)}`)
+                    }
+                  >
+                    Assign location
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         </div>

@@ -7,7 +7,7 @@ import { SectionCard } from '../components/Card';
 import { Skeleton, SkeletonTable, ErrorState, EmptyState, Notice } from '../components/States';
 import { DataTable, type Column } from '../components/DataTable';
 import { Badge } from '../components/Badge';
-import { WirelessInvestigationPanel } from '../components/WirelessInvestigationPanel';
+import { DeviceActivityPanel } from '../components/DeviceActivityPanel';
 import { formatDateTime, formatRelative, normalizeMac } from '../utils/format';
 import '../styles/devices.css';
 import '../styles/device-detail.css';
@@ -107,8 +107,6 @@ export function DeviceDetailPage() {
 
   const activeTab = searchParams.get('tab') || 'overview';
   const lookbackParam = searchParams.get('lookback') || '15m';
-  const startParam = searchParams.get('start') || undefined;
-  const endParam = searchParams.get('end') || undefined;
 
   const handleTabChange = (tab: string) => {
     const nextParams = new URLSearchParams(searchParams);
@@ -218,11 +216,11 @@ export function DeviceDetailPage() {
           Network Intelligence & Telemetry
         </Button>
         <Button
-          variant={activeTab === 'investigation' ? 'primary' : 'quiet'}
+          variant={activeTab === 'activity' || activeTab === 'investigation' ? 'primary' : 'quiet'}
           size="sm"
-          onClick={() => handleTabChange('investigation')}
+          onClick={() => handleTabChange('activity')}
         >
-          📡 Kismet Wireless Investigation
+          🧠 Activity Predictions
         </Button>
       </div>
 
@@ -284,22 +282,22 @@ export function DeviceDetailPage() {
             </SectionCard>
           </div>
 
-          <SectionCard title="Wireless RF Evidence & Passive Capture">
+          <SectionCard title="Machine Learning Activity Intelligence">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--space-4)' }}>
               <div>
                 <div style={{ fontWeight: 600, fontSize: 'var(--font-base)', marginBottom: '4px' }}>
-                  Kismet Passive 802.11 Wireless Capture Available
+                  Real-Time & Historical Traffic Activity Classification
                 </div>
                 <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-sm)' }}>
-                  Inspect historical 802.11 frames, RSSI signal levels, channels, and probe activity captured for MAC {normalizeMac(dev.mac_address)}.
+                  Continuous 30-second window classification: Streaming, File Transfer, Chat, VoIP, and Web activity for MAC {normalizeMac(dev.mac_address)}.
                 </div>
               </div>
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => handleTabChange('investigation')}
+                onClick={() => handleTabChange('activity')}
               >
-                Launch Wireless Investigation (15m Lookback) →
+                Inspect Activity Predictions →
               </Button>
             </div>
           </SectionCard>
@@ -466,13 +464,11 @@ export function DeviceDetailPage() {
         </>
       )}
 
-      {/* Tab 3: Kismet Wireless Investigation */}
-      {activeTab === 'investigation' && dev.mac_address && (
-        <WirelessInvestigationPanel
+      {/* Tab 3: Activity Predictions */}
+      {(activeTab === 'activity' || activeTab === 'investigation') && dev.mac_address && (
+        <DeviceActivityPanel
           deviceMac={dev.mac_address}
           initialLookback={lookbackParam}
-          initialStart={startParam}
-          initialEnd={endParam}
         />
       )}
     </div>

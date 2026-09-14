@@ -32,15 +32,17 @@ class ActivityInferenceService:
         self,
         *,
         model_dir: Path | str | None = None,
-        dataset_version: str = "vnat-v1",
+        model_version: str = ACTIVITY_MODEL_VERSION,
+        dataset_version: str = "vnat-v2",
         storage_dir: Path | str | None = None,
         confidence_threshold: float = 0.55,
         history_size: int = 3,
     ) -> None:
         storage = Path(storage_dir or get_ml_storage_dir())
+        self.model_version = model_version
         self.model_dir = Path(model_dir or os.getenv(
             "KISMET_ACTIVITY_MODEL_DIR",
-            str(storage / "activity_models" / ACTIVITY_MODEL_VERSION),
+            str(storage / "activity_models" / self.model_version),
         ))
         self.dataset_version = dataset_version
         self.store = KismetMLDerivedStore(storage)
@@ -56,8 +58,8 @@ class ActivityInferenceService:
         if self._load_status is not None:
             status, detail = self._load_status
             return None, detail if status != "ok" else None
-        model_path = self.model_dir / f"{ACTIVITY_MODEL_VERSION}.joblib"
-        metadata_path = self.model_dir / f"{ACTIVITY_MODEL_VERSION}.json"
+        model_path = self.model_dir / f"{self.model_version}.joblib"
+        metadata_path = self.model_dir / f"{self.model_version}.json"
         if not model_path.is_file() or not metadata_path.is_file():
             detail = f"activity artifact is unavailable at {self.model_dir}"
             self._load_status = ("model_unavailable", detail)
@@ -90,6 +92,8 @@ class ActivityInferenceService:
             "confidence": round(float(prediction.confidence), 6),
             "probabilities": {key: round(float(value), 6) for key, value in prediction.probabilities.items()},
             "model_version": prediction.model_version,
+            "status": getattr(prediction, "status", "ok"),
+            "status_detail": getattr(prediction, "status_detail", None),
         }
 
     def predict_device(
@@ -99,13 +103,33 @@ class ActivityInferenceService:
         client_mac: Optional[str] = None,
         lookback_minutes: int = 15,
         limit: int = 20,
+        read_only: bool = True,
     ) -> Dict[str, Any]:
+        """Query activity for a device. Strictly read-only by default to avoid GET side-effects."""
+        now_ms = int(time.time() * 1000)
+        cutoff_ms = now_ms - max(1, min(24 * 60, lookback_minutes)) * 60 * 1000
+
+        # 1. First check persisted predictions in the SQLite prediction store
+        persisted = self.prediction_store.query_device(
+            device_id, client_mac=client_mac, cutoff_ms=cutoff_ms, limit=limit,
+        )
+        if persisted:
+            serialized = [self._serialize(p) for p in persisted]
+            current = serialized[-1]
+            return {
+                "device_id": device_id,
+                "current": current,
+                "recent": list(reversed(serialized)),
+                "status": current.get("status", "ok"),
+                "read_only": True,
+            }
+
+        # 2. Fall back to in-memory evaluation of recent derived windows
         classifier, detail = self._load_classifier()
         if classifier is None:
             status = self._load_status[0] if self._load_status else "model_unavailable"
             return {"device_id": device_id, "current": None, "recent": [], "status": status, "detail": detail}
-        now_ms = int(time.time() * 1000)
-        cutoff_ms = now_ms - max(1, min(24 * 60, lookback_minutes)) * 60 * 1000
+
         windows = [
             row for row in self.store.load_all("traffic_windows")
             if self._same_device(row, device_id, client_mac)
@@ -114,9 +138,7 @@ class ActivityInferenceService:
         windows.sort(key=lambda row: (int(row.get("window_start_ms") or 0), str(row.get("window_id") or "")))
         if not windows:
             return {"device_id": device_id, "current": None, "recent": [], "status": "no_recent_window"}
-        # Rebuild the short history from the bounded query on every request.
-        # This keeps repeated reads idempotent instead of smoothing the same
-        # window again merely because a UI refreshed.
+
         smoother = TemporalActivitySmoother(
             history_size=self.history_size, minimum_confidence=self.confidence_threshold,
         )
@@ -124,8 +146,46 @@ class ActivityInferenceService:
         for window in windows[-max(1, min(limit, 100)):]:
             raw = prediction_from_window(window, classifier, device_id=device_id)
             smoothed = smoother.update(raw)
-            self.prediction_store.persist(smoothed)
+            if not read_only:
+                self.prediction_store.persist(smoothed)
             predictions.append(self._serialize(smoothed))
+
         current = predictions[-1]
-        status = "low_confidence" if current["activity"] == "unknown" else "ok"
-        return {"device_id": device_id, "current": current, "recent": list(reversed(predictions)), "status": status}
+        return {
+            "device_id": device_id,
+            "current": current,
+            "recent": list(reversed(predictions)),
+            "status": current.get("status", "ok"),
+            "read_only": read_only,
+        }
+
+    def predict_interval(
+        self,
+        windows: Iterable[Mapping[str, Any]],
+        *,
+        persist: bool = True,
+    ) -> List[Dict[str, Any]]:
+        """Predict a batch of completed interval windows and persist idempotently."""
+        classifier, detail = self._load_classifier()
+        if classifier is None:
+            raise RuntimeError(f"cannot process interval: {detail or 'model unavailable'}")
+
+        # Group windows by device
+        by_device: Dict[str, List[Mapping[str, Any]]] = {}
+        for window in windows:
+            dev = str(window.get("client_mac") or "unknown")
+            by_device.setdefault(dev, []).append(window)
+
+        results = []
+        for dev, dev_windows in by_device.items():
+            dev_windows.sort(key=lambda w: (int(w.get("window_start_ms") or 0), str(w.get("window_id") or "")))
+            smoother = TemporalActivitySmoother(
+                history_size=self.history_size, minimum_confidence=self.confidence_threshold,
+            )
+            for window in dev_windows:
+                raw = prediction_from_window(window, classifier, device_id=dev)
+                smoothed = smoother.update(raw)
+                if persist:
+                    self.prediction_store.persist(smoothed)
+                results.append(self._serialize(smoothed))
+        return results

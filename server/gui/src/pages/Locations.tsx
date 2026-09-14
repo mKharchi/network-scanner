@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   api,
@@ -176,12 +176,19 @@ export function LocationsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { addToast } = useToast();
-  const [selectedFloor, setSelectedFloor] = useState(1);
+  const floorParam = searchParams.get("floor");
+  const selectedParam = searchParams.get("selected");
+  const assigningClientId = searchParams.get("assign");
+
+  const [selectedFloor, setSelectedFloor] = useState(() => {
+    const parsed = Number(floorParam);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 1;
+  });
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [aisleFilter, setAisleFilter] = useState<number | "all">("all");
   const [tableFilter, setTableFilter] = useState<number | "all">("all");
-  const [selectedLocationId, setSelectedLocationId] = useState<number | null>(
-    null,
+  const [selectedLocationId, setSelectedLocationId] = useState<number | string | null>(
+    () => selectedParam || null,
   );
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
   const [actionLoading, setActionLoading] = useState(false);
@@ -193,7 +200,21 @@ export function LocationsPage() {
   const [autoLocatingClientId, setAutoLocatingClientId] = useState<
     string | null
   >(null);
-  const assigningClientId = searchParams.get("assign");
+
+  useEffect(() => {
+    if (floorParam) {
+      const parsed = Number(floorParam);
+      if (Number.isFinite(parsed) && parsed !== selectedFloor) {
+        setSelectedFloor(parsed);
+      }
+    }
+  }, [floorParam]);
+
+  useEffect(() => {
+    if (selectedParam && selectedParam !== String(selectedLocationId)) {
+      setSelectedLocationId(selectedParam);
+    }
+  }, [selectedParam]);
 
   const { state, refetch } = useFetch<FloorLayout>(
     () => api.getLocationLayout(selectedFloor),
@@ -228,10 +249,23 @@ export function LocationsPage() {
         ? unassignedState.staleData.items
         : [];
 
-  const assigningClient = useMemo(
+  const assigningClientFromQueue = useMemo(
     () => unassignedItems.find((item) => item.id === assigningClientId) || null,
     [unassignedItems, assigningClientId],
   );
+
+  const { state: assigningClientFetchState } = useFetch(
+    assigningClientId && !assigningClientFromQueue
+      ? () => api.getClient(assigningClientId)
+      : null,
+    [assigningClientId, Boolean(assigningClientFromQueue)],
+  );
+
+  const assigningClient =
+    assigningClientFromQueue ||
+    (assigningClientFetchState.status === "success"
+      ? assigningClientFetchState.data.client
+      : null);
 
   const selectedLocation = useMemo(
     () => findLocation(layout, selectedLocationId),
@@ -513,6 +547,11 @@ export function LocationsPage() {
         title: "Location assigned",
         message: `${label} is now at ${location.label}.`,
         severity: "SUCCESS",
+        action: {
+          label: "View client details",
+          onClick: () =>
+            navigate(`/clients/${encodeURIComponent(assigningClientId)}`),
+        },
       });
       clearAssignMode();
       setSelectedLocationId(location.id);
@@ -660,14 +699,35 @@ export function LocationsPage() {
 
       {assigningClientId && (
         <div style={{ marginBottom: "var(--space-4)" }}>
-          <div className="notice notice--info">
-            Assigning{" "}
-            <strong>{assigningClient?.hostname || assigningClientId}</strong>.
-            Select an empty PC seat on the layout
-            {assignLoading ? "…" : "."}{" "}
-            <Button variant="quiet" size="sm" onClick={clearAssignMode}>
-              Cancel
-            </Button>
+          <div
+            className="notice notice--info"
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: "var(--space-3)",
+            }}
+          >
+            <div>
+              Assigning location for{" "}
+              <strong>{assigningClient?.hostname || assigningClientId}</strong>.
+              Select an empty PC seat on the layout{assignLoading ? "…" : "."}
+            </div>
+            <div style={{ display: "flex", gap: "var(--space-2)" }}>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() =>
+                  navigate(`/clients/${encodeURIComponent(assigningClientId)}`)
+                }
+              >
+                Back to client details
+              </Button>
+              <Button variant="quiet" size="sm" onClick={clearAssignMode}>
+                Cancel
+              </Button>
+            </div>
           </div>
         </div>
       )}
@@ -1543,18 +1603,22 @@ function stationSeatLabel(
 
 function findLocation(
   layout: FloorLayout | null,
-  locationId: number | null,
+  locationId: number | string | null,
 ): ClientLocation | null {
   if (!layout || locationId == null) return null;
+  const asNumber = typeof locationId === "number" ? locationId : Number(locationId);
+  const isNumeric = Number.isFinite(asNumber);
+  const asString = String(locationId);
+
   for (const room of layout.rooms) {
-    if (room.id === locationId) return room;
+    if ((isNumeric && room.id === asNumber) || room.client_id === asString) return room;
   }
   for (const aisle of layout.aisles) {
     for (const table of aisle.tables) {
-      if (table.location?.id === locationId) return table.location;
+      if ((isNumeric && table.location?.id === asNumber) || table.location?.client_id === asString) return table.location;
       for (const column of tableColumns(table)) {
         for (const station of column.stations) {
-          if (station.id === locationId) return station;
+          if ((isNumeric && station.id === asNumber) || station.client_id === asString) return station;
         }
       }
     }

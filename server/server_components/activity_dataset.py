@@ -24,8 +24,8 @@ from .kismet_ml_foundation import (
 )
 
 
-DATASET_VERSION = "vnat-v1"
-PARSER_VERSION = "vnat-pcap-parser-v1"
+DATASET_VERSION = "vnat-v2"
+PARSER_VERSION = "vnat-pcap-parser-v2"
 SUPPORTED_LINK_TYPES = {1: "ethernet", 101: "raw-ip"}
 _ETHERNET = 1
 _RAW_IP = 101

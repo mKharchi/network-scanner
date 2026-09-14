@@ -2020,6 +2020,8 @@ export interface DeviceActivityPrediction {
   confidence: number;
   probabilities: Record<string, number>;
   model_version: string;
+  status?: string;
+  status_detail?: string | null;
 }
 
 export interface DeviceActivityResponse {
@@ -2028,6 +2030,7 @@ export interface DeviceActivityResponse {
   recent: DeviceActivityPrediction[];
   status: "ok" | "model_unavailable" | "model_incompatible" | "no_recent_window" | "low_confidence" | string;
   detail?: string;
+  read_only?: boolean;
 }
 
 export interface WifiSensor {
