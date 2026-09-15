@@ -102,13 +102,13 @@ NETWORK_SCAN_SUBNET=<e.g. 172.16.0.0/16>
 
 NETWORK_SCAN_STORAGE_DIR=~/network-scanner/server/storage/network_scans
 
-# Kismet sensor — run `ip link` and `iw dev` on the new machine first
-KISMET_CAPTURE_ROOT=~/kismet
+# Kismet sensor — use machine-global paths (never ~ in systemd EnvironmentFile)
+KISMET_CAPTURE_ROOT=/var/lib/kismet/captures
 KISMET_CAPTURE_INTERFACE=<monitor interface from iw dev>
 KISMET_MAIN_INTERFACE=<managed interface from ip link>
 KISMET_HOMEDIR=/var/lib/kismet
 KISMET_BINARY=/usr/local/bin/kismet
-KISMET_CONF_DIR=~/kismet/conf
+KISMET_CONF_DIR=/etc/kismet
 KISMET_RETENTION_HOURS=48
 KISMET_MIN_FREE_BYTES=5368709120
 KISMET_HEALTH_STALE_SECONDS=300
@@ -154,22 +154,25 @@ curl http://127.0.0.1:8080/health
 
 ### 2.8 Install and configure Kismet (if this machine hosts the sensor)
 
-Follow the Kismet installation guide for your distribution. Then:
+Follow the Kismet installation guide for your distribution. Then create the
+**machine-global** capture/conf directories (no per-user `~` paths):
 
 ```bash
-# Create capture directory and conf directory
-mkdir -p ~/kismet/conf
+# Creates /var/lib/kismet/captures and installs conf into /etc/kismet
+sudo bash scripts/setup_kismet_storage.sh
+```
 
-# Copy kismet site config
-cp kismet_site.conf.example ~/kismet/conf/kismet_site.conf
-# Edit ~/kismet/conf/kismet_site.conf to set the correct interface
-
+```bash
 # Install the sensor service (separate from server service)
 sudo cp kismet-sensor.service.example /etc/systemd/system/kismet-sensor.service
-# Edit the service file to match the new username and paths, then:
+# Edit EnvironmentFile / WorkingDirectory if the repo path differs, then:
 sudo systemctl daemon-reload
 sudo systemctl enable --now kismet-sensor.service
 ```
+
+> **Do not use `~` in `server/.env` for Kismet paths.** systemd does not expand
+> `~`, and the service runs as user `kismet` (home `/var/lib/kismet`), not your
+> admin account. Always use absolute paths like `/var/lib/kismet/captures`.
 
 ---
 
@@ -191,19 +194,22 @@ Once the new server is running, push the new `SERVER_IP` to all connected client
 ```bash
 NEW_IP="10.0.0.5"  # replace with the new server's LAN IP
 
-curl -X POST http://127.0.0.1:8080/api/v1/actions \
+# Use the dedicated reconfigure endpoint — it expands targets=["all"]
+# to every currently connected client. (POST /api/v1/actions with
+# targets:["all"] does NOT expand "all" into client IDs.)
+curl -X POST http://127.0.0.1:8080/api/v1/actions/reconfigure-clients \
   -H "Content-Type: application/json" \
   -d "{
-    \"action_type\": \"RECONFIGURE_CLIENT\",
-    \"targets\": [\"all\"],
-    \"parameters\": {\"SERVER_IP\": \"${NEW_IP}\", \"SERVER_PORT\": \"5000\"}
+    \"parameters\": {\"SERVER_IP\": \"${NEW_IP}\", \"SERVER_PORT\": \"5000\"},
+    \"targets\": [\"all\"]
   }"
 ```
 
 Each client will:
 1. Receive the action over its existing TCP connection.
-2. Atomically patch `config/.env` (only `SERVER_IP`/`SERVER_PORT` are updated; all other keys are preserved).
-3. Spawn a new client process and exit — reconnecting to the new server within a few seconds.
+2. Atomically patch `config/.env` (only allowlisted keys; other keys preserved).
+3. For `SERVER_IP` / `SERVER_PORT` only: soft-reconnect (close socket, reload
+   dotenv, connect to the new server). Other keys trigger a process restart.
 
 ### What the allowed config keys are
 

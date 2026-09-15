@@ -191,16 +191,9 @@ class KismetIntervalProcessor:
         self.model_dir = Path(model_dir) if model_dir else (self.storage_dir / "activity_models" / self.model_version)
         self.active_margin_seconds = active_capture_margin_seconds
 
-        configured_dirs = os.getenv("KISMET_CAPTURE_DIRS")
-        if capture_dirs is not None:
-            self.capture_dirs = [Path(path) for path in capture_dirs]
-        elif configured_dirs:
-            self.capture_dirs = [Path(path.strip()) for path in configured_dirs.split(",") if path.strip()]
-        else:
-            self.capture_dirs = [
-                Path(os.getenv("KISMET_CAPTURE_ROOT") or os.getenv("KISMET_CAPTURE_DIR") or "~/kismet").expanduser(),
-                Path("~").expanduser(),
-            ]
+        from .kismet_paths import get_capture_dirs
+
+        self.capture_dirs = get_capture_dirs(capture_dirs)
 
         self.prediction_store = ActivityPredictionStore(self.storage_dir / "activity_predictions.sqlite")
         self.inference_service = ActivityInferenceService(

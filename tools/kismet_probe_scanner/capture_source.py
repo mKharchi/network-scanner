@@ -19,7 +19,9 @@ _SERVER_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "server")
 if _SERVER_DIR not in sys.path:
     sys.path.insert(0, os.path.abspath(_SERVER_DIR))
 
-DEFAULT_CAPTURE_ROOT = Path("/home/adonis/kismet")
+from server_components.kismet_paths import DEFAULT_KISMET_CAPTURE_ROOT, get_capture_dirs
+
+DEFAULT_CAPTURE_ROOT = DEFAULT_KISMET_CAPTURE_ROOT
 STALE_JOURNAL_THRESHOLD_SECONDS = 30.0
 
 
@@ -64,15 +66,7 @@ def discover_capture_files(
     Uses ``KISMET_CAPTURE_DIRS`` (comma-separated) then ``KISMET_CAPTURE_ROOT``
     then the built-in default, mirroring the server service behaviour.
     """
-    if capture_dirs is not None:
-        dirs = capture_dirs
-    else:
-        env_dirs = os.getenv("KISMET_CAPTURE_DIRS")
-        if env_dirs:
-            dirs = [Path(p.strip()) for p in env_dirs.split(",") if p.strip()]
-        else:
-            root = os.getenv("KISMET_CAPTURE_ROOT")
-            dirs = [Path(root) if root else DEFAULT_CAPTURE_ROOT]
+    dirs = get_capture_dirs(capture_dirs)
 
     found: List[Path] = []
     for cdir in dirs:

@@ -74,13 +74,9 @@ class KismetLogRotator:
         self.storage_dir = Path(storage_dir or get_ml_storage_dir()).resolve()
         self.intervals_dir = self.storage_dir / "intervals"
 
-        if capture_dirs is not None:
-            self.capture_dirs = [Path(p) for p in capture_dirs]
-        else:
-            self.capture_dirs = [
-                Path(os.getenv("KISMET_CAPTURE_ROOT") or "~/kismet").expanduser(),
-                Path("~").expanduser(),
-            ]
+        from .kismet_paths import get_capture_dirs
+
+        self.capture_dirs = get_capture_dirs(capture_dirs)
 
     def _auth_header(self) -> str:
         token = f"{self.username}:{self.password}"

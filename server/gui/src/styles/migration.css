@@ -33,6 +33,20 @@
   gap: var(--space-2);
   align-items: center;
 }
+
+
+input {
+  height: 2.25rem;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+  font-family: inherit;
+  outline: none;
+  transition: border-color 120ms;
+}
 select,
 .migration-select,
 .migration-input {
@@ -49,7 +63,6 @@ select,
   width: 100%;
   box-sizing: border-box;
 }
-
 .migration-select:focus,
 .migration-input:focus {
   border-color: var(--accent);
@@ -67,7 +80,9 @@ select,
   color: var(--text-faint);
   cursor: pointer;
   font-size: 0.75rem;
-  transition: background 120ms, color 120ms;
+  transition:
+    background 120ms,
+    color 120ms;
 }
 
 .migration-remove-btn:hover {

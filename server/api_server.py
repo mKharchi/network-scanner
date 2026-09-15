@@ -1075,6 +1075,31 @@ class ApiRequestHandler(BaseHTTPRequestHandler):
                     )
                     return
 
+                if "SERVER_IP" in parameters:
+                    import ipaddress
+                    import re as _re
+                    raw_ip = str(parameters["SERVER_IP"]).strip().strip('"').strip("'")
+                    try:
+                        ipaddress.ip_address(raw_ip)
+                    except ValueError:
+                        if not _re.fullmatch(r"[A-Za-z0-9._-]+", raw_ip) or raw_ip in {".", ".."}:
+                            self.send_error_response(
+                                400, "INVALID_PARAMETERS",
+                                f"SERVER_IP '{raw_ip}' is not a valid IP address or hostname.",
+                            )
+                            return
+                    parameters["SERVER_IP"] = raw_ip
+                if "SERVER_PORT" in parameters:
+                    try:
+                        port = int(str(parameters["SERVER_PORT"]).strip().strip('"').strip("'"))
+                    except (TypeError, ValueError):
+                        self.send_error_response(400, "INVALID_PARAMETERS", "SERVER_PORT must be an integer.")
+                        return
+                    if not (1 <= port <= 65535):
+                        self.send_error_response(400, "INVALID_PARAMETERS", "SERVER_PORT must be 1-65535.")
+                        return
+                    parameters["SERVER_PORT"] = str(port)
+
                 raw_targets = payload.get("targets", ["all"])
                 if raw_targets == ["all"] or raw_targets == "all":
                     raw_targets = list(server_lib.get_connected_client_ids())

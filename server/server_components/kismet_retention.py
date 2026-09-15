@@ -56,13 +56,12 @@ class KismetRetentionManager:
         write_grace_seconds: float = DEFAULT_WRITE_GRACE_SECONDS,
         dry_run: Optional[bool] = None,
     ):
-        configured_dir = os.getenv("KISMET_CAPTURE_ROOT") or os.getenv("KISMET_CAPTURE_DIR")
+        from .kismet_paths import get_capture_root
+
         if capture_dir:
-            self.capture_dir = Path(capture_dir).resolve()
-        elif configured_dir:
-            self.capture_dir = Path(configured_dir).resolve()
+            self.capture_dir = Path(capture_dir).expanduser().resolve()
         else:
-            self.capture_dir = Path("~/kismet").expanduser().resolve()
+            self.capture_dir = get_capture_root().resolve()
 
         self.retention_hours = (
             float(retention_hours)

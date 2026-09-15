@@ -363,8 +363,33 @@ Do not run both:
 
 - The legacy `NetworkClient` Windows service
 - The `NetworkClientUserAgent` scheduled task
+- A manual `py .\client.py` / `python .\user_agent.py` session
 
-on the same machine. Otherwise the server may receive duplicate registrations from the same PC.
+on the same machine. The server keeps **one** live command channel per PC.
+A second process can stay TCP-connected but never receive `RECONFIGURE_CLIENT`
+(or other actions), so its `config/.env` will not change.
+
+## Stopping the client completely
+
+`Unregister-ScheduledTask` / `uninstall_user_logon_task.ps1` only removes the
+task. Older versions left `pythonw.exe` running, so the PC stayed connected.
+
+Always stop processes with:
+
+```powershell
+.\stop_windows_client.ps1
+```
+
+Or, after updating, `.\uninstall_user_logon_task.ps1` also kills matching
+`client.py` / `user_agent.py` processes from this install folder.
+
+Check for leftovers:
+
+```powershell
+Get-CimInstance Win32_Process |
+  Where-Object { $_.CommandLine -match "user_agent\.py|client\.py" } |
+  Select-Object ProcessId, CommandLine
+```
 
 If the old service exists, stop and disable it from an elevated PowerShell:
 

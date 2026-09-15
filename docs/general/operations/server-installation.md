@@ -72,16 +72,19 @@ uses:
 ```text
 KISMET_MAIN_INTERFACE=wlp0s20f3
 KISMET_CAPTURE_INTERFACE=wlp0s20f3mon
-KISMET_CAPTURE_ROOT=/home/adonis/kismet
+KISMET_CAPTURE_ROOT=/var/lib/kismet/captures
 KISMET_HOMEDIR=/var/lib/kismet
-KISMET_CONF_DIR=/home/adonis/kismet/conf
+KISMET_CONF_DIR=/etc/kismet
 ```
 
-Create the service account and directories according to your distribution.
-Install `kismet-sensor.service` only after confirming paths and permissions.
-Install `kismet_site.conf.example` as `kismet_site.conf`, bind Kismet to
-localhost, and create/test the Kismet administrator account before disabling
-first-run credential creation.
+Create the service account and machine-global directories with:
+
+```bash
+sudo bash scripts/setup_kismet_storage.sh
+```
+
+Never put `~` in `server/.env` for these paths — systemd does not expand it,
+and the sensor runs as user `kismet`.
 
 The completed current profile runs Kismet with `User=kismet`, `Group=kismet`,
 `SupplementaryGroups=netdev`, `CAP_NET_ADMIN`, `CAP_NET_RAW`,

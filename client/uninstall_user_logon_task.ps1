@@ -6,10 +6,12 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$clientDir = $PSScriptRoot
 $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction Stop
 
-# Removing a scheduled task prevents future starts but can leave its current
-# pythonw.exe instance running. Stop and confirm that instance exits first.
+# Removing a scheduled task prevents future starts but does NOT kill the
+# already-running pythonw.exe. Stop the task, then force-kill matching client
+# processes from this install directory (same behavior as stop_windows_client.ps1).
 if ($task.State -eq "Running") {
     Stop-ScheduledTask -InputObject $task -ErrorAction Stop
     $deadline = (Get-Date).AddSeconds($StopTimeoutSeconds)
@@ -20,8 +22,21 @@ if ($task.State -eq "Running") {
     } while ($task.State -eq "Running" -and (Get-Date) -lt $deadline)
 
     if ($task.State -eq "Running") {
-        throw "'$TaskName' is still running after $StopTimeoutSeconds seconds. It was not removed."
+        Write-Warning "'$TaskName' is still marked Running after $StopTimeoutSeconds seconds; killing processes anyway."
     }
+}
+
+$escapedClientDir = [regex]::Escape($clientDir)
+$clientProcesses = Get-CimInstance Win32_Process |
+    Where-Object {
+        $_.CommandLine -and
+        $_.CommandLine -match $escapedClientDir -and
+        $_.CommandLine -match "(client\.py|user_agent\.py|NetworkScannerClient\.exe)"
+    }
+
+foreach ($process in $clientProcesses) {
+    Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
+    Write-Host "Stopped client process PID $($process.ProcessId): $($process.Name)"
 }
 
 Unregister-ScheduledTask -InputObject $task -Confirm:$false -ErrorAction Stop

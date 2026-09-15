@@ -35,7 +35,10 @@ MAX_OBSERVATION_LIMIT = 2000
 MAX_PROBE_SCAN_ROWS_PER_CAPTURE = 10000
 PROBE_SCAN_BATCH_ROWS = 700
 CAPTURE_MTIME_LOOKBACK_SLACK_SECONDS = 300
-DEFAULT_CAPTURE_ROOT = Path("/home/adonis/kismet")
+from server_components.kismet_paths import (
+    DEFAULT_KISMET_CAPTURE_ROOT as DEFAULT_CAPTURE_ROOT,
+    get_capture_dirs,
+)
 MAC_RE = re.compile(r"^[0-9A-F]{2}(?::[0-9A-F]{2}){5}$")
 
 # Standard 802.11 frame type mappings
@@ -309,14 +312,7 @@ class KismetInvestigationService:
         *,
         fallback_scan_dir: Optional[Path | str] = None,
     ):
-        configured_dirs = os.getenv("KISMET_CAPTURE_DIRS")
-        if capture_dirs is not None:
-            self.capture_dirs = [Path(p) for p in capture_dirs]
-        elif configured_dirs:
-            self.capture_dirs = [Path(p.strip()) for p in configured_dirs.split(",") if p.strip()]
-        else:
-            configured_root = os.getenv("KISMET_CAPTURE_ROOT")
-            self.capture_dirs = [Path(configured_root) if configured_root else DEFAULT_CAPTURE_ROOT]
+        self.capture_dirs = get_capture_dirs(capture_dirs)
         self.fallback_scan_dir = Path(fallback_scan_dir or (Path(__file__).resolve().parents[1] / "storage" / "network_scans"))
 
     def find_kismet_database_files(self) -> List[Path]:

@@ -380,16 +380,9 @@ class KismetDailySummarizer:
         self.summary_store = DailySummaryStore(self.storage_dir / "daily_summaries.sqlite")
         self.summary_retention_days = summary_retention_days
 
-        configured_dirs = os.getenv("KISMET_CAPTURE_DIRS")
-        if capture_dirs is not None:
-            self.capture_dirs = [Path(p) for p in capture_dirs]
-        elif configured_dirs:
-            self.capture_dirs = [Path(p.strip()) for p in configured_dirs.split(",") if p.strip()]
-        else:
-            self.capture_dirs = [
-                Path(os.getenv("KISMET_CAPTURE_ROOT") or os.getenv("KISMET_CAPTURE_DIR") or "~/kismet").expanduser(),
-                Path("~").expanduser(),
-            ]
+        from .kismet_paths import get_capture_dirs
+
+        self.capture_dirs = get_capture_dirs(capture_dirs)
 
     def _load_day_predictions(
         self, date_utc: str,

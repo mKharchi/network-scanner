@@ -1713,8 +1713,58 @@ _RECONFIGURE_ALLOWLIST: set[str] = {
     "NETWORK_NEIGHBOUR_HOSTNAME_LOOKUP_LIMIT",
 }
 
+# Soft reconnect is enough when only connection targets change — the main
+# loop reloads dotenv before each connect. Other keys may be read once at
+# process start, so those still trigger a full restart.
+_SOFT_RECONNECT_KEYS: set[str] = {"SERVER_IP", "SERVER_PORT"}
 
-def _read_env_file(path: Path) -> dict:
+_reconnect_requested = threading.Event()
+
+
+def request_client_reconnect() -> None:
+    """Ask the running client loop to close the socket and reconnect."""
+    _reconnect_requested.set()
+
+
+def consume_reconnect_request() -> bool:
+    """Return True once if a reconfigure asked for reconnect."""
+    if _reconnect_requested.is_set():
+        _reconnect_requested.clear()
+        return True
+    return False
+
+
+def _validate_reconfigure_parameters(parameters: dict) -> Optional[str]:
+    """Return an error message if SERVER_IP / SERVER_PORT look invalid."""
+    import ipaddress
+    import re
+
+    if "SERVER_IP" in parameters:
+        raw_ip = str(parameters["SERVER_IP"]).strip().strip('"').strip("'")
+        if not raw_ip:
+            return "SERVER_IP must not be empty."
+        try:
+            ipaddress.ip_address(raw_ip)
+        except ValueError:
+            # Allow hostnames for lab setups, but reject obvious garbage.
+            if not re.fullmatch(r"[A-Za-z0-9._-]+", raw_ip) or raw_ip in {".", ".."}:
+                return f"SERVER_IP '{raw_ip}' is not a valid IP address or hostname."
+        parameters["SERVER_IP"] = raw_ip
+
+    if "SERVER_PORT" in parameters:
+        raw_port = str(parameters["SERVER_PORT"]).strip().strip('"').strip("'")
+        try:
+            port = int(raw_port)
+        except (TypeError, ValueError):
+            return f"SERVER_PORT '{raw_port}' must be an integer."
+        if not (1 <= port <= 65535):
+            return f"SERVER_PORT {port} is out of range (1-65535)."
+        parameters["SERVER_PORT"] = str(port)
+
+    return None
+
+
+def _read_env_file(path: Path):
     """Parse a .env file into a dict preserving comment lines."""
     lines = []
     kv = {}
@@ -1821,12 +1871,15 @@ def _spawn_restarted_client(client_root: Path) -> dict:
 
 
 def _handle_reconfigure_client(message, **_context):
-    """Patch config/.env with server-supplied key-value pairs then restart.
+    """Patch config/.env with server-supplied key-value pairs then reconnect/restart.
 
     Only keys present in ``_RECONFIGURE_ALLOWLIST`` are accepted.  All other
     keys are rejected and the config file is left untouched.  The patch is
-    written atomically (tmp-file + os.replace).  After a successful write the
-    client schedules a process restart so the new values are picked up cleanly.
+    written atomically (tmp-file + os.replace).
+
+    SERVER_IP / SERVER_PORT alone trigger a soft reconnect (the main loop
+    reloads dotenv before the next connect). Any other allowlisted key still
+    schedules a process restart so one-shot getenv reads are refreshed.
     """
     raw_params = (
         message.get("parameters")
@@ -1850,6 +1903,10 @@ def _handle_reconfigure_client(message, **_context):
                      f"Allowed: {sorted(_RECONFIGURE_ALLOWLIST)}",
         }
 
+    validation_error = _validate_reconfigure_parameters(parameters)
+    if validation_error:
+        return {"status": "FAILED", "error": validation_error}
+
     # Resolve config/.env path — APP_DIR/../config/.env
     app_dir = Path(__file__).resolve().parent
     client_root = app_dir.parent
@@ -1862,8 +1919,26 @@ def _handle_reconfigure_client(message, **_context):
     except OSError as err:
         return {"status": "FAILED", "error": f"Could not write config/.env: {err}"}
 
+    # Apply into the live process immediately. Soft reconnect reloads dotenv with
+    # override=True as a second line of defense, but updating os.environ here
+    # makes the next connect use the new SERVER_IP even if dotenv is stale.
+    for key, value in parameters.items():
+        os.environ[str(key)] = str(value)
+
     patched_keys = list(parameters.keys())
-    print(f"[RECONFIGURE] Patched config/.env: {patched_keys}. Scheduling restart.")
+    soft_only = set(parameters).issubset(_SOFT_RECONNECT_KEYS)
+
+    if soft_only:
+        print(f"[RECONFIGURE] Patched config/.env: {patched_keys}. Requesting soft reconnect.")
+        request_client_reconnect()
+        return {
+            "status": "ok",
+            "patched_keys": patched_keys,
+            "reconnect_mode": "soft",
+            "message": "Configuration updated. Client will reconnect to the new server.",
+        }
+
+    print(f"[RECONFIGURE] Patched config/.env: {patched_keys}. Scheduling process restart.")
 
     # Schedule the restart in a daemon thread so the response is sent
     # first before the current process exits.
@@ -1885,6 +1960,7 @@ def _handle_reconfigure_client(message, **_context):
     return {
         "status": "ok",
         "patched_keys": patched_keys,
+        "reconnect_mode": "restart",
         "message": "Configuration updated. Client will restart momentarily.",
     }
 
