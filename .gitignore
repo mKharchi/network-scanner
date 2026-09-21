@@ -41,9 +41,18 @@ server/storage/logs/
 server/storage/network_scans/
 server/storage/packages/
 server/storage/ml-2-datasets/
-server/storage/kismet_ml/activity_datasets/
-server/storage/kismet_ml/activity_models/
+server/storage/kismet_ml/
+server/storage/passive_neighborhood/
+server/storage/screenshots/
 client/storage/network_neighborhood/
+client/storage/network_neighbourhood/
+client/storage/network_telemetry/
+client/storage/passive_packets/
+client/logs/
+
+# Deployment / test packages
+test_packages/
+update_packages/
 
 *.db
 
@@ -51,3 +60,7 @@ client/storage/network_neighborhood/
 client/hourly_log.json
 client/reported_alerts.json
 client/neighbour_snapshot_state.json
+client/storage/forbidden_process_scan.json
+client/storage/forbidden_processes_cache.json
+client/storage/resource_protection_config.json
+client/storage/scope_config.json
