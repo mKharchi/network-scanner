@@ -163,15 +163,74 @@ class UpdaterTests(unittest.TestCase):
             def poll(self):
                 return 0
 
+        (self.app / "client.py").write_text("print('ok')\n", encoding="utf-8")
         proc = updater._start_application(
             self.app,
             Path(updater.sys.executable),
             lambda *a, **k: CleanExitProcess(),
             timeout=1.0,
+            client_root=self.root,
         )
         self.assertEqual(proc.returncode, 0)
 
+    def test_cmdline_targets_only_this_install(self):
+        root = self.root
+        self.assertTrue(
+            updater._cmdline_targets_client(
+                f'pythonw.exe "{root / "user_agent.py"}"',
+                root,
+            )
+        )
+        self.assertFalse(
+            updater._cmdline_targets_client(
+                r'pythonw.exe "C:\other\client\user_agent.py"',
+                root,
+            )
+        )
+        self.assertFalse(
+            updater._cmdline_targets_client("python.exe -m http.server", root)
+        )
 
-if __name__ == "__main__":
-    unittest.main()
+    def test_resolve_prefers_user_agent(self):
+        (self.root / "user_agent.py").write_text("print('ua')\n", encoding="utf-8")
+        (self.root / "client.py").write_text("print('c')\n", encoding="utf-8")
+        entry = updater.resolve_client_entry_script(self.root)
+        self.assertEqual(entry, self.root / "user_agent.py")
+
+    def test_apply_update_installs_bundled_updater(self):
+        updater_dir = self.root / "updater"
+        updater_dir.mkdir()
+        (updater_dir / "updater.py").write_text("OLD=1\n", encoding="utf-8")
+
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+            app_files = {
+                "version.json": b'{"version":"2.0.0"}',
+                "new.txt": b"new",
+            }
+            hashes = {name: hashlib.sha256(content).hexdigest() for name, content in app_files.items()}
+            archive.writestr(
+                "manifest.json",
+                json.dumps(
+                    {
+                        "version": "2.0.0",
+                        "package_type": "client-update",
+                        "minimum_updater_version": "1.0.0",
+                        "file_hashes": hashes,
+                    }
+                ),
+            )
+            for name, content in app_files.items():
+                archive.writestr(f"app/{name}", content)
+            archive.writestr("updater/updater.py", b"NEW=1\n")
+        self.write_package(buffer.getvalue())
+
+        result = updater.apply_update(
+            self.package,
+            client_root=self.root,
+            stop_client=lambda: None,
+            start_client=lambda: None,
+        )
+        self.assertEqual(result["status"], "COMPLETED")
+        self.assertEqual((updater_dir / "updater.py").read_text(encoding="utf-8"), "NEW=1\n")
 

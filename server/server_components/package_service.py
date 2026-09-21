@@ -54,8 +54,15 @@ def stream_to_storage(
     package_id: Optional[str] = None,
     uploaded_by: Optional[str] = None,
     max_bytes: int = MAX_PACKAGE_SIZE_BYTES,
+    replace: bool = True,
 ) -> Dict[str, Any]:
-    """Stream an upload to disk, compute SHA-256, and persist metadata."""
+    """Stream an upload to disk, compute SHA-256, and persist metadata.
+
+    By default ``replace=True`` so retrying the same package id (same version
+    zip after a failed client update) overwrites the on-disk archive and
+    upserts the MySQL row. Set ``replace=False`` to keep the old reject-if-exists
+    behaviour.
+    """
     resolved_id = normalize_package_id(package_id)
     safe_name = _safe_filename(filename)
     if not safe_name.lower().endswith(".zip"):
@@ -63,13 +70,18 @@ def stream_to_storage(
 
     PACKAGE_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
     storage_path = PACKAGE_STORAGE_DIR / f"{resolved_id}.zip"
-    if storage_path.exists():
+    existing = get_package(resolved_id)
+    had_file = storage_path.exists()
+    if (had_file or existing) and not replace:
         raise ValueError(f"Package '{resolved_id}' already exists.")
 
+    # Write to a temp sibling first so a failed upload never leaves a half-written
+    # zip under the final package id.
+    temp_path = PACKAGE_STORAGE_DIR / f".{resolved_id}.{uuid.uuid4().hex}.part"
     digest = hashlib.sha256()
     size_bytes = 0
     try:
-        with storage_path.open("wb") as dest:
+        with temp_path.open("wb") as dest:
             while True:
                 chunk = source.read(131072)
                 if not chunk:
@@ -81,13 +93,14 @@ def stream_to_storage(
                     )
                 digest.update(chunk)
                 dest.write(chunk)
-    except Exception:
-        storage_path.unlink(missing_ok=True)
-        raise
 
-    if size_bytes <= 0:
-        storage_path.unlink(missing_ok=True)
-        raise ValueError("Package file is empty.")
+        if size_bytes <= 0:
+            raise ValueError("Package file is empty.")
+
+        temp_path.replace(storage_path)
+    except Exception:
+        temp_path.unlink(missing_ok=True)
+        raise
 
     sha256 = digest.hexdigest().lower()
     record = {
@@ -98,22 +111,31 @@ def stream_to_storage(
         "storage_path": str(storage_path),
         "uploaded_by": uploaded_by,
         "created_at": _now(),
+        "replaced": existing is not None or had_file,
     }
-    _insert_package_record(record)
+    _upsert_package_record(record)
     created_at = record.get("created_at")
     if created_at is not None and hasattr(created_at, "isoformat"):
         record["created_at"] = created_at.isoformat()
     return record
 
 
-def _insert_package_record(record: Dict[str, Any]) -> None:
+def _upsert_package_record(record: Dict[str, Any]) -> None:
+    """Insert a package row, or refresh it when package_id already exists."""
     conn = get_connection()
     cursor = conn.cursor()
     try:
         cursor.execute(
             """INSERT INTO packages
                (package_id, filename, size_bytes, sha256, storage_path, uploaded_by, created_at)
-               VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+               VALUES (%s, %s, %s, %s, %s, %s, %s)
+               ON DUPLICATE KEY UPDATE
+                   filename = VALUES(filename),
+                   size_bytes = VALUES(size_bytes),
+                   sha256 = VALUES(sha256),
+                   storage_path = VALUES(storage_path),
+                   uploaded_by = VALUES(uploaded_by),
+                   created_at = VALUES(created_at)""",
             (
                 record["package_id"],
                 record["filename"],
@@ -129,6 +151,10 @@ def _insert_package_record(record: Dict[str, Any]) -> None:
         cursor.close()
         conn.close()
 
+
+# Backwards-compatible alias used by older call sites / tests.
+def _insert_package_record(record: Dict[str, Any]) -> None:
+    _upsert_package_record(record)
 
 def get_package(package_id: str) -> Optional[Dict[str, Any]]:
     conn = get_connection()
@@ -233,6 +259,14 @@ def build_client_update_package(
 
         shutil.copytree(source_dir, app_target, ignore=_ignore_patterns)
 
+        # Bundle the standalone updater so clients can self-heal stop/start bugs.
+        # It lives outside app/ on disk (client/updater) and is applied by apply_update
+        # when present in the zip.
+        updater_source = source_dir.parent / "updater"
+        if updater_source.is_dir():
+            updater_target = tmp_dir / "updater"
+            shutil.copytree(updater_source, updater_target, ignore=_ignore_patterns)
+
         # Write version.json inside app/
         version_data = {
             "version": ver,
@@ -257,11 +291,13 @@ def build_client_update_package(
             "file_hashes": file_hashes,
             "release_notes": release_notes or f"Client update package v{ver}",
             "build_timestamp": _now().isoformat() + "Z",
+            "includes_updater": bool(updater_source.is_dir()),
         }
         with (tmp_dir / "manifest.json").open("w", encoding="utf-8") as mf:
             json.dump(manifest, mf, indent=2)
 
-        # Build zip archive
+        # Build zip archive into a temp file, then atomically replace the stored package
+        # so rebuilding the same version after a failed deploy is safe to retry.
         tmp_zip = tmp_dir / "temp_package.zip"
         with zipfile.ZipFile(tmp_zip, "w", zipfile.ZIP_DEFLATED) as zf:
             for root_path, _, file_names in os.walk(tmp_dir):
@@ -272,8 +308,13 @@ def build_client_update_package(
                     arcname = full_file.relative_to(tmp_dir).as_posix()
                     zf.write(full_file, arcname)
 
-        # Atomic copy/replace to PACKAGE_STORAGE_DIR
-        shutil.copy2(tmp_zip, storage_path)
+        staging_path = PACKAGE_STORAGE_DIR / f".{resolved_id}.{uuid.uuid4().hex}.part"
+        try:
+            shutil.copy2(tmp_zip, staging_path)
+            staging_path.replace(storage_path)
+        except Exception:
+            staging_path.unlink(missing_ok=True)
+            raise
 
     # Compute digest and size
     size_bytes = storage_path.stat().st_size
@@ -288,36 +329,7 @@ def build_client_update_package(
         "uploaded_by": uploaded_by or "system-builder",
         "created_at": _now(),
     }
-
-    # Insert or update in database
-    conn = get_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute(
-            """INSERT INTO packages
-               (package_id, filename, size_bytes, sha256, storage_path, uploaded_by, created_at)
-               VALUES (%s, %s, %s, %s, %s, %s, %s)
-               ON DUPLICATE KEY UPDATE
-                   filename = VALUES(filename),
-                   size_bytes = VALUES(size_bytes),
-                   sha256 = VALUES(sha256),
-                   storage_path = VALUES(storage_path),
-                   uploaded_by = VALUES(uploaded_by),
-                   created_at = VALUES(created_at)""",
-            (
-                record["package_id"],
-                record["filename"],
-                record["size_bytes"],
-                record["sha256"],
-                record["storage_path"],
-                record["uploaded_by"],
-                record["created_at"],
-            ),
-        )
-        conn.commit()
-    finally:
-        cursor.close()
-        conn.close()
+    _upsert_package_record(record)
 
     created_at = record.get("created_at")
     if created_at is not None and hasattr(created_at, "isoformat"):
@@ -326,16 +338,30 @@ def build_client_update_package(
 
 
 def delete_package(package_id: str) -> bool:
-    record = get_package(package_id)
-    if not record:
-        return False
-    Path(record["storage_path"]).unlink(missing_ok=True)
+    """Remove package metadata and delete the zip from disk.
+
+    Also cleans up the canonical ``{package_id}.zip`` path so a manual file
+    delete + orphaned DB row cannot leave the store inconsistent.
+    """
+    resolved_id = str(package_id).strip()
+    record = get_package(resolved_id)
+    paths_to_remove = set()
+    if record and record.get("storage_path"):
+        paths_to_remove.add(Path(record["storage_path"]))
+    paths_to_remove.add(PACKAGE_STORAGE_DIR / f"{resolved_id}.zip")
+
+    for path in paths_to_remove:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("DELETE FROM packages WHERE package_id = %s", (package_id,))
+        cursor.execute("DELETE FROM packages WHERE package_id = %s", (resolved_id,))
         conn.commit()
-        return cursor.rowcount > 0
+        return cursor.rowcount > 0 or record is not None
     finally:
         cursor.close()
         conn.close()

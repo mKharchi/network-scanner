@@ -1657,6 +1657,30 @@ def _spawn_updater_subprocess(
                 "message": f"Staged package not found: {staged_path}",
             }
 
+        # Self-heal: if the package bundles a newer updater/, install it BEFORE
+        # launching updater.py so stop/start fixes take effect on this run.
+        try:
+            import zipfile as _zipfile
+            with _zipfile.ZipFile(staged_path) as archive:
+                members = [
+                    info for info in archive.infolist()
+                    if not info.is_dir()
+                    and info.filename.replace("\\", "/").startswith("updater/")
+                ]
+                if members:
+                    target_root = client_root_path / "updater"
+                    target_root.mkdir(parents=True, exist_ok=True)
+                    for info in members:
+                        relative = info.filename.replace("\\", "/").split("/", 1)[1]
+                        if not relative or ".." in relative.split("/"):
+                            continue
+                        destination = target_root / relative
+                        destination.parent.mkdir(parents=True, exist_ok=True)
+                        with archive.open(info) as src, destination.open("wb") as dst:
+                            shutil.copyfileobj(src, dst)
+        except Exception as pre_err:
+            print(f"[UPDATE] Warning: could not pre-install updater from package: {pre_err}")
+
         if not updater_path.is_file():
             return {
                 "status": "error",
@@ -1667,6 +1691,12 @@ def _spawn_updater_subprocess(
         # The updater will handle stopping the client, replacing app/, and restarting.
         # We pass the staged package path and client_root as arguments.
         python_exe = sys.executable
+        # Prefer python.exe over pythonw.exe for the updater so logs/console work.
+        if python_exe.lower().endswith("pythonw.exe"):
+            candidate = Path(python_exe).with_name("python.exe")
+            if candidate.is_file():
+                python_exe = str(candidate)
+
         proc = subprocess.Popen(
             [
                 python_exe,
@@ -1677,6 +1707,7 @@ def _spawn_updater_subprocess(
             ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            cwd=str(client_root_path),
             start_new_session=True,  # Detach from parent on Unix; on Windows this is ignored
         )
 

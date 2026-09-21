@@ -214,19 +214,37 @@ def _start_application(
     python_executable: Optional[Path],
     launcher: Callable[..., Any],
     timeout: float,
+    *,
+    client_root: Optional[Path] = None,
 ) -> Any:
     if python_executable is None or not python_executable.is_file():
         raise RuntimeError(f"No Python interpreter is available to start the client: {python_executable}")
 
+    root = Path(client_root).resolve() if client_root is not None else Path(app_root).resolve().parent
+    entry = resolve_client_entry_script(root)
+    if entry is None:
+        raise RuntimeError(
+            f"No client entry script found under {root} "
+            "(expected user_agent.py, client.py, or app/client.py)"
+        )
+
+    # Prefer windowless pythonw on Windows when the entry is the user agent /
+    # scheduled-task style launcher. Fall back to the resolved interpreter.
+    launch_python = python_executable
+    if entry.name == "user_agent.py":
+        pythonw = python_executable.with_name("pythonw.exe")
+        if pythonw.is_file():
+            launch_python = pythonw
+
     log = logging.getLogger("updater")
     log.info(
-        "[UPDATER] Starting client: executable=%s app_root=%s timeout=%.1f",
-        python_executable, app_root, timeout,
+        "[UPDATER] Starting client: executable=%s entry=%s cwd=%s timeout=%.1f",
+        launch_python, entry, root, timeout,
     )
 
     process = launcher(
-        [str(python_executable), str(app_root / "client.py")],
-        cwd=str(app_root),
+        [str(launch_python), str(entry)],
+        cwd=str(root),
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         start_new_session=True,
@@ -259,6 +277,131 @@ def _start_application(
                 timeout, process.pid,
             )
     return process
+
+
+_CLIENT_ENTRY_MARKERS = (
+    "user_agent.py",
+    "client.py",
+    "NetworkScannerClient.exe",
+)
+
+
+def resolve_client_entry_script(client_root: Path) -> Optional[Path]:
+    """Prefer the scheduled-task entry point, then root/app launchers."""
+    for relative in ("user_agent.py", "client.py", "app/client.py"):
+        candidate = client_root / relative
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _cmdline_text(cmdline: Optional[Iterable[str]]) -> str:
+    if not cmdline:
+        return ""
+    return " ".join(str(part) for part in cmdline)
+
+
+def _cmdline_targets_client(cmdline: str, client_root: Path) -> bool:
+    """True when a process command line is this install's client agent."""
+    if not cmdline:
+        return False
+    normalized = cmdline.replace("\\", "/").lower()
+    root_token = str(client_root).replace("\\", "/").lower()
+    if not root_token or root_token not in normalized:
+        return False
+    return any(marker.lower() in normalized for marker in _CLIENT_ENTRY_MARKERS)
+
+
+def stop_client_processes(client_root: Path | str, *, grace_seconds: float = 2.0) -> list[int]:
+    """Stop running agent processes for this client install.
+
+    Handles both ``python.exe client.py`` and the scheduled-task form
+    ``pythonw.exe user_agent.py``. The previous Windows ``taskkill ... COMMANDLINE``
+    filter was invalid, so it never stopped pythonw and the updater then started a
+    second agent — causing endless stop/restart flapping.
+    """
+    root = Path(client_root).resolve()
+    log = logging.getLogger("updater")
+    terminated: list[int] = []
+    my_pid = os.getpid()
+
+    try:
+        import psutil
+    except ImportError:
+        psutil = None  # type: ignore
+
+    if psutil is not None:
+        victims = []
+        for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+            try:
+                pid = int(proc.info["pid"])
+                if pid == my_pid:
+                    continue
+                cmdline = _cmdline_text(proc.info.get("cmdline"))
+                if not _cmdline_targets_client(cmdline, root):
+                    # Compiled exe may have an empty cmdline on some hosts; match by exe name + cwd.
+                    name = (proc.info.get("name") or "").lower()
+                    if name != "networkscannerclient.exe":
+                        continue
+                    try:
+                        cwd = Path(proc.cwd()).resolve()
+                    except Exception:
+                        continue
+                    if cwd != root and root not in cwd.parents and cwd not in root.parents:
+                        continue
+                victims.append(proc)
+            except (psutil.Error, TypeError, ValueError):
+                continue
+
+        for proc in victims:
+            try:
+                log.info("[UPDATER] Stopping client process pid=%s cmdline=%s", proc.pid, _cmdline_text(proc.cmdline()))
+                proc.terminate()
+                terminated.append(proc.pid)
+            except psutil.Error as err:
+                log.warning("[UPDATER] Could not terminate pid=%s: %s", getattr(proc, "pid", "?"), err)
+
+        deadline = time.monotonic() + grace_seconds
+        for proc in victims:
+            try:
+                remaining = max(0.05, deadline - time.monotonic())
+                proc.wait(timeout=remaining)
+            except psutil.TimeoutExpired:
+                try:
+                    proc.kill()
+                except psutil.Error:
+                    pass
+            except psutil.Error:
+                pass
+    else:
+        # Avoid broad taskkill fallbacks — they can kill unrelated Python processes
+        # or miss pythonw entirely. psutil is a client dependency and should be present.
+        log.error(
+            "[UPDATER] psutil is unavailable; cannot safely stop client processes for %s",
+            root,
+        )
+
+    time.sleep(1.0)
+    return terminated
+
+
+def start_client_process(
+    client_root: Path | str,
+    *,
+    python_executable: Optional[Path] = None,
+    launcher: Callable[..., Any] = subprocess.Popen,
+    timeout: float = 10.0,
+) -> Any:
+    """Start the client agent for this install using the correct entry + cwd."""
+    root = Path(client_root).resolve()
+    python_executable = python_executable or _resolve_python(root)
+    return _start_application(
+        root / "app",
+        python_executable,
+        launcher,
+        timeout,
+        client_root=root,
+    )
 
 
 def apply_update(
@@ -307,6 +450,10 @@ def apply_update(
         record_update_state(root, STATE_BACKUP_CREATED, {"backup_version": old_version})
 
         _copy_tree(staged_app, app_root)
+        # Optional self-update of the standalone updater (lives outside app/).
+        staged_updater = staged_root / "updater"
+        if staged_updater.is_dir():
+            _copy_tree(staged_updater, root / "updater")
         record_update_state(root, STATE_FILES_REPLACED)
 
         python_executable = _resolve_python(root)
@@ -317,7 +464,7 @@ def apply_update(
         if start_client:
             start_client()
         else:
-            _start_application(app_root, python_executable, subprocess.Popen, startup_timeout)
+            start_client_process(root, timeout=startup_timeout)
 
         # Version verification on disk (Plan §3.4)
         record_update_state(root, STATE_VERSION_VERIFYING)
@@ -368,6 +515,42 @@ def _rollback_result(
     if client_root:
         record_update_state(client_root, STATE_ROLLBACK_FAILED, {"error": error})
     return {"status": "UPDATE_FAILED", "reason": reason, "error": error, "rolled_back": False}
+
+
+def _install_updater_from_package(package_path: Path, client_root: Path) -> bool:
+    """Copy updater/ out of a staged update zip before launching updater.py.
+
+    The standalone updater lives outside app/, so a normal app-only replace cannot
+    fix stop/start bugs. Extracting it first lets the next apply_update process
+    run the repaired updater.
+    """
+    try:
+        with zipfile.ZipFile(package_path) as archive:
+            updater_members = [
+                info for info in archive.infolist()
+                if not info.is_dir()
+                and info.filename.replace("\\", "/").startswith("updater/")
+            ]
+            if not updater_members:
+                return False
+            target_root = client_root / "updater"
+            target_root.mkdir(parents=True, exist_ok=True)
+            for info in updater_members:
+                relative = info.filename.replace("\\", "/").split("/", 1)[1]
+                if not relative or ".." in relative.split("/"):
+                    continue
+                destination = (target_root / relative).resolve()
+                if not _inside(destination, target_root.resolve()):
+                    continue
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                with archive.open(info) as src, destination.open("wb") as dst:
+                    shutil.copyfileobj(src, dst)
+            return True
+    except Exception as err:
+        logging.getLogger("updater").warning(
+            "[UPDATER] Could not pre-install updater from package: %s", err
+        )
+        return False
 
 
 def _persist_update_result(client_root: Path, action_id: Optional[str], result: Dict[str, Any]) -> None:
@@ -430,43 +613,12 @@ if __name__ == "__main__":
     log.info(f"Starting update from staged package: {staged_pkg}")
 
     def _stop_client() -> None:
-        """Stop the running client (platform-specific)."""
-        import platform
-
-        if platform.system() == "Windows":
-            # Kill the Python process running client.py (not a compiled executable)
-            os.system("taskkill /F /IM python.exe /FI \"COMMANDLINE eq *client.py*\"")
-        else:
-            my_pid = os.getpid()
-            try:
-                import psutil
-                for proc in psutil.process_iter(["pid", "cmdline"]):
-                    if proc.info["pid"] == my_pid:
-                        continue
-                    cmdline = " ".join(proc.info.get("cmdline") or [])
-                    if "client.py" in cmdline:
-                        try:
-                            proc.terminate()
-                            proc.wait(timeout=2.0)
-                        except Exception:
-                            try:
-                                proc.kill()
-                            except Exception:
-                                pass
-            except Exception:
-                os.system("pkill -f 'client\\.py'")
-        # Allow time for the process to fully release file locks
-        time.sleep(1.0)
+        """Stop every agent process for this install (python / pythonw / exe)."""
+        stop_client_processes(client_root)
 
     def _start_client() -> Any:
         """Restart the client after a successful update or rollback."""
-        python_executable = _resolve_python(client_root)
-        return _start_application(
-            client_root / "app",
-            python_executable,
-            subprocess.Popen,
-            timeout=10.0,
-        )
+        return start_client_process(client_root, timeout=10.0)
 
     result = apply_update(
         staged_pkg,

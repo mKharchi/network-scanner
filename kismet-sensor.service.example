@@ -32,7 +32,7 @@ Restart=on-failure
 RestartSec=10
 TimeoutStopSec=30
 KillSignal=SIGTERM
-ReadWritePaths=/home/adonis/kismet /var/lib/kismet
+ReadWritePaths=/var/lib/kismet /etc/kismet
 
 [Install]
 WantedBy=multi-user.target
